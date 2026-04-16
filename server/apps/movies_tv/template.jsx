@@ -213,6 +213,20 @@ function GeneratedUI({ data, onAction }) {
               onAction("share_wechat", { content: msg });
             }}
           >微信</Button>
+          {movieDirectors.slice(0, 2).map(function(dir) {
+            return (
+              <Button key={dir} size="sm" style={{ background: "#0284c7", color: "white" }}
+                onClick={function() { onAction("find_more_by", { query: dir, contentType: "movie" }); }}
+              >🎬 More by {dir}</Button>
+            );
+          })}
+          {movieCast.slice(0, 2).map(function(actor) {
+            return (
+              <Button key={actor} size="sm" style={{ background: "#0e7490", color: "white" }}
+                onClick={function() { onAction("find_more_by", { query: actor, contentType: "movie" }); }}
+              >🎭 Films with {actor}</Button>
+            );
+          })}
         </div>
 
         {/* ── Overview ── */}
@@ -480,11 +494,15 @@ function GeneratedUI({ data, onAction }) {
         {breadcrumb}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <span style={{ fontSize: "20px", marginRight: "8px" }}>🔍</span>
-            <span style={{ fontWeight: 600 }}>Add Movie / TV</span>
-            <span style={{ fontSize: "12px", color: "#64748b", marginLeft: "8px" }}>{addResults.length} results for "{d.query}"</span>
+            <span style={{ fontSize: "20px", marginRight: "8px" }}>{d.moreByCreator ? "🎬" : "🔍"}</span>
+            <span style={{ fontWeight: 600 }}>{d.moreByCreator ? "Films by " + d.moreByCreator : "Add Movie / TV"}</span>
+            <span style={{ fontSize: "12px", color: "#64748b", marginLeft: "8px" }}>{addResults.length} results{d.moreByCreator ? "" : " for \"" + d.query + "\""}</span>
           </div>
-          <Button variant="outline" size="sm" onClick={function() { onAction("browse", {}); }}>← Library</Button>
+          {navStack.length > 0 ? (
+            <Button variant="outline" size="sm" onClick={function() { onAction("nav_back", {}); }}>← Back</Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={function() { onAction("browse", {}); }}>← Library</Button>
+          )}
         </div>
         {addResults.map(function(r, i) {
           return (

@@ -1165,6 +1165,313 @@ export async function handlePluginCardAction(params: {
     return;
   }
 
+  // ── Find More By: search for other books/movies by the same author/director/actor ──
+  if (action === "find_more_by") {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const query = String(p.query ?? "").trim();
+    const contentType = String(p.contentType ?? "book").trim();
+
+    if (!query) { sendOperation("error", "No search query provided"); return; }
+
+    logAction({ ts: Date.now(), type: "action", category: "action:find-more", message: `find_more_by: "${query}" (${contentType})`, cardId });
+    sendOperation("processing", `Searching for ${contentType === "movie" ? "movies" : "books"} by ${query}...`);
+
+    // Push current state onto nav stack so user can go back
+    if (!ctx.navStack) ctx.navStack = [];
+    const fmbCurrentTitle = ((ctx.currentData as Record<string, unknown>)?.entity as Record<string, unknown>)?.title
+      ?? ctx.toolFamily ?? "Previous view";
+    ctx.navStack.push({
+      data: structuredClone(ctx.currentData),
+      generatedUI: ctx.currentGeneratedUI,
+      title: String(fmbCurrentTitle),
+      focusEntity: ((ctx.currentData as Record<string, unknown>)?.focusEntity) as string | undefined,
+    });
+
+    try {
+      let resultData: Record<string, unknown>;
+
+      if (contentType === "movie") {
+        // ── Movie/TV: search TMDB by person name → get their credits ──
+        const osM = await import("os");
+        const fsM = await import("fs");
+        const pathM = await import("path");
+        let tmdbKey = "";
+        try {
+          const keysPath = pathM.default.join(osM.default.homedir(), ".enso", "api-keys.json");
+          if (fsM.default.existsSync(keysPath)) {
+            const keys = JSON.parse(fsM.default.readFileSync(keysPath, "utf-8")) as Record<string, string>;
+            tmdbKey = keys.tmdb || "";
+          }
+        } catch { /* no key */ }
+
+        const movieResults: Array<Record<string, unknown>> = [];
+
+        if (tmdbKey) {
+          // First: find the person by name
+          const personRes = await fetch(
+            `https://api.themoviedb.org/3/search/person?api_key=${tmdbKey}&query=${encodeURIComponent(query)}&language=en-US`,
+            { signal: AbortSignal.timeout(8000) }
+          );
+          if (personRes.ok) {
+            const personData = await personRes.json() as { results?: Array<{ id: number; name: string }> };
+            const person = personData.results?.[0];
+            if (person) {
+              // Get their combined movie credits (as actor + director)
+              const creditsRes = await fetch(
+                `https://api.themoviedb.org/3/person/${person.id}/combined_credits?api_key=${tmdbKey}&language=en-US`,
+                { signal: AbortSignal.timeout(8000) }
+              );
+              if (creditsRes.ok) {
+                const credits = await creditsRes.json() as {
+                  cast?: Array<Record<string, unknown>>;
+                  crew?: Array<Record<string, unknown>>;
+                };
+                const allCredits = [
+                  ...(credits.cast || []).map(m => ({ ...m, _role: "cast" })),
+                  ...(credits.crew || []).filter(m => m.job === "Director" || m.job === "Creator").map(m => ({ ...m, _role: "director" })),
+                ];
+                // Dedupe by tmdbId, prefer director credit
+                const seen = new Map<number, Record<string, unknown>>();
+                for (const m of allCredits) {
+                  const id = m.id as number;
+                  if (!seen.has(id) || m._role === "director") seen.set(id, m);
+                }
+                // Sort by vote count desc, take top 15
+                const sorted = [...seen.values()]
+                  .filter(m => m.title || m.name)
+                  .sort((a, b) => Number(b.vote_count ?? 0) - Number(a.vote_count ?? 0))
+                  .slice(0, 15);
+                for (const r of sorted) {
+                  const isTV = r.media_type === "tv";
+                  movieResults.push({
+                    title: r.title || r.name || "",
+                    type: isTV ? "tv-series" : "movie",
+                    year: String(r.release_date || r.first_air_date || "").slice(0, 4),
+                    overview: String(r.overview || "").slice(0, 400),
+                    rating: r.vote_average || 0,
+                    voteCount: r.vote_count || 0,
+                    posterUrl: r.poster_path ? `https://image.tmdb.org/t/p/w342${r.poster_path}` : "",
+                    backdropUrl: r.backdrop_path ? `https://image.tmdb.org/t/p/w780${r.backdrop_path}` : "",
+                    tmdbId: r.id,
+                    role: r._role,
+                  });
+                }
+              }
+            }
+          }
+        } else {
+          // Fallback: plain TMDB multi search if no key
+          logAction({ ts: Date.now(), type: "action", category: "action:find-more", message: "find_more_by movie: no TMDB key", cardId });
+        }
+
+        resultData = {
+          tool: "enso_movies_tv_add",
+          query,
+          moreByCreator: query,
+          totalResults: movieResults.length,
+          results: movieResults,
+          navStack: ctx.navStack.map(e => ({ title: e.title })),
+        };
+
+      } else {
+        // ── Books: search Google Books (inauthor:) + WeRead + Brave Douban + Brave Kindle ──
+        const braveKey = process.env.BRAVE_API_KEY || "";
+
+        const searchGoogleByAuthor = async (): Promise<Array<Record<string, unknown>>> => {
+          try {
+            const q = encodeURIComponent(`inauthor:"${query}"`);
+            const res = await fetch(`https://www.googleapis.com/books/v1/volumes?q=${q}&maxResults=8`, { signal: AbortSignal.timeout(8000) });
+            if (!res.ok) return [];
+            const data = await res.json() as { items?: Array<{ id?: string; volumeInfo?: Record<string, unknown> }> };
+            return (data.items || []).map(item => {
+              const vol = (item.volumeInfo || {}) as Record<string, unknown>;
+              const imageLinks = (vol.imageLinks || {}) as Record<string, string>;
+              const coverUrl = (imageLinks.thumbnail || imageLinks.smallThumbnail || "").replace("http://", "https://");
+              const authors = (vol.authors as string[]) || [];
+              const identifiers = (vol.industryIdentifiers as Array<{ type: string; identifier: string }>) || [];
+              const isbn13 = identifiers.find(i => i.type === "ISBN_13")?.identifier || "";
+              const isbn10 = identifiers.find(i => i.type === "ISBN_10")?.identifier || "";
+              return {
+                title: vol.title || "",
+                subtitle: vol.subtitle || "",
+                author: authors.join(", "),
+                publisher: vol.publisher || "",
+                publishedDate: vol.publishedDate || "",
+                description: String(vol.description || "").replace(/<[^>]+>/g, "").slice(0, 500),
+                pageCount: vol.pageCount || 0,
+                categories: (vol.categories as string[]) || [],
+                rating: vol.averageRating || 0,
+                ratingsCount: vol.ratingsCount || 0,
+                isbn: isbn13 || isbn10,
+                coverUrl,
+                source: "google",
+                sourceUrl: `https://books.google.com/books?id=${item.id || ""}`,
+              };
+            }).filter(r => r.title);
+          } catch { return []; }
+        };
+
+        const searchWeReadByAuthor = async (): Promise<Array<Record<string, unknown>>> => {
+          try {
+            const res = await fetch(
+              `https://weread.qq.com/web/search/global?keyword=${encodeURIComponent(query)}&maxIdx=0&count=8`,
+              { signal: AbortSignal.timeout(8000) }
+            );
+            if (!res.ok) return [];
+            const data = await res.json() as { books?: Array<Record<string, unknown>> };
+            return (data.books || []).slice(0, 8).map(entry => {
+              const b = (entry.bookInfo || entry) as Record<string, unknown>;
+              const rawCover = String(b.cover || "");
+              const cover = rawCover && !rawCover.startsWith("http") ? "https:" + rawCover : rawCover;
+              return {
+                title: String(b.title || "").replace(/<[^>]+>/g, ""),
+                subtitle: "",
+                author: String(b.author || "").replace(/<[^>]+>/g, ""),
+                publisher: String(b.publisher || ""),
+                publishedDate: "",
+                description: String(b.intro || "").replace(/<[^>]+>/g, "").slice(0, 500),
+                pageCount: 0,
+                categories: b.category ? [b.category] : [],
+                rating: 0,
+                ratingsCount: 0,
+                isbn: String(b.isbn || ""),
+                coverUrl: cover,
+                source: "weread",
+                sourceUrl: b.bookId ? `https://weread.qq.com/web/bookDetail/${b.bookId}` : "",
+              };
+            }).filter(r => r.title);
+          } catch { return []; }
+        };
+
+        const searchBraveForBooks = async (siteQuery: string, source: "douban" | "kindle"): Promise<Array<Record<string, unknown>>> => {
+          if (!braveKey) return [];
+          try {
+            const res = await fetch(
+              `https://api.search.brave.com/res/v1/web/search?q=${encodeURIComponent(siteQuery)}&count=5`,
+              { headers: { "Accept": "application/json", "X-Subscription-Token": braveKey }, signal: AbortSignal.timeout(8000) }
+            );
+            if (!res.ok) return [];
+            const data = await res.json() as { web?: { results?: Array<{ url: string; title: string; description: string }> } };
+            const rawResults = data.web?.results || [];
+            if (source === "douban") {
+              return rawResults
+                .filter(r => r.url?.includes("book.douban.com") && !r.url.includes("/review/") && !r.url.includes("/discussion/"))
+                .map(r => {
+                  const title = (r.title || "")
+                    .replace(/\s*[\(（]豆瓣[\)）]\s*$/g, "").replace(/\s*-\s*豆瓣读书\s*$/g, "")
+                    .replace(/\s*-\s*豆瓣\s*$/g, "").replace(/^书评\s*-\s*/g, "").trim();
+                  if (!title) return null;
+                  const desc = r.description || "";
+                  const ratingMatch = desc.match(/(\d+\.\d)\s*分/) || desc.match(/评分[:\s：]*(\d+\.?\d*)/);
+                  return {
+                    title, subtitle: "", author: query, publisher: "", publishedDate: "",
+                    description: desc.slice(0, 500), pageCount: 0, categories: [],
+                    rating: ratingMatch ? parseFloat(ratingMatch[1]) : 0, ratingsCount: 0,
+                    isbn: "", coverUrl: "", source: "douban", sourceUrl: r.url,
+                  };
+                })
+                .filter((r): r is Record<string, unknown> => r !== null && Boolean(r.title));
+            } else {
+              return rawResults
+                .filter(r => r.url?.includes("amazon.com"))
+                .map(r => {
+                  const title = (r.title || "")
+                    .replace(/\s*-\s*Kindle edition.*$/i, "").replace(/\s*:\s*Kindle Store.*$/i, "")
+                    .replace(/Amazon\.com:\s*/i, "").trim();
+                  if (!title || title.length <= 2) return null;
+                  const desc = r.description || "";
+                  const ratingMatch = desc.match(/(\d+\.?\d*)\s*out of\s*5/);
+                  return {
+                    title, subtitle: "", author: query, publisher: "", publishedDate: "",
+                    description: desc.slice(0, 500), pageCount: 0, categories: [],
+                    rating: ratingMatch ? parseFloat(ratingMatch[1]) : 0, ratingsCount: 0,
+                    isbn: "", coverUrl: "", source: "kindle", sourceUrl: r.url,
+                  };
+                })
+                .filter((r): r is Record<string, unknown> => r !== null && Boolean(r.title));
+            }
+          } catch { return []; }
+        };
+
+        const [googleRes, wereadRes, doubanRes, kindleRes] = await Promise.allSettled([
+          searchGoogleByAuthor(),
+          searchWeReadByAuthor(),
+          searchBraveForBooks(`site:book.douban.com ${query}`, "douban"),
+          searchBraveForBooks(`site:amazon.com kindle ${query}`, "kindle"),
+        ]);
+
+        // Merge all results
+        const allBooks: Array<Record<string, unknown>> = [];
+        if (googleRes.status === "fulfilled") allBooks.push(...googleRes.value);
+        if (wereadRes.status === "fulfilled") allBooks.push(...wereadRes.value);
+        if (doubanRes.status === "fulfilled") allBooks.push(...doubanRes.value);
+        if (kindleRes.status === "fulfilled") allBooks.push(...kindleRes.value);
+
+        // Deduplicate by normalized title
+        const normalizeTitle = (t: string) =>
+          t.toLowerCase().replace(/[^\u4e00-\u9fff\u3400-\u4dbfa-z0-9]/g, "").trim();
+        const seen = new Map<string, number>();
+        const deduped: Array<Record<string, unknown>> = [];
+        for (const r of allBooks) {
+          const norm = normalizeTitle(String(r.title));
+          if (!norm) continue;
+          if (!seen.has(norm)) {
+            seen.set(norm, deduped.length);
+            deduped.push(r);
+          }
+        }
+
+        const googleCount = googleRes.status === "fulfilled" ? googleRes.value.length : 0;
+        const wereadCount = wereadRes.status === "fulfilled" ? wereadRes.value.length : 0;
+        const doubanCount = doubanRes.status === "fulfilled" ? doubanRes.value.length : 0;
+        const kindleCount = kindleRes.status === "fulfilled" ? kindleRes.value.length : 0;
+
+        resultData = {
+          tool: "enso_books_add",
+          query,
+          moreByCreator: query,
+          totalResults: deduped.length,
+          results: deduped.slice(0, 20),
+          sourceCounts: { google: googleCount, weread: wereadCount, douban: doubanCount, kindle: kindleCount },
+          navStack: ctx.navStack.map(e => ({ title: e.title })),
+        };
+      }
+
+      ctx.currentData = resultData;
+
+      // Resolve the generatedUI (same app template)
+      const { getGeneratedTemplateCodeBySignature: getFmbTemplate } = await import("../native-tools/registry.js");
+      let fmbGeneratedUI = ctx.currentGeneratedUI;
+      if (ctx.signatureId) {
+        const appTemplate = getFmbTemplate(ctx.signatureId);
+        if (appTemplate) fmbGeneratedUI = appTemplate;
+      }
+      ctx.currentGeneratedUI = fmbGeneratedUI;
+
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "final", targetCardId: cardId,
+        data: resultData,
+        generatedUI: fmbGeneratedUI,
+        cardMode: cardModeFromContext(ctx),
+        operation: { operationId, stage: "complete", label: `Found ${resultData.totalResults as number} results`, cancellable: false },
+        timestamp: Date.now(),
+      });
+
+      persistCard(client.id, capturedConvId, {
+        id: cardId, runId: "", type: "dynamic-ui", role: "assistant",
+        data: resultData, generatedUI: fmbGeneratedUI,
+        cardMode: cardModeFromContext(ctx), timestamp: Date.now(),
+      });
+
+    } catch (err) {
+      logError("action:find-more", `find_more_by failed for "${query}"`, err, { cardId });
+      sendOperation("error", "Search failed");
+      ctx.navStack?.pop(); // Restore nav stack on failure
+    }
+    return;
+  }
+
   // ── Add to Cortex: create a Cortex entity page from discovered/recommended content ──
   if (action === "add_to_cortex") {
     const p = (payload ?? {}) as Record<string, unknown>;

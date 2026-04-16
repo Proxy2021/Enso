@@ -78,6 +78,17 @@ interface FocusArea {
     }>;
     recommendedFirstAction: { deliverableIndex: number; reason: string };
     nextSteps: string[];
+    briefing?: {
+      headline: string;
+      whatHappened: string;
+      decisions: Array<{ call: string; because: string; impact: string }>;
+      whatChanged: Array<{ area: string; was: string; now: string }>;
+      honestGaps: string[];
+      currentPriority: { name: string; why: string; what: string };
+      plan: Array<{ step: string; reason: string; expectedOutcome: string; dependsOn?: number }>;
+    };
+    preSprintSnapshot?: { understanding: number; progress: number; clarity: string; relatedEntityCount: number };
+    postSprintSnapshot?: { understanding: number; progress: number; clarity: string; relatedEntityCount: number };
   };
 }
 
@@ -691,8 +702,155 @@ export default function FocusView() {
                 return null;
               })()}
 
-              {/* Section D: Deliverables */}
-              {selected.lastSprintSummary && (
+              {/* Section D: Milestone Briefing — the meeting-style debrief.
+                  Falls back to the legacy summary panel when no briefing exists (old sprints). */}
+              {selected.lastSprintSummary?.briefing ? (() => {
+                const b = selected.lastSprintSummary.briefing!;
+                const pre = selected.lastSprintSummary.preSprintSnapshot;
+                const post = selected.lastSprintSummary.postSprintSnapshot;
+                const understandingDelta = post && pre ? post.understanding - pre.understanding : null;
+                const progressDelta = post && pre ? post.progress - pre.progress : null;
+                const newEntities = post && pre ? Math.max(0, post.relatedEntityCount - pre.relatedEntityCount) : null;
+
+                return (
+                  <div className="space-y-4">
+                    {/* Headline + What Happened */}
+                    <div className="rounded-lg border border-violet-500/30 bg-gradient-to-br from-violet-950/30 to-indigo-950/20 p-5">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="text-xs">{"\uD83D\uDCCB"}</span>
+                        <label className="text-[10px] uppercase tracking-wider text-violet-300/80">Milestone briefing</label>
+                        {(understandingDelta !== null || progressDelta !== null || newEntities !== null) && (
+                          <span className="ml-auto flex items-center gap-2 text-[10px] text-gray-400">
+                            {understandingDelta !== null && understandingDelta !== 0 && (
+                              <span className={understandingDelta > 0 ? "text-emerald-400" : "text-amber-400"}>
+                                {"\uD83E\uDDE0"} {understandingDelta > 0 ? "+" : ""}{understandingDelta}
+                              </span>
+                            )}
+                            {progressDelta !== null && progressDelta !== 0 && (
+                              <span className={progressDelta > 0 ? "text-emerald-400" : "text-amber-400"}>
+                                {"\u2192"} {progressDelta > 0 ? "+" : ""}{progressDelta}
+                              </span>
+                            )}
+                            {newEntities !== null && newEntities > 0 && (
+                              <span className="text-violet-300">+{newEntities} new</span>
+                            )}
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="text-base font-semibold text-white leading-snug mb-3">{b.headline}</h3>
+                      <p className="text-xs text-gray-300 leading-relaxed">{b.whatHappened}</p>
+                    </div>
+
+                    {/* What Changed */}
+                    {b.whatChanged?.length > 0 && (
+                      <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-4">
+                        <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-3">What changed</label>
+                        <div className="space-y-2.5">
+                          {b.whatChanged.map((c, i) => (
+                            <div key={i} className="flex flex-col gap-1">
+                              <div className="text-[10px] uppercase tracking-wider text-violet-400/80 font-medium">{c.area}</div>
+                              <div className="flex items-baseline gap-2 flex-wrap text-xs leading-relaxed">
+                                <span className="text-gray-500 line-through">{c.was}</span>
+                                <span className="text-emerald-500">{"\u2192"}</span>
+                                <span className="text-gray-100 font-medium">{c.now}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Decisions */}
+                    {b.decisions?.length > 0 && (
+                      <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-4">
+                        <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-3">Key decisions</label>
+                        <div className="space-y-2.5">
+                          {b.decisions.map((d, i) => (
+                            <div key={i} className="border-l-2 border-violet-500/60 pl-3 py-0.5">
+                              <div className="text-xs text-white font-medium mb-1">{d.call}</div>
+                              <div className="text-[11px] text-gray-400 leading-relaxed">
+                                <span className="text-violet-300/80 font-medium">Because:</span> {d.because}
+                              </div>
+                              <div className="text-[11px] text-gray-400 leading-relaxed mt-0.5">
+                                <span className="text-violet-300/80 font-medium">Impact:</span> {d.impact}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Honest Gaps */}
+                    {b.honestGaps?.length > 0 && (
+                      <div className="rounded-lg border border-amber-500/20 bg-amber-950/10 p-4">
+                        <label className="text-[10px] uppercase tracking-wider text-amber-400/80 block mb-2">What's still open</label>
+                        <ul className="space-y-1.5">
+                          {b.honestGaps.map((g, i) => (
+                            <li key={i} className="text-xs text-amber-100/80 leading-relaxed flex gap-2">
+                              <span className="text-amber-500/60 flex-shrink-0">{"\u2022"}</span>
+                              <span>{g}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+
+                    {/* Current Priority — the prominent one */}
+                    <div className="rounded-lg border border-indigo-400/40 bg-gradient-to-br from-indigo-950/40 to-violet-950/30 p-5 shadow-lg shadow-indigo-950/20">
+                      <label className="text-[10px] uppercase tracking-wider text-indigo-300/90 block mb-2">Current priority</label>
+                      <div className="text-base font-semibold text-white leading-snug mb-3">{b.currentPriority.name}</div>
+                      <div className="text-xs text-indigo-100/80 leading-relaxed mb-1.5">
+                        <span className="text-indigo-300 font-medium">Why: </span>{b.currentPriority.why}
+                      </div>
+                      <div className="text-xs text-indigo-100/80 leading-relaxed mb-3">
+                        <span className="text-indigo-300 font-medium">What: </span>{b.currentPriority.what}
+                      </div>
+                      <button
+                        onClick={() => chatAboutFocus(selected, `Let's talk about the current priority: "${b.currentPriority.name}". ${b.currentPriority.what}`)}
+                        className="text-[11px] px-3 py-1.5 rounded-md bg-indigo-500/90 hover:bg-indigo-400 text-white font-medium transition-colors">
+                        Discuss this priority {"\u2192"}
+                      </button>
+                    </div>
+
+                    {/* Plan */}
+                    {b.plan?.length > 0 && (
+                      <div className="rounded-lg border border-gray-800 bg-gray-900/40 p-4">
+                        <label className="text-[10px] uppercase tracking-wider text-gray-500 block mb-3">The plan</label>
+                        <div className="space-y-3">
+                          {b.plan.map((p, i) => (
+                            <div key={i} className="flex gap-3">
+                              <div className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-800 text-violet-300 flex items-center justify-center text-[11px] font-semibold">
+                                {i + 1}
+                              </div>
+                              <div className="flex-1 min-w-0">
+                                <div className="text-xs text-white font-medium leading-snug">{p.step}</div>
+                                <div className="text-[11px] text-gray-400 leading-relaxed mt-0.5">{p.reason}</div>
+                                {p.expectedOutcome && (
+                                  <div className="text-[10px] text-gray-500 italic mt-1">{"\u2192"} {p.expectedOutcome}</div>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Quick chat about anything else */}
+                    {selected.lastSprintSummary.nextSteps.length > 0 && (
+                      <div className="flex flex-wrap gap-1.5">
+                        <span className="text-[10px] text-gray-500 self-center mr-1">Or ask about:</span>
+                        {selected.lastSprintSummary.nextSteps.map((step, i) => (
+                          <button key={i} onClick={() => chatAboutFocus(selected, step)}
+                            className="text-[10px] px-2 py-1 rounded-full bg-violet-500/10 text-violet-300 border border-violet-500/20 hover:border-violet-500/40 hover:bg-violet-500/20 transition-colors">
+                            {step}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })() : selected.lastSprintSummary && (
+                /* Legacy fallback — for sprints completed before the briefing pass existed */
                 <div className="space-y-3">
                   <div className="rounded-lg border border-violet-500/20 bg-violet-950/10 p-4">
                     <div className="flex items-center gap-2 mb-2">

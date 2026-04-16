@@ -108,6 +108,17 @@ function GeneratedUI({ data, onAction }) {
                     }}
                   >📧 Email Podcast</Button>
                 )}
+                {(function() {
+                  var authorField = fields.find(function(f) { return f.key === "author"; });
+                  if (!authorField) return null;
+                  var authorName = Array.isArray(authorField.value) ? authorField.value[0] : String(authorField.value || "");
+                  if (!authorName) return null;
+                  return (
+                    <Button size="sm" style={{ background: "#0284c7", color: "white" }}
+                      onClick={function() { onAction("find_more_by", { query: authorName, contentType: "book" }); }}
+                    >📚 More by {authorName}</Button>
+                  );
+                })()}
                 <Button size="sm" style={{ background: "#16a34a", color: "white" }}
                   onClick={function() {
                     if (processed && entity.entityId && research) {
@@ -422,13 +433,17 @@ function GeneratedUI({ data, onAction }) {
         {breadcrumb}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
           <div>
-            <span style={{ fontSize: "20px", marginRight: "8px" }}>🔍</span>
-            <span style={{ fontWeight: 600 }}>Add Book</span>
+            <span style={{ fontSize: "20px", marginRight: "8px" }}>{d.moreByCreator ? "📚" : "🔍"}</span>
+            <span style={{ fontWeight: 600 }}>{d.moreByCreator ? "Books by " + d.moreByCreator : "Add Book"}</span>
             <span style={{ fontSize: "12px", color: "#64748b", marginLeft: "8px" }}>
-              {addResults.length > 0 ? addResults.length + " results for \"" + d.query + "\"" : "No results found"}
+              {addResults.length > 0 ? addResults.length + " results" + (d.moreByCreator ? "" : " for \"" + d.query + "\"") : "No results found"}
             </span>
           </div>
-          <Button variant="outline" size="sm" onClick={function() { onAction("browse", {}); }}>← Library</Button>
+          {navStack.length > 0 ? (
+            <Button variant="outline" size="sm" onClick={function() { onAction("nav_back", {}); }}>← Back</Button>
+          ) : (
+            <Button variant="outline" size="sm" onClick={function() { onAction("browse", {}); }}>← Library</Button>
+          )}
         </div>
         {sourceCounts && (sourceCounts.google > 0 || sourceCounts.weread > 0 || sourceCounts.douban > 0 || sourceCounts.kindle > 0) && (
           <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
