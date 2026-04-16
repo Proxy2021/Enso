@@ -70,6 +70,9 @@ var getMediaEntities = function() {
   return entities;
 };
 
+// Stop words to ignore in title matching
+var stopWords = { the: 1, a: 1, an: 1, and: 1, or: 1, of: 1, in: 1, to: 1, for: 1, with: 1, on: 1, at: 1, by: 1, from: 1, is: 1, it: 1, its: 1, that: 1, this: 1, how: 1, what: 1, when: 1, who: 1, all: 1, not: 1, no: 1, but: 1, if: 1, my: 1, your: 1, has: 1, was: 1, are: 1, were: 1, been: 1, be: 1, have: 1, had: 1, do: 1, did: 1, will: 1, can: 1, may: 1, about: 1, into: 1, over: 1, after: 1, before: 1, between: 1, under: 1, through: 1, just: 1, also: 1, than: 1, more: 1, most: 1, other: 1, some: 1, such: 1, each: 1, every: 1, new: 1, old: 1, hd: 1, dv: 1 };
+
 // ── Title normalization for franchise matching ──
 var normalizeTitle = function(title) {
   if (!title) return "";
@@ -80,8 +83,19 @@ var normalizeTitle = function(title) {
   t = t.replace(/\s*\([^)]*\)\s*/g, " ");
   // Remove year suffixes
   t = t.replace(/\s+\d{4}$/, "");
-  // Remove punctuation except hyphens
-  t = t.replace(/[^\w\s-]/g, "");
+  // Remove episode identifiers S01E01 patterns
+  t = t.replace(/\s+s\d+e\d+\b.*$/i, "");
+  // Remove trailing episode patterns like E01, E02
+  t = t.replace(/\s+e\d+\b.*$/i, "");
+  // Remove quality/codec tags
+  t = t.replace(/\s+(hd|4k|1080p|720p|bluray|webrip|dsnp|smurf|blacktv|hbomax)\b.*$/i, "");
+  // Remove Chinese subtitle markers
+  t = t.replace(/\s*中英双字.*$/, "");
+  t = t.replace(/\s*中字.*$/, "");
+  // Replace colons with space (preserve for subtitle splitting in extractBaseName)
+  t = t.replace(/:/g, " ");
+  // Remove other punctuation except hyphens
+  t = t.replace(/[^\w\s\u4e00-\u9fff-]/g, "");
   // Collapse whitespace
   t = t.replace(/\s+/g, " ").trim();
   return t;
@@ -90,66 +104,100 @@ var normalizeTitle = function(title) {
 // Extract base franchise name from a title
 var extractBaseName = function(title) {
   if (!title) return "";
-  var t = normalizeTitle(title);
+  // First, split on colon/em-dash to get the main title before subtitle
+  var mainTitle = title;
+  var colonIdx = title.indexOf(":");
+  var dashIdx = title.indexOf(" - ");
+  var emIdx = title.indexOf("—");
+  var splitIdx = -1;
+  if (colonIdx > 2) splitIdx = colonIdx;
+  if (dashIdx > 2 && (splitIdx === -1 || dashIdx < splitIdx)) splitIdx = dashIdx;
+  if (emIdx > 2 && (splitIdx === -1 || emIdx < splitIdx)) splitIdx = emIdx;
+  if (splitIdx > 2) mainTitle = title.substring(0, splitIdx);
+  // Now normalize the main title
+  var t = normalizeTitle(mainTitle);
   // Remove sequel indicators: Roman numerals, numbers, "Part N", "Vol N", "Book N", "Season N", "Episode N"
   t = t.replace(/\s+(part|vol|volume|book|season|episode|chapter)\s+\w+$/i, "");
   t = t.replace(/\s+(ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii)$/i, "");
   t = t.replace(/\s+\d+$/, "");
-  // Remove subtitle after colon or dash
-  t = t.replace(/\s*[-:]\s+.*$/, "");
   // Remove common Chinese suffixes for sequels
   t = t.replace(/[（(].*[）)]/, "");
   t = t.replace(/\s*第[一二三四五六七八九十\d]+[部季集].*$/, "");
   t = t.trim();
+  // Base name must be at least 3 chars to be meaningful
+  if (t.length < 3) return "";
   return t;
 };
 
-// Check if two base names are similar enough
+// Get unique significant words from a base name (filtering stop words + deduplicating)
+var getSignificantWords = function(base) {
+  var words = base.split(/\s+/);
+  var seen = {};
+  var result = [];
+  for (var i = 0; i < words.length; i++) {
+    var w = words[i];
+    if (w.length > 2 && !stopWords[w] && !seen[w]) {
+      seen[w] = true;
+      result.push(w);
+    }
+  }
+  return result;
+};
+
+// Check if two base names are similar enough for franchise grouping
 var isSimilarBase = function(a, b) {
   if (!a || !b) return false;
   if (a === b) return true;
-  // One contains the other
-  if (a.indexOf(b) >= 0 || b.indexOf(a) >= 0) return true;
-  // Levenshtein-like: allow small edits for very similar names
-  if (a.length > 4 && b.length > 4) {
-    var shorter = a.length <= b.length ? a : b;
-    var longer = a.length > b.length ? a : b;
-    if (longer.indexOf(shorter) >= 0) return true;
-    // Check common word overlap
-    var wordsA = a.split(/\s+/);
-    var wordsB = b.split(/\s+/);
-    if (wordsA.length >= 2 && wordsB.length >= 2) {
-      var common = 0;
-      for (var i = 0; i < wordsA.length; i++) {
-        for (var j = 0; j < wordsB.length; j++) {
-          if (wordsA[i] === wordsB[j] && wordsA[i].length > 2) common++;
-        }
-      }
-      var minWords = Math.min(wordsA.length, wordsB.length);
-      if (minWords > 0 && common / minWords >= 0.6) return true;
+  // Significant word overlap (exclude stop words) — primary matching strategy
+  var wordsA = getSignificantWords(a);
+  var wordsB = getSignificantWords(b);
+  if (wordsA.length < 1 || wordsB.length < 1) return false;
+  var common = 0;
+  for (var i = 0; i < wordsA.length; i++) {
+    for (var j = 0; j < wordsB.length; j++) {
+      if (wordsA[i] === wordsB[j]) common++;
     }
   }
+  var minSig = Math.min(wordsA.length, wordsB.length);
+  // For single-word titles: require exact match of that word (already handled by a===b)
+  // For multi-word: need 80%+ overlap AND at least 2 common significant words
+  if (minSig >= 2 && common >= 2 && common / minSig >= 0.8) return true;
+  // Single significant word match: only if that word is highly specific (7+ chars)
+  if (wordsA.length === 1 && wordsB.length === 1 && wordsA[0] === wordsB[0] && wordsA[0].length >= 7) return true;
   return false;
 };
 
 // Determine entity role in franchise
-var determineRole = function(entity, baseName) {
-  var t = normalizeTitle(entity.title);
-  var base = normalizeTitle(baseName);
-  if (entity.type !== "book" && entity.type !== "game") {
-    // Movie/TV based on book = adaptation
-    // Check crossReferences for book connections
-    var refs = entity.crossReferences || [];
-    for (var i = 0; i < refs.length; i++) {
-      var refId = refs[i].entityId || "";
-      if (refId.indexOf(":book:") >= 0) return "adaptation";
+var determineRole = function(entity, baseName, clusterEntities) {
+  var rawTitle = entity.title || "";
+  var t = normalizeTitle(rawTitle);
+  // 1. Sequel indicators (check FIRST — Part II is always a sequel)
+  if (/part\s+(two|three|four|five|six|ii|iii|iv|v|vi|\d+)/i.test(rawTitle)) return "sequel";
+  if (/\s+(ii|iii|iv|v|vi|vii|viii|ix|x|xi|xii)\s*$/i.test(t)) return "sequel";
+  if (/\b(sequel|2|3|4|5|6|7|8|9|10)\s*$/i.test(t)) return "sequel";
+  if (/vol(ume)?\.?\s*\d/i.test(rawTitle)) return "sequel";
+  if (/第[二三四五六七八九十]/.test(rawTitle)) return "sequel";
+  if (/\bxxl\b/i.test(rawTitle)) return "sequel";
+  // 2. Cross-media roles
+  var hasBook = false;
+  var hasNonBook = false;
+  var isBookEntity = entity.type === "book";
+  if (clusterEntities) {
+    for (var ci = 0; ci < clusterEntities.length; ci++) {
+      if (clusterEntities[ci].entityId === entity.entityId) continue;
+      if (clusterEntities[ci].type === "book") hasBook = true;
+      if (clusterEntities[ci].type !== "book") hasNonBook = true;
     }
   }
-  if (t === base) return "original";
-  if (/\s+(ii|iii|iv|2|3|4|5|6|7|8|9|10)\s*$/i.test(t)) return "sequel";
-  if (/part\s+/i.test(t) || /vol/i.test(t)) return "sequel";
-  if (/第[二三四五六七八九十]/.test(entity.title)) return "sequel";
-  if (entity.type === "tv-series") return "adaptation";
+  // Movie/TV/documentary with a book in the cluster → adaptation
+  if (hasBook && (entity.type === "movie" || entity.type === "tv-series" || entity.type === "documentary")) return "adaptation";
+  // Book in a cluster with movies/shows → original source
+  if (isBookEntity && hasNonBook) return "original";
+  // 3. Base name match — if entity base matches cluster base exactly, it's the original
+  var entBase = extractBaseName(rawTitle);
+  if (entBase === baseName) return "original";
+  // 4. Episode indicators for TV/docs
+  if (/s\d+e\d+/i.test(rawTitle) || /\bE\d+\b/.test(rawTitle)) return "related";
   return "related";
 };
 
@@ -169,7 +217,10 @@ if (action === "detect") {
   for (var ti = 0; ti < entities.length; ti++) {
     var ent = entities[ti];
     var base = extractBaseName(ent.title);
-    if (!base || base.length < 2) continue;
+    if (!base || base.length < 3) continue;
+    // Skip very generic bases that create false clusters
+    var sigWords = getSignificantWords(base);
+    if (sigWords.length === 0) continue;
     entityToBase[ent.entityId] = base;
 
     // Check if this base matches any existing cluster
@@ -206,11 +257,10 @@ if (action === "detect") {
         if (mediaEntityTypes.indexOf(refEntity.type) === -1) continue;
         if (expanded.indexOf(refId) >= 0) continue;
 
-        // Only add cross-refs if they share a similar base name OR are adaptations
+        // Only add cross-refs if they share a very similar base name
+        // (do NOT use reason text — too many false positives like "both deal with X")
         var refBase = extractBaseName(refEntity.title);
-        var reason = (crefs[cr].reason || "").toLowerCase();
-        var isAdaptation = reason.indexOf("adapt") >= 0 || reason.indexOf("based on") >= 0 || reason.indexOf("same universe") >= 0 || reason.indexOf("same series") >= 0;
-        if (isSimilarBase(clusterName, refBase) || isAdaptation) {
+        if (isSimilarBase(clusterName, refBase)) {
           expanded.push(refId);
         }
       }
@@ -243,21 +293,26 @@ if (action === "detect") {
       assignedEntities[uniqueIds[ai]] = true;
     }
 
-    // Build franchise object
+    // Build franchise object — collect entities first, then determine roles
     var mediaTypes = {};
-    var fEntities = [];
+    var clusterEnts = [];
     for (var fe = 0; fe < uniqueIds.length; fe++) {
       var fEnt = entityLookup[uniqueIds[fe]];
       if (!fEnt) continue;
       mediaTypes[fEnt.type] = (mediaTypes[fEnt.type] || 0) + 1;
+      clusterEnts.push(fEnt);
+    }
+    var fEntities = [];
+    for (var fe2 = 0; fe2 < clusterEnts.length; fe2++) {
+      var fEnt2 = clusterEnts[fe2];
       fEntities.push({
-        entityId: fEnt.entityId,
-        title: fEnt.title,
-        type: fEnt.type,
-        source: fEnt.source || "",
-        imageUrl: fEnt.imageUrl || null,
-        role: determineRole(fEnt, cName),
-        tags: (fEnt.semanticTags || []).slice(0, 3)
+        entityId: fEnt2.entityId,
+        title: fEnt2.title,
+        type: fEnt2.type,
+        source: fEnt2.source || "",
+        imageUrl: fEnt2.imageUrl || null,
+        role: determineRole(fEnt2, cName, clusterEnts),
+        tags: (fEnt2.semanticTags || []).slice(0, 3)
       });
     }
 

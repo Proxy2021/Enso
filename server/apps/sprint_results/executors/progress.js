@@ -167,6 +167,71 @@ if (!recommended) {
   }
 }
 
+// ── Feedback integration ──
+var feedbackInsights = null;
+try {
+  var aggregator = require("../apps/sprint_results/lib/feedback-aggregator.cjs");
+  feedbackInsights = aggregator.getActivationInsights();
+} catch (e) {
+  // Aggregator not available — continue without feedback data
+}
+
+// Merge feedback ratings into per-record data
+var feedbackByEntity = {};
+if (feedbackInsights && feedbackInsights.totalFeedback > 0) {
+  try {
+    var fs = require("fs");
+    var fbPath = (process.env.HOME || process.env.USERPROFILE || "~") + "/.enso/data/activation-feedback.json";
+    var fbRaw = fs.readFileSync(fbPath, "utf8");
+    var fbData = JSON.parse(fbRaw);
+    for (var fbi = 0; fbi < (fbData.feedbackEntries || []).length; fbi++) {
+      var entry = fbData.feedbackEntries[fbi];
+      feedbackByEntity[entry.entityId] = { rating: entry.rating, actionTaken: entry.actionTaken || "" };
+    }
+  } catch (e2) {}
+}
+
+// Attach feedback to records and compute per-type stats
+var typeStats = {};
+for (var rli = 0; rli < recordsList.length; rli++) {
+  var rl = recordsList[rli];
+  if (feedbackByEntity[rl.entityId]) {
+    rl.feedback = feedbackByEntity[rl.entityId];
+  }
+  // Track type activation counts
+  var et = rl.entityType || "unknown";
+  if (!typeStats[et]) typeStats[et] = { total: 0, activated: 0 };
+  typeStats[et].total++;
+  if (rl.status === "completed") typeStats[et].activated++;
+}
+
+// Identify most/least activated types
+var mostActivatedType = null;
+var leastActivatedType = null;
+var tsKeys = Object.keys(typeStats);
+for (var tsi = 0; tsi < tsKeys.length; tsi++) {
+  var tsKey = tsKeys[tsi];
+  var tsVal = typeStats[tsKey];
+  var tsRate = tsVal.total > 0 ? tsVal.activated / tsVal.total : 0;
+  if (!mostActivatedType || tsRate > mostActivatedType.rate) {
+    mostActivatedType = { type: tsKey, rate: Math.round(tsRate * 100), activated: tsVal.activated, total: tsVal.total };
+  }
+  if (!leastActivatedType || tsRate < leastActivatedType.rate) {
+    leastActivatedType = { type: tsKey, rate: Math.round(tsRate * 100), activated: tsVal.activated, total: tsVal.total };
+  }
+}
+
+// Enrich byFocus with feedback average ratings
+if (feedbackInsights && feedbackInsights.ratingsByFocus) {
+  for (var efi = 0; efi < byFocus.length; efi++) {
+    var focusFb = feedbackInsights.ratingsByFocus[byFocus[efi].focusId];
+    if (focusFb) {
+      byFocus[efi].avgRating = focusFb.averageRating;
+      byFocus[efi].feedbackCount = focusFb.count;
+    }
+  }
+}
+
 var result = {
   tool: "enso_sprint_results_progress",
   success: true,
@@ -179,7 +244,17 @@ var result = {
   byFocus: byFocus,
   records: recordsList,
   recommended: recommended,
-  focusId: focusIdParam || null
+  focusId: focusIdParam || null,
+  typeStats: typeStats,
+  mostActivatedType: mostActivatedType,
+  leastActivatedType: leastActivatedType,
+  feedback: feedbackInsights ? {
+    totalFeedback: feedbackInsights.totalFeedback,
+    averageRating: feedbackInsights.averageRating,
+    ratingsByType: feedbackInsights.ratingsByType,
+    trend: feedbackInsights.recentTrend,
+    topSuggestions: feedbackInsights.topSuggestions ? feedbackInsights.topSuggestions.slice(0, 3) : []
+  } : null
 };
 
 return { content: [{ type: "text", text: JSON.stringify(result) }] };

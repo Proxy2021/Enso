@@ -113,8 +113,15 @@ if (!deliverable && !record) {
   }) }] };
 }
 
-// ── Generate activation steps based on entity type ──
-function generateSteps(entityType, quickStart, taskTitle) {
+// ── Smart classifier (content-aware steps) with generic fallback ──
+var classifier = null;
+try {
+  classifier = require("../apps/sprint_results/lib/deliverable-classifier.cjs");
+} catch (e) {
+  // Classifier not available — will use generic fallback
+}
+
+function generateGenericSteps(entityType, quickStart, taskTitle) {
   var qs = quickStart || taskTitle;
   if (entityType === "app") {
     return [
@@ -144,9 +151,53 @@ function generateSteps(entityType, quickStart, taskTitle) {
   }
 }
 
+/**
+ * Generate steps using the smart classifier (reads wiki content, extracts
+ * headings/bullets/action items, generates content-specific steps).
+ * Falls back to generic templates on any error.
+ */
+async function generateSmartSteps(src) {
+  if (!classifier) return null;
+  try {
+    var classification = await classifier.classifyDeliverable(ctx, {
+      entityId: src.entityId || entityId,
+      entityType: src.entityType || "synthesis",
+      taskTitle: src.taskTitle || "Untitled",
+      painPoint: src.painPoint || "",
+      howItHelps: src.howItHelps || "",
+      quickStart: src.quickStart || ""
+    });
+    if (!classification || !classification.activationSteps || classification.activationSteps.length === 0) {
+      return null;
+    }
+    // Convert classifier output to step records with stepIndex
+    var steps = [];
+    for (var si = 0; si < classification.activationSteps.length; si++) {
+      var cs = classification.activationSteps[si];
+      steps.push({
+        stepIndex: si,
+        instruction: cs.instruction,
+        context: cs.context || "",
+        estimatedMinutes: cs.estimatedMinutes || 5,
+        completed: false
+      });
+    }
+    return {
+      steps: steps,
+      activationType: classification.activationType,
+      contentSummary: classification.contentSummary,
+      keyTopics: classification.keyTopics,
+      relatedActions: classification.relatedActions
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
 // ── Create or resume activation record ──
 if (!record) {
   var src = deliverable;
+  var smartResult = await generateSmartSteps(src);
   record = {
     entityId: entityId,
     focusId: focusId,
@@ -160,7 +211,12 @@ if (!record) {
     actionType: src.actionType || "review",
     status: "in_progress",
     activatedAt: new Date().toISOString(),
-    steps: generateSteps(src.entityType || "synthesis", src.quickStart, src.taskTitle)
+    steps: smartResult ? smartResult.steps : generateGenericSteps(src.entityType || "synthesis", src.quickStart, src.taskTitle),
+    activationType: smartResult ? smartResult.activationType : null,
+    contentSummary: smartResult ? smartResult.contentSummary : null,
+    keyTopics: smartResult ? smartResult.keyTopics : null,
+    relatedActions: smartResult ? smartResult.relatedActions : null,
+    classifiedByContent: !!smartResult
   };
   activationState.records[entityId] = record;
   activationState.updatedAt = new Date().toISOString();
@@ -169,7 +225,17 @@ if (!record) {
   record.status = "in_progress";
   record.activatedAt = new Date().toISOString();
   if (!record.steps || record.steps.length === 0) {
-    record.steps = generateSteps(record.entityType || "synthesis", record.quickStart || "", record.taskTitle || "");
+    var smartPending = await generateSmartSteps(record);
+    if (smartPending) {
+      record.steps = smartPending.steps;
+      record.activationType = smartPending.activationType;
+      record.contentSummary = smartPending.contentSummary;
+      record.keyTopics = smartPending.keyTopics;
+      record.relatedActions = smartPending.relatedActions;
+      record.classifiedByContent = true;
+    } else {
+      record.steps = generateGenericSteps(record.entityType || "synthesis", record.quickStart || "", record.taskTitle || "");
+    }
   }
   activationState.records[entityId] = record;
   activationState.updatedAt = new Date().toISOString();
@@ -209,6 +275,12 @@ var result = {
   steps: record.steps,
   progress: { completed: doneCount, total: record.steps.length, percent: Math.round((doneCount / record.steps.length) * 100) },
   nextStep: nextStepItem ? nextStepItem.instruction : null,
+  nextStepContext: nextStepItem ? (nextStepItem.context || "") : "",
+  activationType: record.activationType || null,
+  contentSummary: record.contentSummary || null,
+  keyTopics: record.keyTopics || null,
+  relatedActions: record.relatedActions || null,
+  classifiedByContent: record.classifiedByContent || false,
   message: record.status === "completed"
     ? "\"" + record.taskTitle + "\" is fully activated!"
     : "Activation started. First step: " + (nextStepItem ? nextStepItem.instruction : "")

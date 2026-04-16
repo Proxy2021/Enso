@@ -719,6 +719,59 @@
         },
         "requiredDataKeys": ["tool", "action"],
         "isPrimary": false
+      },
+      {
+        "suffix": "bulk_enrich",
+        "description": "Bulk metadata enrichment orchestrator. Propagates existing cache enrichment to entity index and calls external APIs (TMDB, Steam Store, Google Books) for unenriched entities. Actions: status (show enrichment coverage per type), preview (show entities to be enriched), enrich (execute batch enrichment). Use when the user says: 'enrich my library', 'bulk enrich', 'enrich metadata', 'fill missing metadata', 'enrich movies', 'enrich books'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: status (show coverage), preview (dry run), enrich (execute)"
+            },
+            "mediaType": {
+              "type": "string",
+              "description": "Filter by media type: all, books, movies, tv, games (default: all)"
+            },
+            "limit": {
+              "type": "number",
+              "description": "Max entities to API-enrich per run (default: 50). Cache propagation is unlimited."
+            },
+            "source": {
+              "type": "string",
+              "description": "Filter enrichment source: all, tmdb, steam, google_books (default: all)"
+            }
+          },
+          "required": ["action"]
+        },
+        "sampleParams": { "action": "status" },
+        "sampleData": {
+          "tool": "enso_media_library_bulk_enrich",
+          "action": "status",
+          "totalEntities": 968,
+          "coverage": {
+            "overall": { "total": 968, "enriched": 455, "propagatable": 400, "needsApi": 113, "percent": 47 },
+            "byType": {
+              "movie": { "total": 299, "enriched": 0, "propagatable": 152, "needsApi": 147, "percent": 0, "estimateMinutes": 1.5 },
+              "book": { "total": 491, "enriched": 11, "propagatable": 461, "needsApi": 19, "percent": 2, "estimateMinutes": 0.1 },
+              "game": { "total": 17, "enriched": 0, "propagatable": 15, "needsApi": 2, "percent": 0, "estimateMinutes": 0.03 }
+            }
+          },
+          "apiStatus": {
+            "tmdb": { "configured": true },
+            "steam": { "configured": true, "note": "No key required" },
+            "googleBooks": { "configured": true, "note": "Free API" }
+          },
+          "caches": {
+            "kindle": { "total": 472, "enriched": 472 },
+            "moviesTv": { "total": 590, "enriched": 299 },
+            "steam": { "total": 16, "enriched": 15 }
+          }
+        },
+        "requiredDataKeys": ["tool", "action"],
+        "isPrimary": false
       }
     ]
   }

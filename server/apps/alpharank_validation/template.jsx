@@ -30,12 +30,17 @@ export default function GeneratedUI({ data, onAction }) {
   var editingNote = editingNoteState[0];
   var setEditingNote = editingNoteState[1];
 
+  var expandedGateState = useState(null);
+  var expandedGate = expandedGateState[0];
+  var setExpandedGate = expandedGateState[1];
+
   // ── View detection ──
   var isScorecard = data && data.tool === "enso_alpharank_validation_scorecard";
   var isFeatures = data && data.tool === "enso_alpharank_validation_features";
   var isDiagnose = data && data.tool === "enso_alpharank_validation_diagnose";
   var isChecklist = data && data.tool === "enso_alpharank_validation_checklist";
   var isCompare = data && data.tool === "enso_alpharank_validation_compare";
+  var isGates = data && data.tool === "enso_alpharank_validation_gates";
 
   // ── Error view ──
   if (data && data.error) {
@@ -163,6 +168,9 @@ export default function GeneratedUI({ data, onAction }) {
           </Button>
           <Button variant="outline" onClick={function() { onAction("compare", {}); }}>
             Compare Models
+          </Button>
+          <Button variant="primary" onClick={function() { onAction("gates", {}); }}>
+            Kill-Gate Protocol
           </Button>
         </div>
       </div>
@@ -665,6 +673,300 @@ export default function GeneratedUI({ data, onAction }) {
           <Button variant="outline" onClick={function() { onAction("scorecard", {}); }}>Scorecard</Button>
           <Button variant="outline" onClick={function() { onAction("features", {}); }}>Feature Analysis</Button>
           <Button variant="outline" onClick={function() { onAction("checklist", {}); }}>Checklist</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ════════════════════════════════════════════
+  // GATES VIEW (Kill-Gate Protocol)
+  // ════════════════════════════════════════════
+  if (isGates) {
+    var gates = data.gates || [];
+    var gateSummary = data.summary || {};
+
+    var gateStatusColor = function(s) {
+      if (s === "pass") return "#22c55e";
+      if (s === "fail") return "#ef4444";
+      if (s === "active") return "#60a5fa";
+      return "#475569";
+    };
+    var gateStatusBadge = function(s) {
+      if (s === "pass") return "success";
+      if (s === "fail") return "danger";
+      if (s === "active") return "info";
+      return "outline";
+    };
+    var gateStatusLabel = function(s) {
+      if (s === "pass") return "PASS";
+      if (s === "fail") return "FAIL";
+      if (s === "active") return "ACTIVE";
+      if (s === "locked") return "LOCKED";
+      return s;
+    };
+    var gateAccent = function(s) {
+      if (s === "pass") return "emerald";
+      if (s === "fail") return "red";
+      if (s === "active") return "blue";
+      return "gray";
+    };
+
+    var metricDisplay = function(met) {
+      if (met.value === null || met.value === undefined) return "—";
+      if (met.unit === "bool") return met.value === 0 ? "None" : "Detected";
+      if (met.unit === "%") return fmtDec(met.value, 1) + "%";
+      if (met.unit === "wk") return met.value + " wk";
+      return fmtDec(met.value, 4);
+    };
+    var thresholdDisplay = function(met) {
+      var comp = met.comparison || ">=";
+      var val = met.threshold;
+      if (met.unit === "bool") return comp + " None";
+      if (met.unit === "%") return comp + " " + val + "%";
+      if (met.unit === "wk") return comp + " " + val + " wk";
+      return comp + " " + val;
+    };
+
+    // Progress bar data
+    var gateProgress = gateSummary.totalGates > 0 ? Math.round((gateSummary.passed / gateSummary.totalGates) * 100) : 0;
+
+    // Gate pipeline visualization data for chart
+    var pipelineChartData = [];
+    for (var gci = 0; gci < gates.length; gci++) {
+      pipelineChartData.push({
+        name: "G" + gates[gci].id,
+        value: gates[gci].status === "pass" ? 1 : gates[gci].status === "fail" ? -1 : 0,
+        fill: gateStatusColor(gates[gci].status)
+      });
+    }
+
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <div>
+            <h2 style={{ fontSize: "1.25rem", fontWeight: "bold", color: "#f1f5f9", margin: 0 }}>Kill-Gate Protocol</h2>
+            <p style={{ fontSize: "0.75rem", color: "#94a3b8", margin: "4px 0 0" }}>Updated: {fmtDate(data.updatedAt)}</p>
+          </div>
+          <Badge variant={gateSummary.overallStatus === "all_pass" ? "success" : gateSummary.overallStatus === "blocked" ? "danger" : "info"}>
+            {gateSummary.overallStatus === "all_pass" ? "ALL PASS" : gateSummary.overallStatus === "blocked" ? "BLOCKED" : "IN PROGRESS"}
+          </Badge>
+        </div>
+
+        {/* Overall verdict */}
+        <UICard accent={gateSummary.overallStatus === "all_pass" ? "emerald" : gateSummary.overallStatus === "blocked" ? "red" : "blue"}>
+          <p style={{ fontSize: "0.85rem", fontWeight: "600", color: gateSummary.overallStatus === "all_pass" ? "#22c55e" : gateSummary.overallStatus === "blocked" ? "#ef4444" : "#60a5fa" }}>
+            {gateSummary.overallVerdict || "Pipeline initialized"}
+          </p>
+        </UICard>
+
+        {/* Summary stats */}
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: "8px" }}>
+          <Stat label="Passed" value={gateSummary.passed || 0} accent="emerald" />
+          <Stat label="Failed" value={gateSummary.failed || 0} accent={gateSummary.failed > 0 ? "red" : "gray"} />
+          <Stat label="Active" value={gateSummary.activeGate ? "Gate " + gateSummary.activeGate : "—"} accent="blue" />
+          <Stat label="Locked" value={gateSummary.locked || 0} accent="gray" />
+        </div>
+
+        {/* Progress bar */}
+        <UICard>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
+            <span style={{ fontSize: "0.85rem", color: "#e2e8f0" }}>Gate Progress</span>
+            <Badge variant={gateProgress === 100 ? "success" : gateProgress > 0 ? "warning" : "outline"}>
+              {gateSummary.passed || 0}/5 gates
+            </Badge>
+          </div>
+          <Progress value={gateProgress} max={100} variant={gateProgress === 100 ? "emerald" : "blue"} showLabel />
+        </UICard>
+
+        {/* Pipeline visualization — horizontal status bar */}
+        <UICard header="Gate Pipeline">
+          <div style={{ display: "flex", gap: "4px", alignItems: "center" }}>
+            {gates.map(function(gate, gi) {
+              var isLast = gi === gates.length - 1;
+              return (
+                <Fragment key={gate.id}>
+                  <div
+                    style={{
+                      flex: 1,
+                      textAlign: "center",
+                      padding: "8px 4px",
+                      borderRadius: "6px",
+                      backgroundColor: gateStatusColor(gate.status) + "20",
+                      border: "2px solid " + gateStatusColor(gate.status),
+                      cursor: "pointer",
+                      transition: "transform 0.1s"
+                    }}
+                    onClick={function() {
+                      var gId = gate.id;
+                      setExpandedGate(function(prev) { return prev === gId ? null : gId; });
+                    }}
+                  >
+                    <p style={{ fontSize: "0.65rem", color: "#94a3b8", margin: 0 }}>Gate {gate.id}</p>
+                    <p style={{ fontSize: "0.75rem", fontWeight: "bold", color: gateStatusColor(gate.status), margin: "2px 0 0" }}>
+                      {gateStatusLabel(gate.status)}
+                    </p>
+                  </div>
+                  {!isLast && (
+                    <span style={{ color: "#475569", fontSize: "0.9rem" }}>→</span>
+                  )}
+                </Fragment>
+              );
+            })}
+          </div>
+        </UICard>
+
+        {/* Individual Gate Cards */}
+        <div className="space-y-3">
+          {gates.map(function(gate, gIdx) {
+            var mKeys = Object.keys(gate.metrics || {});
+            var isExpanded = expandedGate === gate.id;
+            var isActive = gate.status === "active";
+            var isFailed = gate.status === "fail";
+
+            return (
+              <UICard key={gate.id} accent={gateAccent(gate.status)}>
+                {/* Gate header row */}
+                <div
+                  style={{ display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+                  onClick={function() {
+                    var gId = gate.id;
+                    setExpandedGate(function(prev) { return prev === gId ? null : gId; });
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                    <div style={{
+                      width: "32px", height: "32px", borderRadius: "50%",
+                      backgroundColor: gateStatusColor(gate.status) + "30",
+                      border: "2px solid " + gateStatusColor(gate.status),
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      fontSize: "0.85rem", fontWeight: "bold", color: gateStatusColor(gate.status)
+                    }}>
+                      {gate.status === "pass" ? "✓" : gate.status === "fail" ? "✗" : gate.status === "locked" ? React.createElement(LucideReact.Lock, { size: 14 }) : gate.id}
+                    </div>
+                    <div>
+                      <p style={{ fontSize: "0.9rem", fontWeight: "600", color: "#f1f5f9", margin: 0 }}>
+                        Gate {gate.id}: {gate.name}
+                      </p>
+                      <p style={{ fontSize: "0.7rem", color: "#94a3b8", margin: "2px 0 0" }}>{gate.description}</p>
+                    </div>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+                    <Badge variant={gateStatusBadge(gate.status)}>{gateStatusLabel(gate.status)}</Badge>
+                    <span style={{ color: "#64748b", fontSize: "0.8rem" }}>{isExpanded ? "▼" : "▶"}</span>
+                  </div>
+                </div>
+
+                {/* Expanded details */}
+                {isExpanded && (
+                  <div style={{ marginTop: "12px" }}>
+                    <Separator />
+
+                    {/* Metrics table */}
+                    <div style={{ marginTop: "10px" }}>
+                      <p style={{ fontSize: "0.75rem", fontWeight: "600", color: "#94a3b8", margin: "0 0 6px", textTransform: "uppercase", letterSpacing: "0.05em" }}>Metrics</p>
+                      <div className="space-y-2">
+                        {mKeys.map(function(mk) {
+                          var met = gate.metrics[mk];
+                          return (
+                            <div key={mk} style={{
+                              display: "flex", justifyContent: "space-between", alignItems: "center",
+                              padding: "6px 10px", borderRadius: "4px",
+                              backgroundColor: met.pass === true ? "#22c55e10" : met.pass === false ? "#ef444410" : "#1e293b"
+                            }}>
+                              <span style={{ fontSize: "0.8rem", color: "#e2e8f0" }}>{met.label}</span>
+                              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                                <span style={{ fontSize: "0.7rem", color: "#64748b" }}>
+                                  {thresholdDisplay(met)}
+                                </span>
+                                <span style={{
+                                  fontSize: "0.85rem", fontWeight: "600",
+                                  color: met.pass === true ? "#22c55e" : met.pass === false ? "#ef4444" : "#94a3b8"
+                                }}>
+                                  {metricDisplay(met)}
+                                </span>
+                                {met.pass !== null && (
+                                  <span style={{ fontSize: "0.75rem" }}>
+                                    {met.pass ? React.createElement("span", { style: { color: "#22c55e" } }, "✓") : React.createElement("span", { style: { color: "#ef4444" } }, "✗")}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Verdict */}
+                    {gate.verdict && (
+                      <div style={{ marginTop: "8px" }}>
+                        <p style={{
+                          fontSize: "0.8rem", fontWeight: "600", margin: 0,
+                          color: gate.status === "pass" ? "#22c55e" : "#ef4444"
+                        }}>
+                          {gate.verdict}
+                        </p>
+                        {gate.timestamp && (
+                          <p style={{ fontSize: "0.65rem", color: "#64748b", margin: "2px 0 0" }}>
+                            Evaluated: {fmtDate(gate.timestamp)}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Pivot action on failure */}
+                    {isFailed && gate.pivotAction && (
+                      <UICard accent="amber" header="Pivot Action">
+                        <p style={{ fontSize: "0.8rem", color: "#fde68a", margin: 0 }}>{gate.pivotAction}</p>
+                      </UICard>
+                    )}
+
+                    {/* Notes */}
+                    {gate.notes && (
+                      <div style={{ marginTop: "8px" }}>
+                        <p style={{ fontSize: "0.7rem", color: "#94a3b8", fontWeight: "600", margin: "0 0 4px" }}>Notes:</p>
+                        <p style={{ fontSize: "0.75rem", color: "#60a5fa", margin: 0, fontStyle: "italic", whiteSpace: "pre-line" }}>{gate.notes}</p>
+                      </div>
+                    )}
+
+                    {/* Action buttons */}
+                    <div style={{ display: "flex", gap: "6px", marginTop: "10px", flexWrap: "wrap" }}>
+                      {(isActive || isFailed) && (
+                        <Button variant="primary" onClick={function() {
+                          var gId = gate.id;
+                          onAction("gates", { action: "submit", gate: gId, metrics: "{}" });
+                        }}>
+                          Submit Results
+                        </Button>
+                      )}
+                      {(gate.status === "pass" || isFailed) && (
+                        <Button variant="outline" onClick={function() {
+                          var gId = gate.id;
+                          onAction("gates", { action: "reset", gate: gId });
+                        }}>
+                          Reset Gate
+                        </Button>
+                      )}
+                      <Button variant="ghost" onClick={function() {
+                        var gId = gate.id;
+                        onAction("gates", { action: "notes", gate: gId, notes: "Observation added from dashboard" });
+                      }}>
+                        Add Note
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </UICard>
+            );
+          })}
+        </div>
+
+        {/* Navigation */}
+        <div style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+          <Button variant="outline" onClick={function() { onAction("scorecard", {}); }}>Scorecard</Button>
+          <Button variant="outline" onClick={function() { onAction("checklist", {}); }}>Checklist</Button>
+          <Button variant="outline" onClick={function() { onAction("diagnose", {}); }}>Diagnose</Button>
+          <Button variant="outline" onClick={function() { onAction("compare", {}); }}>Compare</Button>
         </div>
       </div>
     );

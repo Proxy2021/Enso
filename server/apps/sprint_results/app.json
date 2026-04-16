@@ -299,6 +299,52 @@
         "isPrimary": false
       },
       {
+        "suffix": "feedback",
+        "description": "Rate and give feedback on sprint deliverables to improve future sprints. Without a rating, shows a feedback form. With a rating (1-5), saves your feedback. Use when the user says: 'rate this deliverable', 'give feedback', 'how useful was this', or after activating a deliverable.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "entityId": {
+              "type": "string",
+              "description": "The Cortex entity ID of the deliverable to rate"
+            },
+            "focusId": {
+              "type": "string",
+              "description": "Focus area ID for context"
+            },
+            "rating": {
+              "type": "number",
+              "description": "Usefulness rating 1-5 (1=Not useful, 5=Essential). Omit to show the feedback form."
+            },
+            "actionTaken": {
+              "type": "string",
+              "description": "What the user actually did with this deliverable"
+            },
+            "suggestion": {
+              "type": "string",
+              "description": "How to improve this type of deliverable in future sprints"
+            }
+          },
+          "required": ["entityId"]
+        },
+        "sampleParams": { "entityId": "entity-abc123", "rating": 4, "actionTaken": "Used it to organize my latest photo shoot" },
+        "sampleData": {
+          "tool": "enso_sprint_results_feedback",
+          "success": true,
+          "mode": "saved",
+          "entityId": "entity-abc123",
+          "title": "Photo Curation Workflow App",
+          "entityType": "app",
+          "rating": 4,
+          "confirmation": "Great to hear! We'll aim to produce more deliverables like this.",
+          "stats": { "totalFeedbackGiven": 5, "averageRating": 3.8 },
+          "message": "Feedback saved — 4/5 for \"Photo Curation Workflow App\". Great to hear!"
+        },
+        "requiredDataKeys": ["tool", "success", "entityId"],
+        "isPrimary": false
+      },
+      {
         "suffix": "value_map",
         "description": "Show a pain-point-centric value dashboard — maps all sprint deliverables across all focus areas to your specific pain points. Shows what Enso has built, activation status, and dormant value. Use when the user says: 'what has Enso built for me', 'show my value', 'pain point mapping', 'value dashboard', 'what did my sprints produce'.",
         "parameters": {

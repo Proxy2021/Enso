@@ -55,6 +55,7 @@ export default function GeneratedUI({ data, onAction }) {
   var isTimeline = tool === "enso_media_library_timeline";
   var isTasteProfile = tool === "enso_media_library_taste_profile";
   var isFranchise = tool === "enso_media_library_franchise";
+  var isBulkEnrich = tool === "enso_media_library_bulk_enrich";
 
   // ── Error handling ──
   if (data && data.error) {
@@ -1820,6 +1821,543 @@ export default function GeneratedUI({ data, onAction }) {
           variant: "outline", size: "sm",
           onClick: function() { onAction("browse", {}); }
         }, React.createElement(LucideIcons.Library, { size: 14 }), " Browse")
+      )
+    );
+  }
+
+  // ══════════════════════════════════════════════
+  // FRANCHISE VIEW
+  // ══════════════════════════════════════════════
+  if (isFranchise) {
+    var fAction = data.action || "";
+    var roleLabels = { original: "Original", sequel: "Sequel", adaptation: "Adaptation", spinoff: "Spinoff", related: "Related" };
+    var roleVariants = { original: "success", sequel: "info", adaptation: "warning", spinoff: "default", related: "outline" };
+
+    // ── DETECT: Show detection results ──
+    if (fAction === "detect") {
+      var detectedFranchises = data.franchises || [];
+      return React.createElement("div", null,
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" } },
+          React.createElement("div", null,
+            React.createElement("div", { style: { fontSize: "18px", fontWeight: 700, color: "#f3f4f6" } }, "Franchise Detection"),
+            React.createElement("div", { style: { fontSize: "12px", color: "#9ca3af", marginTop: "2px" } },
+              data.totalEntitiesAnalyzed + " entities analyzed \u2022 " + data.totalEntitiesGrouped + " grouped (" + data.coveragePercent + "%)"
+            )
+          ),
+          React.createElement(Badge, { variant: "info" }, data.franchisesDetected + " franchises")
+        ),
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(100px, 1fr))", gap: "8px", marginBottom: "16px" } },
+          React.createElement(Stat, { label: "Franchises", value: data.franchisesDetected || 0, accent: "purple" }),
+          React.createElement(Stat, { label: "Entities Grouped", value: data.totalEntitiesGrouped || 0, accent: "emerald" }),
+          React.createElement(Stat, { label: "Coverage", value: (data.coveragePercent || 0) + "%", accent: "cyan" }),
+          React.createElement(Stat, { label: "Analyzed", value: data.totalEntitiesAnalyzed || 0, accent: "blue" })
+        ),
+        detectedFranchises.length === 0
+          ? React.createElement(EmptyState, { icon: React.createElement(LucideIcons.Layers, { size: 32 }), title: "No franchises detected", description: "Run detect to analyze your library for franchise groupings" })
+          : React.createElement("div", null,
+              detectedFranchises.map(function(f, fi) {
+                return React.createElement(UICard, { key: f.franchiseId || fi, accent: f.crossMediaCount > 2 ? "amber" : f.crossMediaCount > 1 ? "purple" : "blue", style: { marginBottom: "10px" } },
+                  React.createElement("div", { style: { padding: "12px" } },
+                    React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "8px" } },
+                      React.createElement("div", { style: { flex: 1 } },
+                        React.createElement("div", { style: { fontWeight: 700, fontSize: "15px", color: "#f3f4f6", marginBottom: "4px" } }, f.name),
+                        React.createElement("div", { style: { fontSize: "12px", color: "#9ca3af" } }, f.description)
+                      ),
+                      React.createElement("div", { style: { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: "4px", flexShrink: 0, marginLeft: "8px" } },
+                        React.createElement(Badge, { variant: "info" }, f.entityCount + " items"),
+                        React.createElement(Badge, { variant: f.crossMediaCount > 1 ? "success" : "outline" },
+                          f.crossMediaCount + " media type" + (f.crossMediaCount > 1 ? "s" : "")
+                        )
+                      )
+                    ),
+                    React.createElement("div", { style: { display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "8px" } },
+                      (f.mediaTypes || []).map(function(mt) {
+                        return React.createElement(Badge, { key: mt, variant: "outline", style: { borderColor: "var(--accent-" + (typeColors[mt] || "blue") + ", #3b82f6)" } },
+                          React.createElement(LucideIcons[typeIcons[mt] || "FileText"], { size: 12 }),
+                          " " + (mt === "tv-series" ? "TV" : mt.charAt(0).toUpperCase() + mt.slice(1))
+                        );
+                      })
+                    ),
+                    (f.sampleEntities || []).length > 0
+                      ? React.createElement("div", { style: { display: "flex", gap: "8px", overflowX: "auto", marginBottom: "8px" } },
+                          f.sampleEntities.map(function(se, sei) {
+                            return React.createElement("div", { key: sei, style: { display: "flex", alignItems: "center", gap: "6px", flexShrink: 0 } },
+                              se.imageUrl
+                                ? React.createElement("img", { src: se.imageUrl, style: { width: "28px", height: "36px", objectFit: "cover", borderRadius: "3px" }, alt: "" })
+                                : React.createElement("div", { style: { width: "28px", height: "36px", background: "#1f2937", borderRadius: "3px", display: "flex", alignItems: "center", justifyContent: "center" } },
+                                    React.createElement(LucideIcons[typeIcons[se.type] || "FileText"], { size: 12, color: "#6b7280" })
+                                  ),
+                              React.createElement("div", { style: { maxWidth: "100px" } },
+                                React.createElement("div", { style: { fontSize: "11px", color: "#d1d5db", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, se.title),
+                                React.createElement(Badge, { variant: roleVariants[se.role] || "outline" }, roleLabels[se.role] || se.role)
+                              )
+                            );
+                          })
+                        )
+                      : null,
+                    React.createElement(Button, { variant: "ghost", size: "sm", onClick: function() {
+                      var franchise = detectedFranchises[fi];
+                      onAction("franchise", { action: "view", franchiseId: franchise.franchiseId });
+                    } },
+                      React.createElement(LucideIcons.Eye, { size: 14 }), " View Details"
+                    )
+                  )
+                );
+              })
+            ),
+        React.createElement("div", { style: { display: "flex", gap: "8px", marginTop: "12px" } },
+          React.createElement(Button, { variant: "outline", size: "sm", onClick: function() { onAction("franchise", { action: "list" }); } },
+            React.createElement(LucideIcons.List, { size: 14 }), " View All"
+          )
+        )
+      );
+    }
+
+    // ── LIST: Franchise grid ──
+    if (fAction === "list") {
+      var allFranchises = data.franchises || [];
+      return React.createElement("div", null,
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" } },
+          React.createElement("div", null,
+            React.createElement("div", { style: { fontSize: "18px", fontWeight: 700, color: "#f3f4f6" } }, "Franchises & Series"),
+            data.detectedAt
+              ? React.createElement("div", { style: { fontSize: "12px", color: "#6b7280", marginTop: "2px" } }, "Last scan: " + fmtDate(data.detectedAt))
+              : null
+          ),
+          React.createElement("div", { style: { display: "flex", gap: "6px" } },
+            React.createElement(Badge, { variant: "info" }, data.totalFranchises + " franchises"),
+            React.createElement(Button, { variant: "primary", size: "sm", onClick: function() { onAction("franchise", { action: "detect" }); } },
+              React.createElement(LucideIcons.Scan, { size: 14 }), " Re-detect"
+            )
+          )
+        ),
+        data.message
+          ? React.createElement(EmptyState, { icon: React.createElement(LucideIcons.Layers, { size: 32 }), title: "Not found", description: data.message })
+          : allFranchises.length === 0
+            ? React.createElement(EmptyState, { icon: React.createElement(LucideIcons.Layers, { size: 32 }), title: "No franchises detected yet", description: "Run detection to analyze your library for franchise groupings",
+                action: React.createElement(Button, { variant: "primary", size: "sm", onClick: function() { onAction("franchise", { action: "detect" }); } }, "Detect Franchises")
+              })
+            : React.createElement("div", null,
+                allFranchises.map(function(f, fi) {
+                  return React.createElement(UICard, { key: f.franchiseId || fi, accent: f.crossMediaCount > 2 ? "amber" : f.crossMediaCount > 1 ? "purple" : "blue", style: { marginBottom: "8px", cursor: "pointer" } },
+                    React.createElement("div", { style: { padding: "12px" }, onClick: function() {
+                      var franchise = allFranchises[fi];
+                      onAction("franchise", { action: "view", franchiseId: franchise.franchiseId });
+                    } },
+                      React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center" } },
+                        React.createElement("div", { style: { flex: 1 } },
+                          React.createElement("div", { style: { fontWeight: 600, fontSize: "14px", color: "#f3f4f6", marginBottom: "4px" } }, f.name),
+                          React.createElement("div", { style: { display: "flex", gap: "4px", flexWrap: "wrap" } },
+                            (f.mediaTypes || []).map(function(mt) {
+                              return React.createElement(Badge, { key: mt, variant: "outline", style: { borderColor: "var(--accent-" + (typeColors[mt] || "blue") + ", #3b82f6)" } },
+                                React.createElement(LucideIcons[typeIcons[mt] || "FileText"], { size: 11 }),
+                                " " + (mt === "tv-series" ? "TV" : mt.charAt(0).toUpperCase() + mt.slice(1))
+                              );
+                            })
+                          )
+                        ),
+                        React.createElement("div", { style: { display: "flex", gap: "6px", alignItems: "center", flexShrink: 0, marginLeft: "8px" } },
+                          React.createElement(Badge, { variant: "info" }, f.entityCount + " items"),
+                          React.createElement(LucideIcons.ChevronRight, { size: 16, color: "#6b7280" })
+                        )
+                      ),
+                      (f.sampleEntities || []).length > 0
+                        ? React.createElement("div", { style: { display: "flex", gap: "6px", marginTop: "8px", overflowX: "auto" } },
+                            f.sampleEntities.slice(0, 4).map(function(se, sei) {
+                              return React.createElement("div", { key: sei, style: { display: "flex", alignItems: "center", gap: "4px", flexShrink: 0 } },
+                                se.imageUrl
+                                  ? React.createElement("img", { src: se.imageUrl, style: { width: "24px", height: "32px", objectFit: "cover", borderRadius: "2px" }, alt: "" })
+                                  : React.createElement("div", { style: { width: "24px", height: "32px", background: "#1f2937", borderRadius: "2px", display: "flex", alignItems: "center", justifyContent: "center" } },
+                                      React.createElement(LucideIcons[typeIcons[se.type] || "FileText"], { size: 10, color: "#6b7280" })
+                                    ),
+                                React.createElement("span", { style: { fontSize: "11px", color: "#9ca3af", maxWidth: "70px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, se.title)
+                              );
+                            })
+                          )
+                        : null
+                    )
+                  );
+                })
+              )
+      );
+    }
+
+    // ── VIEW: Detailed franchise ──
+    if (fAction === "view") {
+      var franchise = data.franchise || {};
+      var typeGroups = data.typeGroups || [];
+      var fEntities = data.entities || [];
+
+      var accordionItems = typeGroups.map(function(group) {
+        return {
+          value: group.mediaType,
+          title: (group.mediaType === "tv-series" ? "TV Series" : group.mediaType.charAt(0).toUpperCase() + group.mediaType.slice(1)) + " (" + group.count + ")",
+          content: React.createElement("div", null,
+            group.entities.map(function(ent, ei) {
+              return React.createElement("div", { key: ent.entityId || ei, style: { display: "flex", gap: "10px", padding: "8px 0", borderBottom: ei < group.entities.length - 1 ? "1px solid #1f2937" : "none", alignItems: "center" } },
+                ent.imageUrl
+                  ? React.createElement("img", { src: ent.imageUrl, style: { width: "40px", height: "52px", objectFit: "cover", borderRadius: "4px", flexShrink: 0 }, alt: "" })
+                  : React.createElement("div", { style: { width: "40px", height: "52px", background: "#1f2937", borderRadius: "4px", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } },
+                      React.createElement(LucideIcons[typeIcons[ent.type] || "FileText"], { size: 16, color: "#6b7280" })
+                    ),
+                React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                  React.createElement("div", { style: { display: "flex", alignItems: "center", gap: "6px", marginBottom: "2px" } },
+                    React.createElement("span", { style: { fontWeight: 600, fontSize: "13px", color: "#f3f4f6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, ent.title),
+                    ent.isFavorite ? React.createElement("span", { style: { color: "#ef4444", fontSize: "12px" } }, "\u2764") : null
+                  ),
+                  React.createElement("div", { style: { display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "2px" } },
+                    React.createElement(Badge, { variant: roleVariants[ent.role] || "outline" }, roleLabels[ent.role] || ent.role),
+                    ent.source ? React.createElement(Badge, { variant: "outline" }, ent.source) : null,
+                    ent.consumptionStatus ? React.createElement(Badge, { variant: statusVariants[ent.consumptionStatus] || "default" }, statusLabels[ent.consumptionStatus] || ent.consumptionStatus) : null
+                  ),
+                  ent.userRating ? React.createElement("div", null, renderStars(ent.userRating)) : null,
+                  (ent.tags || []).length > 0
+                    ? React.createElement("div", { style: { display: "flex", gap: "3px", flexWrap: "wrap", marginTop: "2px" } },
+                        ent.tags.slice(0, 3).map(function(tag, ti) {
+                          return React.createElement("span", { key: ti, style: { fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: "#1f2937", color: "#9ca3af" } }, tag);
+                        })
+                      )
+                    : null
+                ),
+                React.createElement("div", { style: { flexShrink: 0, display: "flex", flexDirection: "column", gap: "2px", alignItems: "flex-end" } },
+                  ent.crossRefCount ? React.createElement("span", { style: { fontSize: "11px", color: "#6b7280" } }, ent.crossRefCount + " refs") : null
+                )
+              );
+            })
+          )
+        };
+      });
+
+      var defaultOpenGroups = typeGroups.map(function(g) { return g.mediaType; });
+
+      return React.createElement("div", null,
+        React.createElement("div", { style: { marginBottom: "12px" } },
+          React.createElement(Button, { variant: "ghost", size: "sm", onClick: function() { onAction("franchise", { action: "list" }); } },
+            React.createElement(LucideIcons.ArrowLeft, { size: 14 }), " All Franchises"
+          )
+        ),
+        React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "12px" } },
+          React.createElement("div", null,
+            React.createElement("div", { style: { fontSize: "20px", fontWeight: 700, color: "#f3f4f6" } }, franchise.name || "Franchise"),
+            React.createElement("div", { style: { fontSize: "13px", color: "#9ca3af", marginTop: "2px" } }, franchise.description || "")
+          ),
+          React.createElement("div", { style: { display: "flex", flexDirection: "column", gap: "4px", alignItems: "flex-end" } },
+            React.createElement(Badge, { variant: "info" }, franchise.entityCount + " items"),
+            React.createElement(Badge, { variant: franchise.crossMediaCount > 1 ? "success" : "outline" },
+              franchise.crossMediaCount + " media type" + (franchise.crossMediaCount > 1 ? "s" : "")
+            )
+          )
+        ),
+        React.createElement("div", { style: { display: "flex", gap: "4px", flexWrap: "wrap", marginBottom: "12px" } },
+          (franchise.mediaTypes || []).map(function(mt) {
+            return React.createElement(Badge, { key: mt, variant: "outline", style: { borderColor: "var(--accent-" + (typeColors[mt] || "blue") + ", #3b82f6)" } },
+              React.createElement(LucideIcons[typeIcons[mt] || "FileText"], { size: 12 }),
+              " " + (mt === "tv-series" ? "TV" : mt.charAt(0).toUpperCase() + mt.slice(1))
+            );
+          })
+        ),
+        typeGroups.length > 0
+          ? React.createElement(Accordion, { items: accordionItems, type: "multiple", defaultOpen: defaultOpenGroups })
+          : React.createElement(EmptyState, { icon: React.createElement(LucideIcons.Layers, { size: 32 }), title: "No entities", description: "This franchise has no entities" }),
+        React.createElement("div", { style: { display: "flex", gap: "8px", marginTop: "12px" } },
+          React.createElement(Button, { variant: "outline", size: "sm", onClick: function() { onAction("franchise", { action: "list" }); } },
+            React.createElement(LucideIcons.List, { size: 14 }), " All Franchises"
+          ),
+          React.createElement(Button, { variant: "outline", size: "sm", onClick: function() { onAction("franchise", { action: "detect" }); } },
+            React.createElement(LucideIcons.Scan, { size: 14 }), " Re-detect"
+          )
+        )
+      );
+    }
+
+    // ── MERGE: Confirmation ──
+    if (fAction === "merge") {
+      return React.createElement(UICard, { accent: data.success ? "emerald" : "red" },
+        React.createElement("div", { style: { padding: "16px", textAlign: "center" } },
+          React.createElement("div", { style: { fontSize: "24px", marginBottom: "8px" } }, data.success ? "\u2713" : "\u2717"),
+          React.createElement("div", { style: { fontSize: "16px", fontWeight: 600, color: "#f3f4f6", marginBottom: "4px" } },
+            data.success
+              ? data.mergeType === "add_entity" ? "Entity added to franchise" : "Franchises merged"
+              : "Merge failed"
+          ),
+          data.success ? React.createElement("div", null,
+            data.mergeType === "add_entity"
+              ? React.createElement("div", { style: { fontSize: "13px", color: "#d1d5db" } },
+                  "\"" + data.addedEntity + "\" added to " + data.franchiseName + " (" + data.newEntityCount + " items)"
+                )
+              : React.createElement("div", { style: { fontSize: "13px", color: "#d1d5db" } },
+                  data.sourceFranchise + " merged into " + data.targetFranchise + " (" + data.entitiesAdded + " added, " + data.newEntityCount + " total)"
+                )
+          ) : React.createElement("div", { style: { color: "#ef4444" } }, data.error || "Unknown error"),
+          React.createElement("div", { style: { marginTop: "12px" } },
+            React.createElement(Button, { variant: "outline", size: "sm", onClick: function() { onAction("franchise", { action: "list" }); } }, "View Franchises")
+          )
+        )
+      );
+    }
+
+    // ── Franchise fallback (unknown action) ──
+    return React.createElement(UICard, { accent: "amber" },
+      React.createElement("div", { style: { padding: "16px", textAlign: "center" } },
+        React.createElement("div", { style: { fontSize: "16px", fontWeight: 600, color: "#f3f4f6" } }, "Franchise Tool"),
+        React.createElement("div", { style: { fontSize: "13px", color: "#9ca3af", marginTop: "4px" } }, data.error || "Use detect, list, view, or merge"),
+        React.createElement("div", { style: { marginTop: "12px" } },
+          React.createElement(Button, { variant: "primary", size: "sm", onClick: function() { onAction("franchise", { action: "detect" }); } }, "Detect Franchises")
+        )
+      )
+    );
+  }
+
+  // ══════════════════════════════════════════════
+  // BULK ENRICH VIEW
+  // ══════════════════════════════════════════════
+  if (isBulkEnrich) {
+    var enrichAction = data.action || "";
+    var typeLabels = { book: "Books", movie: "Movies", "tv-series": "TV Series", documentary: "Documentaries", game: "Games" };
+    var typeColorMap = { book: "#10b981", movie: "#a855f7", "tv-series": "#06b6d4", documentary: "#f59e0b", game: "#f43f5e" };
+
+    // ── STATUS VIEW ──
+    if (enrichAction === "status") {
+      var cov = data.coverage || {};
+      var overall = cov.overall || {};
+      var byType = cov.byType || {};
+      var apis = data.apiStatus || {};
+      var caches = data.caches || {};
+      var overallPct = overall.percent || 0;
+
+      var progressColor = overallPct >= 80 ? "#10b981" : overallPct >= 40 ? "#f59e0b" : "#ef4444";
+
+      return React.createElement("div", null,
+        React.createElement("div", { style: { fontSize: "18px", fontWeight: 700, color: "#f3f4f6", marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" } },
+          React.createElement(LucideIcons.Database, { size: 20 }),
+          "Enrichment Status"
+        ),
+
+        // Overall progress
+        React.createElement(UICard, { accent: overallPct >= 80 ? "emerald" : overallPct >= 40 ? "amber" : "red", style: { marginBottom: "12px" } },
+          React.createElement("div", { style: { padding: "16px" } },
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: "8px" } },
+              React.createElement("span", { style: { fontWeight: 600, color: "#f3f4f6" } }, "Entity Index Metadata"),
+              React.createElement("span", { style: { fontWeight: 700, color: progressColor, fontSize: "18px" } }, overallPct + "%")
+            ),
+            React.createElement("div", { style: { height: "8px", background: "#1f2937", borderRadius: "4px", overflow: "hidden", marginBottom: "8px" } },
+              React.createElement("div", { style: { height: "100%", width: overallPct + "%", background: progressColor, borderRadius: "4px", transition: "width 0.3s" } })
+            ),
+            React.createElement("div", { style: { display: "flex", gap: "16px", fontSize: "13px", color: "#9ca3af" } },
+              React.createElement("span", null, overall.enriched + " enriched"),
+              React.createElement("span", { style: { color: "#3b82f6" } }, overall.propagatable + " ready to propagate"),
+              React.createElement("span", { style: { color: "#f59e0b" } }, overall.needsApi + " need API")
+            )
+          )
+        ),
+
+        // Per-type breakdown
+        React.createElement("div", { style: { marginBottom: "12px" } },
+          Object.keys(byType).map(function (tKey) {
+            var t = byType[tKey];
+            var pct = t.percent || 0;
+            var barColor = typeColorMap[tKey] || "#3b82f6";
+            return React.createElement(UICard, { key: tKey, style: { marginBottom: "8px" } },
+              React.createElement("div", { style: { padding: "12px" } },
+                React.createElement("div", { style: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" } },
+                  React.createElement("div", { style: { display: "flex", alignItems: "center", gap: "6px" } },
+                    React.createElement("span", { style: { width: "8px", height: "8px", borderRadius: "50%", background: barColor, display: "inline-block" } }),
+                    React.createElement("span", { style: { fontWeight: 600, color: "#f3f4f6", fontSize: "14px" } }, typeLabels[tKey] || tKey)
+                  ),
+                  React.createElement("span", { style: { color: "#9ca3af", fontSize: "13px" } }, t.enriched + "/" + t.total + " (" + pct + "%)")
+                ),
+                React.createElement("div", { style: { height: "6px", background: "#1f2937", borderRadius: "3px", overflow: "hidden", marginBottom: "6px" } },
+                  React.createElement("div", { style: { height: "100%", width: (t.total > 0 ? Math.round(((t.enriched + t.propagatable) / t.total) * 100) : 0) + "%", background: barColor, opacity: 0.6, borderRadius: "3px" } }),
+                  React.createElement("div", { style: { height: "100%", width: pct + "%", background: barColor, borderRadius: "3px", marginTop: "-6px" } })
+                ),
+                React.createElement("div", { style: { display: "flex", gap: "12px", fontSize: "12px", color: "#6b7280" } },
+                  t.propagatable > 0 ? React.createElement("span", { style: { color: "#3b82f6" } }, t.propagatable + " propagatable") : null,
+                  t.needsApi > 0 ? React.createElement("span", null, t.needsApi + " need API (\u2248" + t.estimateMinutes + "m)") : null
+                )
+              )
+            );
+          })
+        ),
+
+        // API & Cache status
+        React.createElement("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" } },
+          React.createElement(Badge, { variant: apis.tmdb && apis.tmdb.configured ? "success" : "danger" }, "TMDB " + (apis.tmdb && apis.tmdb.configured ? "\u2713" : "\u2717")),
+          React.createElement(Badge, { variant: "success" }, "Steam \u2713"),
+          React.createElement(Badge, { variant: "success" }, "Google Books \u2713")
+        ),
+
+        // Cache info
+        React.createElement(UICard, { style: { marginBottom: "12px" } },
+          React.createElement("div", { style: { padding: "12px" } },
+            React.createElement("div", { style: { fontWeight: 600, color: "#f3f4f6", marginBottom: "8px", fontSize: "13px" } }, "Source Caches"),
+            React.createElement("div", { style: { display: "flex", gap: "16px", fontSize: "12px", color: "#9ca3af" } },
+              React.createElement("span", null, "Kindle: " + (caches.kindle ? caches.kindle.enriched + "/" + caches.kindle.total : "N/A")),
+              React.createElement("span", null, "Movies/TV: " + (caches.moviesTv ? caches.moviesTv.enriched + "/" + caches.moviesTv.total : "N/A")),
+              React.createElement("span", null, "Steam: " + (caches.steam ? caches.steam.enriched + "/" + caches.steam.total : "N/A"))
+            )
+          )
+        ),
+
+        // Actions
+        React.createElement("div", { style: { display: "flex", gap: "8px" } },
+          React.createElement(Button, { variant: "primary", onClick: function () { onAction("bulk_enrich", { action: "enrich", limit: 500 }); } }, "Enrich All"),
+          React.createElement(Button, { variant: "outline", onClick: function () { onAction("bulk_enrich", { action: "preview" }); } }, "Preview"),
+          React.createElement(Button, { variant: "outline", onClick: function () { onAction("bulk_enrich", { action: "status" }); } }, "Refresh")
+        )
+      );
+    }
+
+    // ── PREVIEW VIEW ──
+    if (enrichAction === "preview") {
+      var pItems = data.items || [];
+      var sourceLabels = { cache_propagation: "Cache", google_books: "Google Books", tmdb: "TMDB", steam_api: "Steam" };
+      var sourceColors = { cache_propagation: "info", google_books: "success", tmdb: "purple", steam_api: "warning" };
+
+      return React.createElement("div", null,
+        React.createElement("div", { style: { fontSize: "18px", fontWeight: 700, color: "#f3f4f6", marginBottom: "4px" } }, "Enrichment Preview"),
+        React.createElement("div", { style: { fontSize: "13px", color: "#9ca3af", marginBottom: "12px" } }, data.previewCount + " entities to enrich"),
+
+        pItems.map(function (item, idx) {
+          return React.createElement(UICard, { key: item.entityId || idx, style: { marginBottom: "6px" } },
+            React.createElement("div", { style: { padding: "10px", display: "flex", justifyContent: "space-between", alignItems: "center" } },
+              React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                React.createElement("div", { style: { fontWeight: 600, fontSize: "13px", color: "#f3f4f6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.title),
+                React.createElement("div", { style: { display: "flex", gap: "4px", marginTop: "4px" } },
+                  React.createElement(Badge, { variant: "outline" }, item.type),
+                  React.createElement(Badge, { variant: sourceColors[item.enrichSource] || "default" }, sourceLabels[item.enrichSource] || item.enrichSource)
+                ),
+                item.cacheHas.length > 0
+                  ? React.createElement("div", { style: { fontSize: "11px", color: "#6b7280", marginTop: "4px" } }, "Cache has: " + item.cacheHas.slice(0, 5).join(", "))
+                  : null
+              )
+            )
+          );
+        }),
+
+        React.createElement("div", { style: { display: "flex", gap: "8px", marginTop: "12px" } },
+          React.createElement(Button, { variant: "primary", onClick: function () { onAction("bulk_enrich", { action: "enrich", limit: 500 }); } }, "Run Enrichment"),
+          React.createElement(Button, { variant: "outline", onClick: function () { onAction("bulk_enrich", { action: "status" }); } }, "Back to Status")
+        )
+      );
+    }
+
+    // ── ENRICH RESULTS VIEW ──
+    if (enrichAction === "enrich") {
+      var r = data.results || {};
+      var totalDone = (r.propagated || 0) + (r.apiEnriched || 0);
+      var rByType = r.byType || {};
+      var remaining = r.remaining || {};
+      var samples = r.samples || [];
+      var totalRemaining = 0;
+      var remKeys = Object.keys(remaining);
+      for (var rki = 0; rki < remKeys.length; rki++) totalRemaining += remaining[remKeys[rki]];
+
+      return React.createElement("div", null,
+        React.createElement("div", { style: { fontSize: "18px", fontWeight: 700, color: "#f3f4f6", marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" } },
+          React.createElement(LucideIcons.CheckCircle, { size: 20, color: "#10b981" }),
+          "Enrichment Complete"
+        ),
+
+        // Summary cards
+        React.createElement("div", { style: { display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "8px", marginBottom: "12px" } },
+          React.createElement(UICard, { accent: "emerald" },
+            React.createElement("div", { style: { padding: "12px", textAlign: "center" } },
+              React.createElement("div", { style: { fontSize: "24px", fontWeight: 700, color: "#10b981" } }, String(totalDone)),
+              React.createElement("div", { style: { fontSize: "12px", color: "#9ca3af" } }, "Enriched")
+            )
+          ),
+          React.createElement(UICard, { accent: "blue" },
+            React.createElement("div", { style: { padding: "12px", textAlign: "center" } },
+              React.createElement("div", { style: { fontSize: "24px", fontWeight: 700, color: "#3b82f6" } }, String(r.propagated || 0)),
+              React.createElement("div", { style: { fontSize: "12px", color: "#9ca3af" } }, "From Cache")
+            )
+          ),
+          React.createElement(UICard, { accent: "purple" },
+            React.createElement("div", { style: { padding: "12px", textAlign: "center" } },
+              React.createElement("div", { style: { fontSize: "24px", fontWeight: 700, color: "#a855f7" } }, String(r.apiEnriched || 0)),
+              React.createElement("div", { style: { fontSize: "12px", color: "#9ca3af" } }, "Via API")
+            )
+          )
+        ),
+
+        // Failures & semantic tags
+        (r.failed > 0 || r.semanticTagsApplied > 0)
+          ? React.createElement("div", { style: { display: "flex", gap: "8px", marginBottom: "12px" } },
+              r.failed > 0 ? React.createElement(Badge, { variant: "danger" }, r.failed + " failed") : null,
+              r.semanticTagsApplied > 0 ? React.createElement(Badge, { variant: "info" }, r.semanticTagsApplied + " semantic tags applied") : null
+            )
+          : null,
+
+        // Per-type breakdown
+        React.createElement(UICard, { style: { marginBottom: "12px" } },
+          React.createElement("div", { style: { padding: "12px" } },
+            React.createElement("div", { style: { fontWeight: 600, color: "#f3f4f6", marginBottom: "8px", fontSize: "13px" } }, "By Type"),
+            Object.keys(rByType).map(function (tKey) {
+              var t = rByType[tKey];
+              return React.createElement("div", { key: tKey, style: { display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid #1f2937" } },
+                React.createElement("span", { style: { color: "#d1d5db", fontSize: "13px" } }, typeLabels[tKey] || tKey),
+                React.createElement("div", { style: { display: "flex", gap: "8px", fontSize: "12px" } },
+                  t.propagated > 0 ? React.createElement("span", { style: { color: "#3b82f6" } }, t.propagated + " propagated") : null,
+                  t.apiEnriched > 0 ? React.createElement("span", { style: { color: "#a855f7" } }, t.apiEnriched + " API") : null,
+                  t.failed > 0 ? React.createElement("span", { style: { color: "#ef4444" } }, t.failed + " failed") : null
+                )
+              );
+            })
+          )
+        ),
+
+        // Sample enrichments
+        samples.length > 0
+          ? React.createElement(UICard, { style: { marginBottom: "12px" } },
+              React.createElement("div", { style: { padding: "12px" } },
+                React.createElement("div", { style: { fontWeight: 600, color: "#f3f4f6", marginBottom: "8px", fontSize: "13px" } }, "Sample Enrichments"),
+                samples.slice(0, 5).map(function (s, si) {
+                  return React.createElement("div", { key: si, style: { padding: "6px 0", borderBottom: si < 4 ? "1px solid #1f2937" : "none" } },
+                    React.createElement("div", { style: { fontWeight: 500, color: "#f3f4f6", fontSize: "13px" } }, s.title),
+                    React.createElement("div", { style: { display: "flex", gap: "4px", marginTop: "2px", flexWrap: "wrap" } },
+                      React.createElement(Badge, { variant: "outline" }, s.type),
+                      React.createElement(Badge, { variant: "info" }, s.method.replace(/_/g, " ")),
+                      s.fieldsAdded.slice(0, 4).map(function (f, fi) {
+                        return React.createElement("span", { key: fi, style: { fontSize: "11px", padding: "1px 6px", borderRadius: "4px", background: "#064e3b", color: "#6ee7b7" } }, "+" + f);
+                      })
+                    )
+                  );
+                })
+              )
+            )
+          : null,
+
+        // Remaining
+        totalRemaining > 0
+          ? React.createElement("div", { style: { fontSize: "13px", color: "#9ca3af", marginBottom: "12px" } },
+              totalRemaining + " entities still unenriched",
+              React.createElement("span", { style: { color: "#6b7280" } },
+                " (" + remKeys.map(function (k) { return (typeLabels[k] || k) + ": " + remaining[k]; }).join(", ") + ")"
+              )
+            )
+          : null,
+
+        // Actions
+        React.createElement("div", { style: { display: "flex", gap: "8px" } },
+          totalRemaining > 0
+            ? React.createElement(Button, { variant: "primary", onClick: function () { onAction("bulk_enrich", { action: "enrich", limit: 500 }); } }, "Enrich More")
+            : null,
+          React.createElement(Button, { variant: "outline", onClick: function () { onAction("bulk_enrich", { action: "status" }); } }, "View Status"),
+          React.createElement(Button, { variant: "outline", onClick: function () { onAction("dashboard"); } }, "Dashboard")
+        )
+      );
+    }
+
+    // Fallback for bulk enrich
+    return React.createElement(UICard, { accent: "blue" },
+      React.createElement("div", { style: { padding: "16px", textAlign: "center" } },
+        React.createElement(LucideIcons.Database, { size: 32, color: "#3b82f6" }),
+        React.createElement("div", { style: { fontSize: "16px", fontWeight: 600, color: "#f3f4f6", marginTop: "8px" } }, "Bulk Enrichment"),
+        React.createElement("div", { style: { fontSize: "13px", color: "#9ca3af", marginTop: "4px" } }, "Enrich your media library with metadata from TMDB, Steam, and Google Books"),
+        React.createElement("div", { style: { display: "flex", gap: "8px", justifyContent: "center", marginTop: "12px" } },
+          React.createElement(Button, { variant: "primary", onClick: function () { onAction("bulk_enrich", { action: "status" }); } }, "Check Status"),
+          React.createElement(Button, { variant: "outline", onClick: function () { onAction("bulk_enrich", { action: "enrich", limit: 500 }); } }, "Enrich Now")
+        )
       )
     );
   }

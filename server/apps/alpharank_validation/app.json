@@ -4,7 +4,7 @@
   "spec": {
     "toolFamily": "alpharank_validation",
     "toolPrefix": "enso_alpharank_validation_",
-    "description": "AlphaRank validation dashboard: model scorecard with IC/ICIR/PBO/DSR gates, feature importance analysis, overfitting diagnostics, validation checklist tracker, and model comparison",
+    "description": "AlphaRank validation dashboard: model scorecard with IC/ICIR/PBO/DSR gates, feature importance analysis, overfitting diagnostics, validation checklist tracker, model comparison, and Kill-Gate Protocol workflow",
     "signatureId": "alpharank_validation_view",
     "tools": [
       {
@@ -380,6 +380,123 @@
           "recommendation": "Pruned + CPCV (v1.2) is the strongest configuration — it passes all 4 validation gates and reduces overfitting by 69%."
         },
         "requiredDataKeys": ["tool", "configurations", "deltas"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "gates",
+        "description": "Kill-Gate Protocol: sequential 5-gate validation workflow for AlphaRank. View gate status dashboard, submit validation results from Python runs, reset gates for re-validation, and add notes. Gates: (1) IC Baseline, (2) PBO/DSR, (3) Cost Survival, (4) Data Integrity, (5) Paper Trading. Use when the user says: 'kill gate', 'gate status', 'validation gates', 'submit gate results', 'gate workflow', 'kill-gate protocol'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: 'status' (default) show dashboard, 'submit' submit gate results, 'reset' reset a gate, 'notes' add notes to a gate."
+            },
+            "gate": {
+              "type": "number",
+              "description": "Gate number (1-5). Required for submit, reset, and notes actions."
+            },
+            "metrics": {
+              "type": "string",
+              "description": "JSON string of metric values for the gate. For submit action. Gate 1: {ic, icir}, Gate 2: {pbo, dsr_pvalue}, Gate 3: {after_cost_sharpe, after_cost_alpha}, Gate 4: {survivorship_bias_delta, lookahead_detected}, Gate 5: {live_backtest_sharpe_ratio, weeks_trading}."
+            },
+            "notes": {
+              "type": "string",
+              "description": "Text notes to attach to a gate. Used with action='notes'."
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_alpharank_validation_gates",
+          "action": "status",
+          "gates": [
+            {
+              "id": 1,
+              "name": "IC Baseline",
+              "description": "Verify predictive signal exists out-of-sample",
+              "status": "pass",
+              "metrics": {
+                "ic": { "label": "IC", "value": 0.035, "threshold": 0.03, "comparison": ">=", "unit": "", "pass": true },
+                "icir": { "label": "ICIR", "value": 0.58, "threshold": 0.5, "comparison": ">=", "unit": "", "pass": true }
+              },
+              "verdict": "PASS — All metrics meet thresholds",
+              "timestamp": "2026-04-14T10:30:00Z",
+              "notes": "[2026-04-14] Tested with pruned 45-feature model M6",
+              "pivotAction": "Reduce features, try different model hyperparameters, check data quality"
+            },
+            {
+              "id": 2,
+              "name": "PBO / DSR",
+              "description": "Confirm signal is not a product of overfitting or multiple testing",
+              "status": "active",
+              "metrics": {
+                "pbo": { "label": "PBO", "value": null, "threshold": 0.5, "comparison": "<", "unit": "", "pass": null },
+                "dsr_pvalue": { "label": "DSR p-value", "value": null, "threshold": 0.05, "comparison": "<", "unit": "", "pass": null }
+              },
+              "verdict": null,
+              "timestamp": null,
+              "notes": "",
+              "pivotAction": "Too many features or too many strategy variants tested. Simplify."
+            },
+            {
+              "id": 3,
+              "name": "Cost Survival",
+              "description": "Verify alpha survives real-world transaction costs",
+              "status": "locked",
+              "metrics": {
+                "after_cost_sharpe": { "label": "After-cost Sharpe", "value": null, "threshold": 0.3, "comparison": ">=", "unit": "", "pass": null },
+                "after_cost_alpha": { "label": "After-cost Alpha", "value": null, "threshold": 0, "comparison": ">", "unit": "%", "pass": null }
+              },
+              "verdict": null,
+              "timestamp": null,
+              "notes": "",
+              "pivotAction": "Alpha is real but too small to survive costs. Increase holding period or reduce turnover."
+            },
+            {
+              "id": 4,
+              "name": "Data Integrity",
+              "description": "Ensure no data biases contaminate the signal",
+              "status": "locked",
+              "metrics": {
+                "survivorship_bias_delta": { "label": "Survivorship Bias Delta", "value": null, "threshold": 20, "comparison": "<", "unit": "%", "pass": null },
+                "lookahead_detected": { "label": "Lookahead Leakage", "value": null, "threshold": 0, "comparison": "==", "unit": "bool", "pass": null }
+              },
+              "verdict": null,
+              "timestamp": null,
+              "notes": "",
+              "pivotAction": "Data integrity issues. Fix survivorship bias, check for lookahead leakage."
+            },
+            {
+              "id": 5,
+              "name": "Paper Trading",
+              "description": "Validate live execution matches backtest expectations",
+              "status": "locked",
+              "metrics": {
+                "live_backtest_sharpe_ratio": { "label": "Live/Backtest Sharpe Ratio", "value": null, "threshold": 50, "comparison": ">=", "unit": "%", "pass": null },
+                "weeks_trading": { "label": "Weeks Trading", "value": null, "threshold": 6, "comparison": ">=", "unit": "wk", "pass": null }
+              },
+              "verdict": null,
+              "timestamp": null,
+              "notes": "",
+              "pivotAction": "Backtest-to-live gap too large. Investigate execution quality and market regime."
+            }
+          ],
+          "summary": {
+            "totalGates": 5,
+            "passed": 1,
+            "failed": 0,
+            "locked": 3,
+            "activeGate": 2,
+            "overallStatus": "in_progress",
+            "overallVerdict": "Gate 2 active — Submit validation results to proceed"
+          },
+          "startedAt": "2026-04-14T09:00:00Z",
+          "updatedAt": "2026-04-14T10:30:00Z"
+        },
+        "requiredDataKeys": ["tool", "gates", "summary"],
         "isPrimary": false
       }
     ]
