@@ -1042,6 +1042,21 @@ export async function launchFocusEvolve(params: {
   logAction({ ts: Date.now(), type: "action", category: "focus-areas",
     message: `Launching focus evolution for "${area.title}"` });
 
+  // Capture pre-sprint snapshot for the milestone briefing's "what changed" comparison
+  const preSprintSnapshot: import("../../shared/types.js").FocusSnapshot = {
+    capturedAt: new Date().toISOString(),
+    understanding: area.assessment?.understanding ?? 0,
+    progress: area.assessment?.progress ?? 0,
+    clarity: area.clarity,
+    intent: area.intent,
+    deeperIntent: area.deeperIntent,
+    nextSteps: area.nextSteps ? [...area.nextSteps] : undefined,
+    relatedEntityCount: area.relatedEntityIds?.length ?? 0,
+    relatedEntityIds: area.relatedEntityIds ? [...area.relatedEntityIds] : [],
+    briefingExcerpt: area.preparedBriefing?.slice(0, 1500),
+    experts: (area.experts || []).map(e => ({ name: e.name, role: e.role })),
+  };
+
   // Gather transcript
   let discussion = "";
   try {
@@ -1326,6 +1341,130 @@ Rules:
                     if (freshState3) {
                       const freshArea3 = freshState3.areas.find(a => a.id === focusId);
                       if (freshArea3) {
+                        // ── Milestone Briefing Pass ──
+                        // A second LLM call that turns the raw deliverables + before/after
+                        // state into a human-readable narrative debrief — what happened,
+                        // what we decided, what changed, what's still unknown, what's next.
+                        try {
+                          const postSprintSnapshot: import("../../shared/types.js").FocusSnapshot = {
+                            capturedAt: new Date().toISOString(),
+                            understanding: freshArea3.assessment?.understanding ?? preSprintSnapshot.understanding,
+                            progress: freshArea3.assessment?.progress ?? preSprintSnapshot.progress,
+                            clarity: freshArea3.clarity,
+                            intent: freshArea3.intent,
+                            deeperIntent: freshArea3.deeperIntent,
+                            nextSteps: freshArea3.nextSteps ? [...freshArea3.nextSteps] : undefined,
+                            relatedEntityCount: freshArea3.relatedEntityIds?.length ?? 0,
+                            relatedEntityIds: freshArea3.relatedEntityIds ? [...freshArea3.relatedEntityIds] : [],
+                            briefingExcerpt: freshArea3.preparedBriefing?.slice(0, 1500),
+                            experts: (freshArea3.experts || []).map(e => ({ name: e.name, role: e.role })),
+                          };
+
+                          // Identify NEW entities created this sprint
+                          const newEntityIds = postSprintSnapshot.relatedEntityIds.filter(
+                            id => !preSprintSnapshot.relatedEntityIds.includes(id)
+                          );
+
+                          // Build per-task raw results (what the agents actually did)
+                          const taskNarratives = plan.tasks
+                            .filter((t: { resultSummary?: string }) => t.resultSummary)
+                            .map((t: { title: string; agentRole: string; resultSummary: string }) =>
+                              `### ${t.title} (${t.agentRole})\n${t.resultSummary.slice(0, 1200)}`
+                            ).join("\n\n");
+
+                          const briefingPrompt = `You are debriefing the user on what just happened in their focus area sprint.
+The user is the executive sponsor — they want a milestone-meeting style briefing in plain language,
+not a list of artifacts. They want to know what we did, why, what changed, and what's next.
+
+FOCUS AREA: "${area.title}"
+GOAL: ${area.intent || area.description}
+${area.deeperIntent ? `DEEPER WHY: ${area.deeperIntent}` : ""}
+
+===== STATE BEFORE THE SPRINT =====
+Understanding: ${preSprintSnapshot.understanding}/100  |  Progress: ${preSprintSnapshot.progress}/100
+Clarity: ${preSprintSnapshot.clarity}
+Intent: ${preSprintSnapshot.intent || "(not yet defined)"}
+Next steps we'd planned:
+${(preSprintSnapshot.nextSteps || []).map(s => `  - ${s}`).join("\n") || "  (none)"}
+Existing related entities: ${preSprintSnapshot.relatedEntityCount}
+What we knew going in (briefing excerpt):
+${preSprintSnapshot.briefingExcerpt?.slice(0, 800) || "(no briefing was prepared)"}
+
+===== STATE AFTER THE SPRINT =====
+Understanding: ${postSprintSnapshot.understanding}/100  (Δ ${postSprintSnapshot.understanding - preSprintSnapshot.understanding})
+Progress: ${postSprintSnapshot.progress}/100  (Δ ${postSprintSnapshot.progress - preSprintSnapshot.progress})
+Clarity: ${postSprintSnapshot.clarity}
+Total related entities: ${postSprintSnapshot.relatedEntityCount}  (${newEntityIds.length} NEW this sprint)
+
+===== WHAT THE AGENTS PRODUCED THIS SPRINT =====
+${taskNarratives.slice(0, 6000)}
+
+===== AUTO-GENERATED ONE-PARAGRAPH SUMMARY (for context only — do NOT copy verbatim) =====
+${sprintSummary.sprintSummary}
+
+${discussion ? `===== USER'S OWN WORDS FROM THE PRE-SPRINT DISCUSSION =====\n${discussion.slice(0, 3000)}\n` : ""}
+
+Now write the milestone briefing as JSON. The user should read this and feel like a colleague
+just walked them through what happened.
+
+Return EXACTLY this JSON shape (no markdown, no commentary):
+{
+  "headline": "<one short sentence — the takeaway. Like a meeting subject line. No emojis.>",
+  "whatHappened": "<3-5 sentences in plain language. Pattern: 'Going in, we wanted to ___. We tried ___. The biggest thing we learned was ___. We hit ___ which means ___.' Be concrete. No jargon. No bullet points.>",
+  "decisions": [
+    { "call": "<the actual decision>", "because": "<the reasoning that drove it>", "impact": "<what this changes about how we proceed>" }
+  ],
+  "whatChanged": [
+    { "area": "<dimension: e.g. Knowledge, Capability, Direction, Open Questions, Confidence>", "was": "<state before>", "now": "<state after>" }
+  ],
+  "honestGaps": [
+    "<plain statement of what didn't work, what's still unknown, or what we deferred. Be candid.>"
+  ],
+  "currentPriority": {
+    "name": "<the SINGLE most important thing now — not a list>",
+    "why": "<why this is the priority NOW, grounded in what we just decided/learned>",
+    "what": "<concrete next action — what doing it actually looks like>"
+  },
+  "plan": [
+    { "step": "<a concrete step>", "reason": "<why this step before others>", "expectedOutcome": "<what success looks like>", "dependsOn": <index of prior step or omit> }
+  ]
+}
+
+Rules:
+- 2-5 decisions. Skip if there were no real calls — but USUALLY there were.
+- 2-5 whatChanged items. Cover dimensions that actually moved. Skip dimensions that didn't.
+- 1-3 honestGaps. Be honest. Empty array only if everything truly worked.
+- Exactly ONE currentPriority — pick it from what's most pressing given what changed.
+- 3-6 plan steps. Sequenced. Reasoning visible per step.
+- Plain language throughout. Imagine you're talking to a smart friend, not writing a status report.
+- Do NOT mention "the sprint" or "deliverables" or "agents" in the prose — talk about the WORK.
+- Headline must NOT start with "Sprint complete" or "We made progress" — be specific.`;
+
+                          const briefingResponse = await llmCall({
+                            prompt: briefingPrompt,
+                            tier: "pro",
+                            maxOutputTokens: 5000,
+                            responseMimeType: "application/json",
+                            temperature: 0.5,
+                            timeoutMs: 90_000,
+                          });
+
+                          const briefing = JSON.parse(briefingResponse) as import("../../shared/types.js").SprintBriefing;
+
+                          // Validate minimum required fields, then attach to summary
+                          if (briefing.headline && briefing.whatHappened && briefing.currentPriority?.name) {
+                            sprintSummary.briefing = briefing;
+                            sprintSummary.preSprintSnapshot = preSprintSnapshot;
+                            sprintSummary.postSprintSnapshot = postSprintSnapshot;
+                            logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+                              message: `Generated milestone briefing for "${area.title}": "${briefing.headline}"` });
+                          } else {
+                            logError("focus-areas", `Briefing for "${area.title}" missing required fields — keeping raw summary only`);
+                          }
+                        } catch (briefingErr) {
+                          logError("focus-areas", `Briefing generation failed for "${area.title}" (sprint summary still saved)`, briefingErr);
+                        }
+
                         freshArea3.lastSprintSummary = sprintSummary;
                         saveFocusState(freshState3);
                       }

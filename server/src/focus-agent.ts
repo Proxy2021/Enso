@@ -246,13 +246,35 @@ export async function deliverSprintResults(
 ): Promise<void> {
   const recommended = summary.deliverables[summary.recommendedFirstAction?.deliverableIndex ?? 0];
   const startAction = recommended?.quickStart || "Open the Focus tab to review results.";
+  const briefing = summary.briefing;
 
-  const text = [
-    `✅ Sprint complete for "${focusTitle}"!`, "",
-    summary.sprintSummary, "",
-    `▸ Start here: ${startAction}`, "",
-    `Next steps:`, ...summary.nextSteps.map(s => `  • ${s}`),
-  ].join("\n");
+  // Plain-text fallback — milestone-meeting style if briefing exists, otherwise legacy
+  const text = briefing
+    ? [
+        briefing.headline, "",
+        "WHAT HAPPENED",
+        briefing.whatHappened, "",
+        ...(briefing.whatChanged?.length
+          ? ["WHAT CHANGED", ...briefing.whatChanged.map(c => `  ${c.area}: ${c.was} → ${c.now}`), ""]
+          : []),
+        ...(briefing.honestGaps?.length
+          ? ["WHAT'S STILL OPEN", ...briefing.honestGaps.map(g => `  • ${g}`), ""]
+          : []),
+        "CURRENT PRIORITY",
+        `  ${briefing.currentPriority.name}`,
+        `  Why: ${briefing.currentPriority.why}`,
+        `  What: ${briefing.currentPriority.what}`, "",
+        ...(briefing.plan?.length
+          ? ["PLAN", ...briefing.plan.map((p, i) => `  ${i + 1}. ${p.step}\n     ${p.reason}`), ""]
+          : []),
+        `Open in Enso: ${getEnsoUrl()}`,
+      ].join("\n")
+    : [
+        `✅ Sprint complete for "${focusTitle}"!`, "",
+        summary.sprintSummary, "",
+        `▸ Start here: ${startAction}`, "",
+        `Next steps:`, ...summary.nextSteps.map(s => `  • ${s}`),
+      ].join("\n");
 
   const ensoUrl = getEnsoUrl();
   const deliverableCount = summary.deliverables.length;
@@ -261,6 +283,10 @@ export async function deliverSprintResults(
 
   const actionLabels: Record<string, string> = { run: "▶ Run", read: "📖 Read", explore: "🔍 Explore", review: "✓ Review" };
   const actionColors: Record<string, string> = { run: "#10b981", read: "#3b82f6", explore: "#8b5cf6", review: "#f59e0b" };
+
+  const escapeHtml = (s: string) => s
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;").replace(/'/g, "&#39;");
 
   const deliverableCards = summary.deliverables.map((d, i) => {
     const isRec = i === (summary.recommendedFirstAction?.deliverableIndex ?? -1);
@@ -271,37 +297,104 @@ export async function deliverSprintResults(
     return `<div style="background:#0d1117;border-radius:8px;padding:14px 16px;margin-bottom:8px;border-left:3px solid ${color};">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;">
         <div style="flex:1;">
-          <div style="font-size:14px;color:#f9fafb;font-weight:600;">${icon} ${d.taskTitle}${isRec ? ' <span style="background:#065f46;color:#34d399;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:6px;">START HERE</span>' : ""}</div>
-          <div style="font-size:12px;color:#9ca3af;margin-top:4px;">${d.howItHelps}</div>
+          <div style="font-size:14px;color:#f9fafb;font-weight:600;">${icon} ${escapeHtml(d.taskTitle)}${isRec ? ' <span style="background:#065f46;color:#34d399;font-size:10px;padding:2px 6px;border-radius:4px;margin-left:6px;">START HERE</span>' : ""}</div>
+          <div style="font-size:12px;color:#9ca3af;margin-top:4px;">${escapeHtml(d.howItHelps)}</div>
         </div>
       </div>
       <div style="margin-top:10px;">
         <a href="${ensoUrl}" style="display:inline-block;background:${btnColor};color:#fff;padding:6px 14px;border-radius:6px;text-decoration:none;font-size:12px;font-weight:600;">${btnLabel}</a>
-        <span style="font-size:11px;color:#6b7280;margin-left:8px;">${d.quickStart}</span>
+        <span style="font-size:11px;color:#6b7280;margin-left:8px;">${escapeHtml(d.quickStart)}</span>
       </div>
     </div>`;
   }).join("\n");
 
+  // ── Build briefing HTML when we have one ──
+  const briefingHtml = briefing ? (() => {
+    const decisionsHtml = (briefing.decisions || []).map(d => `
+      <div style="padding:10px 12px;background:#0d1117;border-radius:6px;margin-bottom:8px;border-left:2px solid #7c3aed;">
+        <div style="font-size:13px;color:#f9fafb;font-weight:600;margin-bottom:4px;">${escapeHtml(d.call)}</div>
+        <div style="font-size:12px;color:#9ca3af;line-height:1.5;"><span style="color:#a78bfa;font-weight:500;">Because:</span> ${escapeHtml(d.because)}</div>
+        <div style="font-size:12px;color:#9ca3af;line-height:1.5;margin-top:2px;"><span style="color:#a78bfa;font-weight:500;">Impact:</span> ${escapeHtml(d.impact)}</div>
+      </div>`).join("");
+
+    const changesHtml = (briefing.whatChanged || []).map(c => `
+      <div style="padding:10px 12px;background:#0d1117;border-radius:6px;margin-bottom:8px;">
+        <div style="font-size:11px;color:#a78bfa;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">${escapeHtml(c.area)}</div>
+        <div style="display:flex;gap:8px;align-items:center;font-size:13px;color:#d1d5db;line-height:1.5;flex-wrap:wrap;">
+          <span style="color:#6b7280;text-decoration:line-through;">${escapeHtml(c.was)}</span>
+          <span style="color:#10b981;">→</span>
+          <span style="color:#f9fafb;font-weight:500;">${escapeHtml(c.now)}</span>
+        </div>
+      </div>`).join("");
+
+    const gapsHtml = (briefing.honestGaps || []).length ? `
+      <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin:18px 0 8px;">What's still open</div>
+      ${briefing.honestGaps.map(g =>
+        `<div style="padding:8px 12px;background:#1c1410;border-left:2px solid #f59e0b;border-radius:4px;margin-bottom:6px;font-size:13px;color:#fde68a;line-height:1.5;">${escapeHtml(g)}</div>`
+      ).join("")}` : "";
+
+    const planHtml = (briefing.plan || []).map((p, i) => `
+      <div style="display:flex;gap:10px;margin-bottom:10px;">
+        <div style="flex-shrink:0;width:24px;height:24px;border-radius:50%;background:#1f2937;color:#a78bfa;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;">${i + 1}</div>
+        <div style="flex:1;">
+          <div style="font-size:13px;color:#f9fafb;font-weight:500;line-height:1.4;">${escapeHtml(p.step)}</div>
+          <div style="font-size:12px;color:#9ca3af;line-height:1.5;margin-top:2px;">${escapeHtml(p.reason)}</div>
+          ${p.expectedOutcome ? `<div style="font-size:11px;color:#6b7280;margin-top:2px;font-style:italic;">→ ${escapeHtml(p.expectedOutcome)}</div>` : ""}
+        </div>
+      </div>`).join("");
+
+    return `
+    <div style="background:#111827;padding:24px;">
+      <div style="font-size:11px;color:#a78bfa;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Milestone briefing</div>
+      <h3 style="margin:0 0 16px;font-size:17px;color:#f9fafb;line-height:1.4;font-weight:600;">${escapeHtml(briefing.headline)}</h3>
+
+      <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">What happened</div>
+      <p style="font-size:14px;color:#d1d5db;line-height:1.65;margin:0 0 18px;">${escapeHtml(briefing.whatHappened)}</p>
+
+      ${decisionsHtml ? `<div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin:18px 0 8px;">Key decisions</div>${decisionsHtml}` : ""}
+      ${changesHtml ? `<div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin:18px 0 8px;">What changed</div>${changesHtml}` : ""}
+      ${gapsHtml}
+
+      <div style="margin-top:22px;padding:16px;background:linear-gradient(135deg,#1e1b4b,#312e81);border-radius:8px;border:1px solid #4338ca;">
+        <div style="font-size:11px;color:#a5b4fc;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Current priority</div>
+        <div style="font-size:16px;color:#fff;font-weight:600;line-height:1.4;margin-bottom:8px;">${escapeHtml(briefing.currentPriority.name)}</div>
+        <div style="font-size:13px;color:#c7d2fe;line-height:1.5;margin-bottom:6px;"><span style="color:#a5b4fc;font-weight:500;">Why:</span> ${escapeHtml(briefing.currentPriority.why)}</div>
+        <div style="font-size:13px;color:#c7d2fe;line-height:1.5;"><span style="color:#a5b4fc;font-weight:500;">What:</span> ${escapeHtml(briefing.currentPriority.what)}</div>
+      </div>
+
+      ${planHtml ? `<div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin:24px 0 10px;">The plan</div>${planHtml}` : ""}
+    </div>`;
+  })() : "";
+
+  // Legacy section — only render when no briefing exists (backward compat)
+  const legacyOverview = briefing ? "" : `
+    <div style="background:#111827;padding:20px 24px;">
+      <p style="font-size:14px;color:#d1d5db;line-height:1.6;margin:0 0 20px;">${escapeHtml(summary.sprintSummary)}</p>
+    </div>`;
+
   const nextStepsList = summary.nextSteps.map(s =>
-    `<div style="padding:8px 12px;background:#0d1117;border-radius:6px;margin-bottom:6px;font-size:13px;color:#d1d5db;">• ${s}</div>`
+    `<div style="padding:8px 12px;background:#0d1117;border-radius:6px;margin-bottom:6px;font-size:13px;color:#d1d5db;">• ${escapeHtml(s)}</div>`
   ).join("\n");
 
   const html = `<div style="max-width:560px;margin:0 auto;font-family:-apple-system,BlinkMacSystemFont,sans-serif;">
     <div style="background:linear-gradient(135deg,#065f46,#059669);padding:24px;border-radius:12px 12px 0 0;">
       <div style="font-size:12px;color:#a7f3d0;text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">SPRINT COMPLETE</div>
-      <h2 style="margin:0;font-size:20px;color:#fff;line-height:1.3;">${focusTitle}</h2>
+      <h2 style="margin:0;font-size:20px;color:#fff;line-height:1.3;">${escapeHtml(focusTitle)}</h2>
     </div>
-    <div style="background:#111827;padding:20px 24px;">
-      <p style="font-size:14px;color:#d1d5db;line-height:1.6;margin:0 0 20px;">${summary.sprintSummary}</p>
-      <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">${deliverableCount} DELIVERABLES</div>
-      ${deliverableCards}
+    ${briefingHtml}
+    ${legacyOverview}
+    <div style="background:#0a0f1c;padding:20px 24px;">
+      <details style="cursor:pointer;">
+        <summary style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;outline:none;">Supporting deliverables (${deliverableCount})</summary>
+        <div style="margin-top:12px;">${deliverableCards}</div>
+      </details>
     </div>
-    <div style="background:#111827;padding:0 24px 20px;">
+    ${!briefing ? `<div style="background:#111827;padding:0 24px 20px;">
       <div style="font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">NEXT STEPS</div>
       ${nextStepsList}
-    </div>
+    </div>` : ""}
     <div style="background:#111827;padding:16px 24px;text-align:center;border-radius:0 0 12px 12px;border-top:1px solid #1f2937;">
-      <a href="${ensoUrl}" style="display:inline-block;background:#10b981;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">Review in Enso →</a>
+      <a href="${ensoUrl}" style="display:inline-block;background:#10b981;color:#fff;padding:12px 32px;border-radius:8px;text-decoration:none;font-size:14px;font-weight:600;">Open in Enso →</a>
     </div>
   </div>`;
 
@@ -321,7 +414,15 @@ export async function deliverSprintResults(
     const { getFollowerOpenIds, isWithinServiceWindow, sendTextMessage } = await import("./wechat.js");
     for (const openId of await getFollowerOpenIds()) {
       if (!isWithinServiceWindow(openId)) continue;
-      await sendTextMessage(openId, [`✅ Sprint complete: ${focusTitle}`, "", summary.sprintSummary, "", `▸ ${startAction}`].join("\n"));
+      const wechatLines = briefing
+        ? [
+            `✅ ${briefing.headline}`, "",
+            briefing.whatHappened, "",
+            `▸ Now: ${briefing.currentPriority.name}`,
+            `   ${briefing.currentPriority.what}`,
+          ]
+        : [`✅ Sprint complete: ${focusTitle}`, "", summary.sprintSummary, "", `▸ ${startAction}`];
+      await sendTextMessage(openId, wechatLines.join("\n"));
       logAction({ ts: Date.now(), type: "action", category: "focus-agent", message: `Sprint results sent via WeChat for "${focusTitle}"` });
       break;
     }

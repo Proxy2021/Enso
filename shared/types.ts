@@ -631,11 +631,84 @@ export interface SprintDeliverableSummary {
   actionType: "run" | "read" | "explore" | "review";
 }
 
+/**
+ * Snapshot of a focus area's state at a point in time — used to compute
+ * "what changed" between sprint start and sprint end.
+ */
+export interface FocusSnapshot {
+  capturedAt: string;
+  understanding: number;
+  progress: number;
+  clarity: "emerging" | "developing" | "clear";
+  intent?: string;
+  deeperIntent?: string;
+  nextSteps?: string[];
+  /** Number of related entities at snapshot time */
+  relatedEntityCount: number;
+  /** IDs of related entities at snapshot time — used to identify NEW entities post-sprint */
+  relatedEntityIds: string[];
+  /** Excerpt of the prepared briefing — what we knew going in */
+  briefingExcerpt?: string;
+  /** Expert team composition at snapshot time */
+  experts: Array<{ name: string; role: string }>;
+}
+
+/**
+ * The "milestone meeting" briefing — a human-readable narrative debrief of
+ * what a sprint actually accomplished. Replaces the bare `sprintSummary`
+ * paragraph + flat deliverables list with a structured story:
+ *   what happened → what we decided → what changed → what's still unknown
+ *   → what the priority is now → what the plan is.
+ */
+export interface SprintBriefing {
+  /** One-line headline of the meeting — the takeaway */
+  headline: string;
+  /** 3-5 sentences in plain language: going in we wanted X, we tried Y, we learned Z */
+  whatHappened: string;
+  /** Concrete calls made during the sprint, with reasoning + impact */
+  decisions: Array<{
+    call: string;
+    because: string;
+    impact: string;
+  }>;
+  /** Real state changes for this focus area — before vs after the sprint */
+  whatChanged: Array<{
+    /** Dimension of change: "Knowledge", "Capability", "Direction", "Open questions", etc. */
+    area: string;
+    was: string;
+    now: string;
+  }>;
+  /** Honest acknowledgement of what didn't work or what remains unknown */
+  honestGaps: string[];
+  /** The single most important thing to do next — not a list */
+  currentPriority: {
+    name: string;
+    /** Why this is the priority, grounded in decisions/changes from this sprint */
+    why: string;
+    /** Concrete next action */
+    what: string;
+  };
+  /** Sequenced narrative plan with reasoning visible per step */
+  plan: Array<{
+    step: string;
+    reason: string;
+    expectedOutcome: string;
+    /** Index into this plan array — for visual sequencing */
+    dependsOn?: number;
+  }>;
+}
+
 export interface SprintResultsSummary {
   sprintSummary: string;
   deliverables: SprintDeliverableSummary[];
   recommendedFirstAction: { deliverableIndex: number; reason: string };
   nextSteps: string[];
+  /** Milestone-meeting briefing — added by the post-sprint debrief pass */
+  briefing?: SprintBriefing;
+  /** Snapshot of focus state captured at sprint start */
+  preSprintSnapshot?: FocusSnapshot;
+  /** Snapshot of focus state captured at sprint end (after deliverables linked) */
+  postSprintSnapshot?: FocusSnapshot;
 }
 
 // ── Type Guards ──

@@ -268,6 +268,7 @@ export default function TasksView() {
   const [showTaskDialog, setShowTaskDialog] = useState(false);
   const [editingTask, setEditingTask] = useState<ScheduledTaskDef | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [scheduledCollapsed, setScheduledCollapsed] = useState(true);
 
   // Focus areas (for TL action → focus navigation)
   const [focusAreas, setFocusAreas] = useState<Array<{ id: string; title: string }>>([]);
@@ -804,13 +805,17 @@ export default function TasksView() {
         {/* Scheduled Tasks */}
         <section>
           <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => setScheduledCollapsed((c) => !c)}
+              className="flex items-center gap-1.5 cursor-pointer hover:opacity-80 transition-opacity"
+            >
+              {scheduledCollapsed ? <ChevronRight className="w-3.5 h-3.5 text-gray-500" /> : <ChevronDown className="w-3.5 h-3.5 text-gray-500" />}
               <Clock className="w-3.5 h-3.5 text-blue-400" />
               <h2 className="text-[11px] font-medium text-gray-400 uppercase tracking-wide">{t("tasks.scheduledTasks")}</h2>
               {scheduledTasks.length > 0 && (
                 <span className="text-[10px] text-gray-600">({scheduledTasks.filter((t) => t.enabled).length} active)</span>
               )}
-            </div>
+            </button>
             <button
               onClick={() => { setEditingTask(null); setShowTaskDialog(true); }}
               className="flex items-center gap-1 px-2.5 py-1 text-[10px] font-medium rounded-lg bg-blue-500/15 text-blue-400 border border-blue-500/30 hover:bg-blue-500/25 transition-colors cursor-pointer"
@@ -819,13 +824,14 @@ export default function TasksView() {
             </button>
           </div>
 
-          {scheduledTasks.length === 0 ? (
+          {!scheduledCollapsed && scheduledTasks.length === 0 && (
             <div className="rounded-xl border border-gray-800/50 bg-gray-900/30 px-4 py-6 text-center">
               <Clock className="w-6 h-6 mx-auto mb-2 text-gray-600" />
               <p className="text-xs text-gray-500">{t("tasks.noScheduled")}</p>
               <p className="text-[10px] text-gray-600 mt-1">{t("tasks.noScheduledHint")}</p>
             </div>
-          ) : (
+          )}
+          {!scheduledCollapsed && scheduledTasks.length > 0 && (
             <div className="space-y-2">
               {scheduledTasks.map((task) => (
                 <div key={task.taskId} className={`rounded-xl border px-4 py-3 ${task.enabled ? "border-gray-700/50 bg-gray-800/40" : "border-gray-800/30 bg-gray-900/30 opacity-60"}`}>
