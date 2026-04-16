@@ -104,8 +104,8 @@ export async function renderPodcastAudio(script: string, geminiKey: string): Pro
       speechConfig: {
         multiSpeakerVoiceConfig: {
           speakerVoiceConfigs: [
-            { speaker: "Host A", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Kore" } } },
-            { speaker: "Host B", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Puck" } } },
+            { speaker: "Host A", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Enceladus" } } },
+            { speaker: "Host B", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } } },
           ],
         },
       },
