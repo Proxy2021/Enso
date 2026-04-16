@@ -59,6 +59,8 @@ export interface FocusAnalysis {
   }>;
   /** TL's assessment of understanding and progress */
   assessment?: { understanding: number; progress: number };
+  /** Whether auto-evolve is enabled for this focus (default true) */
+  autoEvolve: boolean;
 }
 
 export interface ProgressPulse {
@@ -110,7 +112,10 @@ export async function analyzeFocusAreas(): Promise<FocusAnalysis[]> {
     let recommendedAction: FocusAnalysis["recommendedAction"] = "none";
     let actionReason = "";
 
-    if (hasUnreviewedResults) {
+    // Auto-evolve disabled — TL should not autonomously act on this focus
+    if (area.autoEvolve === false) {
+      actionReason = "Auto-evolve disabled by user. Will only act on explicit requests.";
+    } else if (hasUnreviewedResults) {
       recommendedAction = "review_results";
       actionReason = `Sprint completed ${daysSinceSprint} day(s) ago but results haven't been reviewed.`;
     } else if (!hasEvaluation && !hasSprint) {
@@ -137,6 +142,7 @@ export async function analyzeFocusAreas(): Promise<FocusAnalysis[]> {
       hasUnreviewedResults, hasEvaluation, hasSprint, recommendedAction, actionReason,
       experts: (area.experts || []).map(e => ({ id: e.id, name: e.name, role: e.role, hasConversation: !!e.conversationId, metrics: e.metrics })),
       assessment: area.assessment ? { understanding: area.assessment.understanding, progress: area.assessment.progress } : undefined,
+      autoEvolve: area.autoEvolve !== false,
     });
   }
 

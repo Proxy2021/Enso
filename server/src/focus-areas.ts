@@ -100,6 +100,9 @@ export interface FocusArea {
   lastSprintDate?: string;
   /** Structured summary from the last evolution sprint — maps deliverables to pain points */
   lastSprintSummary?: import("../../shared/types.js").SprintResultsSummary;
+
+  /** Whether the TL should auto-launch evaluation/sprint cycles for this focus. Default true. */
+  autoEvolve?: boolean;
 }
 
 export interface FocusState {
@@ -188,6 +191,7 @@ function writeFocusToCortex(state: FocusState): void {
         ] : [
           `- **Confidence:** ${Math.round((area.confidence ?? 0.5) * 100)}%`,
         ]),
+        `- **Auto-evolve:** ${area.autoEvolve !== false ? "on" : "off"}`,
         `- **Trend:** ${area.progress.trend}`,
         `- **Last active:** ${area.progress.lastActiveAt}`,
         `- **Updated:** ${area.updatedAt}`,
@@ -1803,6 +1807,10 @@ export function updateFocusArea(focusId: string, updates: Partial<FocusArea>): F
   if (updates.deeperIntent) {
     changes.push(`deeper intent updated`);
     area.deeperIntent = updates.deeperIntent;
+  }
+  if (typeof updates.autoEvolve === "boolean" && updates.autoEvolve !== area.autoEvolve) {
+    changes.push(`auto-evolve: ${area.autoEvolve !== false ? "on" : "off"} → ${updates.autoEvolve ? "on" : "off"}`);
+    area.autoEvolve = updates.autoEvolve;
   }
   // conversationId is a silent update — no refinement log needed
   if (updates.conversationId && updates.conversationId !== area.conversationId) {

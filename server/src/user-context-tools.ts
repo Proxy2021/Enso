@@ -894,9 +894,9 @@ export async function enrichWeReadMetadata(): Promise<{ enriched: number; total:
       try {
         const bookId = String(book.wereadBookId);
 
-        // Use WeRead book info API (works with numeric IDs)
+        // Use WeRead book info API (i.weread.qq.com is the stable API host)
         const meta = await page.evaluate(`(function() {
-          return fetch("https://weread.qq.com/web/book/info?bookId=${bookId}", { credentials: "include" })
+          return fetch("https://i.weread.qq.com/book/info?bookId=${bookId}", { credentials: "include" })
             .then(function(r) { return r.json(); })
             .catch(function(e) { return { error: e.message }; });
         })()`) as Record<string, unknown>;
@@ -1994,67 +1994,141 @@ export function createUserContextTools(): EnsoAgentTool[] {
                 };
               }
 
-              // Try to use WeRead's API to get books (more reliable than DOM scraping)
+              // Fetch books via multiple WeRead API endpoints for maximum coverage
               const books: Array<Record<string, unknown>> = [];
+              const processedIds = new Set<string>();
 
-              // Method 1: Try the shelf API
-              interface WeReadBook { bookId?: string; book_id?: string; title?: string; bookName?: string; author?: string; cover?: string; coverUrl?: string; intro?: string; description?: string; categories?: Array<Record<string, string>> | string[]; readingProgress?: number; progress?: number; noteCount?: number; notesCount?: number; newRating?: number; rating?: number; publisher?: string; publishTime?: string; isbn?: string }
-              interface WeReadShelfData { books?: WeReadBook[]; bookInfos?: WeReadBook[]; shelf?: WeReadBook[] }
-              const apiBooks = await page.evaluate(async (): Promise<WeReadShelfData | null> => {
+              interface WeReadBook { bookId?: string; book_id?: string; title?: string; bookName?: string; author?: string; cover?: string; coverUrl?: string; intro?: string; description?: string; categories?: Array<Record<string, string>> | string[]; readingProgress?: number; progress?: number; noteCount?: number; notesCount?: number; newRating?: number; rating?: number; publisher?: string; publishTime?: string; isbn?: string; category?: string }
+
+              function pushBook(b: WeReadBook, bookId: string): void {
+                if (!bookId || processedIds.has(bookId)) return;
+                processedIds.add(bookId);
+                const cats = b.categories
+                  ? (Array.isArray(b.categories) ? (b.categories as Array<string | Record<string, string>>).map((c) => typeof c === "string" ? c : (c.title || c.name || "")) : [])
+                  : (b.category ? [String(b.category)] : []);
+                books.push({
+                  title: b.title || b.bookName || "",
+                  author: b.author || "",
+                  coverUrl: b.cover || b.coverUrl || "",
+                  wereadBookId: bookId,
+                  description: b.intro || b.description || "",
+                  categories: cats.filter(Boolean),
+                  readingProgress: b.readingProgress || b.progress || 0,
+                  noteCount: b.noteCount || b.notesCount || 0,
+                  rating: b.newRating ? (b.newRating as number) / 10 : (b.rating || 0),
+                  publisher: b.publisher || "",
+                  publishTime: b.publishTime || "",
+                  isbn: b.isbn || "",
+                });
+              }
+
+              // Method 1: /user/notebooks — most reliable, returns books with notes/highlights
+              const notebookBooks = await page.evaluate(async () => {
                 try {
-                  // WeRead shelf API
-                  const res = await fetch("https://weread.qq.com/web/shelf/sync", {
-                    method: "GET",
-                    credentials: "include",
-                  });
-                  if (res.ok) {
-                    const data = await res.json();
-                    return data as WeReadShelfData;
-                  }
-                } catch { /* fallback to DOM */ }
+                  const res = await fetch("https://i.weread.qq.com/user/notebooks", { credentials: "include" });
+                  if (res.ok) return await res.json();
+                } catch { /* continue */ }
                 return null;
-              });
+              }) as { books?: Array<{ bookId: string; book?: WeReadBook; noteCount?: number; reviewCount?: number; bookmarkCount?: number; sort?: number }> } | null;
 
-              if (apiBooks && (apiBooks.books || apiBooks.bookInfos || apiBooks.shelf)) {
-                // Parse API response — WeRead returns books in various formats
-                const bookList = apiBooks.books || apiBooks.bookInfos || [];
-                const shelfBooks = apiBooks.shelf || [];
-
-                // If shelf has bookIds, map them to book details
-                const bookMap: Record<string, WeReadBook> = {};
-                for (const b of bookList) {
-                  if (b.bookId) bookMap[b.bookId] = b;
-                }
-
-                const processedIds = new Set<string>();
-
-                // Process books from API
-                for (const item of [...bookList, ...shelfBooks]) {
-                  const b = item.bookId ? (bookMap[item.bookId] || item) : item;
-                  const bookId = String(b.bookId || b.book_id || "");
-                  if (!bookId || processedIds.has(bookId)) continue;
-                  processedIds.add(bookId);
-
-                  books.push({
-                    title: b.title || b.bookName || "",
-                    author: b.author || "",
-                    coverUrl: b.cover || b.coverUrl || "",
-                    wereadBookId: bookId,
-                    description: b.intro || b.description || "",
-                    categories: b.categories ? (Array.isArray(b.categories) ? (b.categories as Array<string | Record<string, string>>).map((c) => typeof c === "string" ? c : (c.title || c.name || "")) : []) : [],
-                    readingProgress: b.readingProgress || b.progress || 0,
-                    noteCount: b.noteCount || b.notesCount || 0,
-                    rating: b.newRating ? (b.newRating as number) / 10 : (b.rating || 0),
-                    publisher: b.publisher || "",
-                    publishTime: b.publishTime || "",
-                    isbn: b.isbn || "",
-                  });
+              if (notebookBooks?.books) {
+                logAction({ ts: Date.now(), type: "action", category: "weread-scan", message: `Notebooks API returned ${notebookBooks.books.length} books` });
+                for (const nb of notebookBooks.books) {
+                  const b = nb.book || {} as WeReadBook;
+                  const bookId = String(nb.bookId || b.bookId || "");
+                  pushBook({
+                    ...b,
+                    bookId: bookId,
+                    noteCount: nb.noteCount || nb.bookmarkCount || b.noteCount,
+                  }, bookId);
                 }
               }
 
-              // Method 2: Fallback to DOM scraping if API didn't work
+              // Method 2: /web/shelf/sync — gets all shelf books (including those without notes)
+              // The response has a nested structure: { bookProgress: [...], archive: [...], bookInfos: {...} }
+              const shelfData = await page.evaluate(async () => {
+                try {
+                  const res = await fetch("https://weread.qq.com/web/shelf/sync", { method: "GET", credentials: "include" });
+                  if (res.ok) return await res.json();
+                } catch { /* continue */ }
+                return null;
+              }) as Record<string, unknown> | null;
+
+              if (shelfData) {
+                logAction({ ts: Date.now(), type: "action", category: "weread-scan", message: `Shelf sync API returned keys: ${Object.keys(shelfData).join(", ")}` });
+
+                // bookProgress is an array of {bookId, progress, ...} — tells us which books are on the shelf
+                const bookProgress = (shelfData.bookProgress as Array<{ bookId?: string; progress?: number; readingTime?: number }>) || [];
+                // bookInfos may be an object {bookId: bookInfo} or an array
+                const bookInfos = shelfData.bookInfos || {};
+                // Some responses have books or shelf arrays directly
+                const booksArr = (shelfData.books as WeReadBook[]) || [];
+                const shelfArr = (shelfData.shelf as Array<{ bookId?: string }>) || [];
+                // archive may contain archived shelf items
+                const archiveArr = (shelfData.archive as Array<{ bookId?: string; bookIds?: string[] }>) || [];
+
+                // Collect all bookIds from shelf
+                const shelfBookIds = new Set<string>();
+                for (const bp of bookProgress) {
+                  if (bp.bookId) shelfBookIds.add(String(bp.bookId));
+                }
+                for (const si of shelfArr) {
+                  if (si.bookId) shelfBookIds.add(String(si.bookId));
+                }
+                for (const ai of archiveArr) {
+                  if (ai.bookId) shelfBookIds.add(String(ai.bookId));
+                  if (ai.bookIds) ai.bookIds.forEach(id => shelfBookIds.add(String(id)));
+                }
+
+                // bookInfos might be object keyed by bookId
+                const infoMap: Record<string, WeReadBook> = {};
+                if (bookInfos && typeof bookInfos === "object" && !Array.isArray(bookInfos)) {
+                  for (const [k, v] of Object.entries(bookInfos as Record<string, WeReadBook>)) {
+                    infoMap[k] = v;
+                  }
+                }
+
+                // Process books from the direct books array
+                for (const b of booksArr) {
+                  const bookId = String(b.bookId || b.book_id || "");
+                  pushBook(b, bookId);
+                }
+
+                // For shelf bookIds that we haven't processed yet, use bookInfos or fetch individually
+                const missingIds = [...shelfBookIds].filter(id => !processedIds.has(id));
+                for (const bookId of missingIds) {
+                  const info = infoMap[bookId];
+                  if (info) {
+                    const bp = bookProgress.find(p => String(p.bookId) === bookId);
+                    pushBook({ ...info, readingProgress: bp?.progress }, bookId);
+                  }
+                }
+
+                // Batch-fetch any remaining missing books via /book/info
+                const stillMissing = [...shelfBookIds].filter(id => !processedIds.has(id));
+                if (stillMissing.length > 0) {
+                  logAction({ ts: Date.now(), type: "action", category: "weread-scan", message: `Fetching ${stillMissing.length} individual book details` });
+                  for (const bookId of stillMissing) {
+                    try {
+                      const info = await page.evaluate(async (bid: string) => {
+                        try {
+                          const r = await fetch(`https://i.weread.qq.com/book/info?bookId=${bid}`, { credentials: "include" });
+                          if (r.ok) return await r.json();
+                        } catch { /* skip */ }
+                        return null;
+                      }, bookId) as WeReadBook | null;
+                      if (info) {
+                        const bp = bookProgress.find(p => String(p.bookId) === bookId);
+                        pushBook({ ...info, readingProgress: bp?.progress }, bookId);
+                      }
+                    } catch { /* skip individual book failures */ }
+                  }
+                }
+              }
+
+              // Method 3: Fallback to DOM scraping if APIs returned nothing
               if (books.length === 0) {
-                // Scroll to load all books
+                logAction({ ts: Date.now(), type: "action", category: "weread-scan", message: "API methods returned 0 books, falling back to DOM scraping" });
                 for (let i = 0; i < 30; i++) {
                   await page.evaluate(() => window.scrollBy(0, 800));
                   await new Promise(r => setTimeout(r, 1000));
@@ -2062,7 +2136,6 @@ export function createUserContextTools(): EnsoAgentTool[] {
 
                 const domBooks = await page.evaluate(() => {
                   const results: Array<Record<string, string>> = [];
-                  // Try various selectors WeRead might use
                   const bookElements = document.querySelectorAll(
                     ".shelf_book, .bookshelf_book, [class*=shelf_book], [class*=book_item], .book-item, .wr_bookCover_img"
                   );
@@ -2107,6 +2180,8 @@ export function createUserContextTools(): EnsoAgentTool[] {
                   }
                 }
               }
+
+              logAction({ ts: Date.now(), type: "action", category: "weread-scan", message: `Total books collected: ${books.length} (from all methods)` });
 
               await browser.close();
 

@@ -40,6 +40,7 @@ export interface SystemSignals {
     focusId: string; title: string; focusType?: string; recommendedAction: string;
     actionReason: string; daysSinceActivity: number; hasUnreviewedResults: boolean;
     experts: Array<{ id: string; name: string; role: string; hasConversation: boolean }>;
+    autoEvolve: boolean;
   }>;
   cortexStats: { totalPages: number; entityCount: number; recentUpdates: string[] };
   taskResults: Array<{ taskId: string; taskName: string; status: string; firedAt: number; resultSummary?: string }>;
@@ -921,7 +922,7 @@ export async function gatherSignals(): Promise<SystemSignals> {
     focusAnalyses = analyses.map(a => ({
       focusId: a.focusId, title: a.title, focusType: a.focusType, recommendedAction: a.recommendedAction,
       actionReason: a.actionReason, daysSinceActivity: a.daysSinceActivity, hasUnreviewedResults: a.hasUnreviewedResults,
-      experts: a.experts,
+      experts: a.experts, autoEvolve: a.autoEvolve,
     }));
   } catch { /* focus agent not available */ }
 
@@ -1024,7 +1025,8 @@ export async function assessAndPrioritize(signals: SystemSignals): Promise<TeamL
       // Include assessment data if available
       const assessment = (f as Record<string, unknown>).assessment as { understanding?: number; progress?: number } | undefined;
       const assessLine = assessment ? ` | Understanding: ${assessment.understanding}%, Progress: ${assessment.progress}%` : "";
-      return `- "${f.title}" [${f.focusType || "general"}] — ${f.recommendedAction}: ${f.actionReason}${f.hasUnreviewedResults ? " [UNREVIEWED RESULTS]" : ""} (${f.daysSinceActivity}d inactive)${assessLine}${expertLine}`;
+      const autoEvolveTag = f.autoEvolve === false ? " [AUTO-EVOLVE DISABLED]" : "";
+      return `- "${f.title}" [${f.focusType || "general"}] — ${f.recommendedAction}: ${f.actionReason}${f.hasUnreviewedResults ? " [UNREVIEWED RESULTS]" : ""}${autoEvolveTag} (${f.daysSinceActivity}d inactive)${assessLine}${expertLine}`;
     }),
     "",
     `## Cortex`,
@@ -1065,6 +1067,9 @@ FOCUS EVOLUTION — YOU DRIVE THIS, NOT THE USER:
   Most results DON'T need user involvement — only surface items when the user needs to
   personally READ, DECIDE, or APPLY something in real life.
 - After review, queue next evaluation cycle automatically.
+- IMPORTANT: Some focuses have auto-evolve DISABLED (autoEvolve=false). Do NOT auto-execute
+  evaluations, sprints, or evolution cycles for these focuses. You may still work on them
+  if the user explicitly requests it.
 
 The user should NOT be a bottleneck in the evolution loop. You drive progress.
 Only pull the user in when their brain is genuinely needed.
@@ -1780,6 +1785,13 @@ async function handleFocusEvaluate(action: TeamLeaderAction): Promise<void> {
   const area = state.areas.find(a => titleLower.includes(a.title.toLowerCase()) || titleLower.includes(a.id));
   if (!area) return;
 
+  // Respect autoEvolve — skip auto-evaluations (allow explicit user requests)
+  if (area.autoEvolve === false && action.autoExecute) {
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `Skipping auto-evaluation for "${area.title}" — auto-evolve disabled` });
+    return;
+  }
+
   // Skip if already evaluated
   if (area.preparedBriefing) {
     logAction({ ts: Date.now(), type: "action", category: "team-leader",
@@ -1812,8 +1824,13 @@ async function handleFocusEvaluate(action: TeamLeaderAction): Promise<void> {
         await assessFocusUnderstanding(area, updateFocusAssessment);
         logAction({ ts: Date.now(), type: "action", category: "team-leader",
           message: `Evaluation complete for "${area.title}" — briefing ready` });
-        // Queue next step: launch sprint
-        queueTask({ title: `Launch evolution sprint for "${area.title}"`, description: `Evaluation complete. Launch sprint to make progress.`, source: "follow-up" });
+        // Queue next step: launch sprint (only if auto-evolve is enabled)
+        if (area.autoEvolve !== false) {
+          queueTask({ title: `Launch evolution sprint for "${area.title}"`, description: `Evaluation complete. Launch sprint to make progress.`, source: "follow-up" });
+        } else {
+          logAction({ ts: Date.now(), type: "action", category: "team-leader",
+            message: `Skipping auto-sprint for "${area.title}" — auto-evolve disabled` });
+        }
       }
     }
   } catch (err) {
@@ -1997,6 +2014,13 @@ async function handleFocusEvolve(action: TeamLeaderAction): Promise<void> {
   const titleLower = action.title.toLowerCase();
   const area = state.areas.find(a => titleLower.includes(a.title.toLowerCase()) || titleLower.includes(a.id));
   if (!area) return;
+
+  // Respect autoEvolve — skip auto-launches (allow explicit user requests via reacts)
+  if (area.autoEvolve === false && action.autoExecute) {
+    logAction({ ts: Date.now(), type: "action", category: "team-leader",
+      message: `Skipping auto-sprint for "${area.title}" — auto-evolve disabled` });
+    return;
+  }
 
   // Need evaluation first
   if (!area.preparedBriefing) {

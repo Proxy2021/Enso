@@ -65,6 +65,7 @@ interface FocusArea {
   relatedEntityIds?: string[];
   lastSprintResults?: string;
   lastSprintDate?: string;
+  autoEvolve?: boolean;
   lastSprintSummary?: {
     sprintSummary: string;
     deliverables: Array<{
@@ -566,6 +567,26 @@ export default function FocusView() {
               ))}
             </div>
             <div className="flex-1" />
+            <button
+              onClick={() => {
+                const next = selected.autoEvolve === false;
+                handleUpdate(selected.id, { autoEvolve: next } as Partial<FocusArea>);
+                setFocusState(prev => prev ? {
+                  ...prev,
+                  areas: prev.areas.map(a => a.id === selected.id ? { ...a, autoEvolve: next } : a),
+                } : prev);
+              }}
+              className={`text-[10px] px-2 py-1 rounded transition-all duration-150 mr-2 ${
+                selected.autoEvolve !== false
+                  ? "text-emerald-400/80 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20"
+                  : "text-gray-500 bg-gray-800/40 hover:bg-gray-700/40 border border-gray-700/30"
+              }`}
+              title={selected.autoEvolve !== false
+                ? "Auto-evolve is ON — TL will automatically run evaluation and sprint cycles"
+                : "Auto-evolve is OFF — TL will only work on this focus when you explicitly ask"}
+            >
+              {selected.autoEvolve !== false ? "⚡ Auto" : "⏸ Manual"}
+            </button>
             <button onClick={() => handleDelete(selected.id)}
               className="text-[10px] px-2 py-1 rounded text-gray-600 hover:text-red-300 hover:bg-red-500/10 transition-colors">
               Remove
@@ -1644,5 +1665,12 @@ function FocusStatus({ area, compact }: { area: FocusArea; compact?: boolean }) 
     status = { label: compact ? "Active" : "Active — TL managing", bg: "bg-gray-800/40 text-gray-400" };
   }
 
-  return <span className={`text-[9px] px-1.5 py-0.5 rounded shrink-0 ${status.bg}`}>{status.label}</span>;
+  return (
+    <span className="flex items-center gap-1 shrink-0">
+      <span className={`text-[9px] px-1.5 py-0.5 rounded ${status.bg}`}>{status.label}</span>
+      {area.autoEvolve === false && (
+        <span className="text-[8px] px-1 py-0.5 rounded bg-gray-800/50 text-gray-500 border border-gray-700/30" title="Auto-evolve disabled">⏸</span>
+      )}
+    </span>
+  );
 }
