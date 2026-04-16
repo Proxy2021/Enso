@@ -235,8 +235,10 @@ export default function ReactToTL({ context, onClose, defaultAgentId, mode = "po
         }),
       });
 
-      // Cleanup blob URLs
+      // Cleanup blob URLs and clear state
       images.forEach(img => URL.revokeObjectURL(img.previewUrl));
+      setText("");
+      setImages([]);
       const targetName = selected?.name || "Team Leader";
       const imgNote = imageUrls.length ? ` + ${imageUrls.length} image(s)` : "";
       pushToast(`Sent to ${targetName}`, context.summary.slice(0, 50) + imgNote, true, 3000);
