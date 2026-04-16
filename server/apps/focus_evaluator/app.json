@@ -1,0 +1,325 @@
+{
+  "version": 1,
+  "createdAt": 1713200000000,
+  "spec": {
+    "toolFamily": "focus_evaluator",
+    "toolPrefix": "enso_focus_evaluator_",
+    "description": "Focus area evaluation dashboard: assessment trends, behavioral engagement signals, drift detection, structured evaluation findings, and cross-area comparison for the Team Leader.",
+    "signatureId": "focus_evaluator_view",
+    "tools": [
+      {
+        "suffix": "dashboard",
+        "description": "Load the focus evaluation dashboard showing all focus areas with assessment scores, trends, drift status, and engagement signals. Use when the user says: 'show focus dashboard', 'evaluation overview', 'how are my focus areas doing', 'focus area status', 'assessment dashboard'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_focus_evaluator_dashboard",
+          "generatedAt": "2026-04-16T08:00:00Z",
+          "totalAreas": 4,
+          "activeAreas": 4,
+          "areas": [
+            {
+              "id": "develop-enso-personal-ai-assistant",
+              "title": "Develop Enso into a Truly Useful Personal AI Assistant",
+              "status": "active",
+              "clarity": "clear",
+              "focusType": "project",
+              "understanding": 70,
+              "progress": 45,
+              "trend": "growing",
+              "daysSinceActivity": 2,
+              "driftStatus": "healthy",
+              "engagementScore": 72,
+              "assessmentCount": 5,
+              "lastAssessed": "2026-04-15T10:00:00Z",
+              "sprintCount": 3,
+              "progressVelocity": 8.5,
+              "tags": ["artificial-intelligence", "personal-growth"]
+            },
+            {
+              "id": "develop-alpharank-quant-tool",
+              "title": "Develop AlphaRank into a Market-Beating Quant Tool",
+              "status": "active",
+              "clarity": "clear",
+              "focusType": "project",
+              "understanding": 15,
+              "progress": 55,
+              "trend": "steady",
+              "daysSinceActivity": 7,
+              "driftStatus": "stalling",
+              "engagementScore": 35,
+              "assessmentCount": 3,
+              "lastAssessed": "2026-04-14T08:00:00Z",
+              "sprintCount": 1,
+              "progressVelocity": 2.1,
+              "tags": ["quantitative-finance"]
+            }
+          ],
+          "driftAlerts": [
+            {
+              "type": "stalling",
+              "severity": "warning",
+              "focusId": "develop-alpharank-quant-tool",
+              "focusTitle": "Develop AlphaRank into a Market-Beating Quant Tool",
+              "message": "Progress velocity below 2pts/cycle for 2 consecutive cycles",
+              "suggestedAction": "Re-evaluate approach or consider scope reduction"
+            }
+          ],
+          "globalMetrics": {
+            "avgUnderstanding": 42,
+            "avgProgress": 50,
+            "avgEngagement": 54,
+            "totalAssessments": 14,
+            "areasWithDrift": 1
+          }
+        },
+        "requiredDataKeys": ["tool", "areas"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "trend_analysis",
+        "description": "Show assessment trend analysis for a specific focus area: historical scores chart, velocity, acceleration, projected progress, and cycle statistics. Use when the user says: 'show trends for', 'assessment history', 'how is progress trending', 'score trajectory'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "focusId": {
+              "type": "string",
+              "description": "Focus area ID to analyze trends for"
+            }
+          },
+          "required": ["focusId"]
+        },
+        "sampleParams": { "focusId": "develop-enso-personal-ai-assistant" },
+        "sampleData": {
+          "tool": "enso_focus_evaluator_trend_analysis",
+          "focusId": "develop-enso-personal-ai-assistant",
+          "focusTitle": "Develop Enso into a Truly Useful Personal AI Assistant",
+          "history": [
+            { "date": "2026-04-09", "understanding": 20, "progress": 10, "confidence": 40, "engagementScore": 30, "source": "inference" },
+            { "date": "2026-04-11", "understanding": 35, "progress": 20, "confidence": 55, "engagementScore": 45, "source": "tl-evaluate" },
+            { "date": "2026-04-13", "understanding": 50, "progress": 30, "confidence": 65, "engagementScore": 60, "source": "tl-evaluate" },
+            { "date": "2026-04-15", "understanding": 70, "progress": 45, "confidence": 72, "engagementScore": 72, "source": "tl-sprint-review" }
+          ],
+          "trend": {
+            "progressVelocity": 8.5,
+            "progressAcceleration": -1.2,
+            "understandingVelocity": 12.5,
+            "avgCycleDays": 2,
+            "evaluationCount": 4,
+            "projectedProgress": 53
+          },
+          "current": {
+            "understanding": 70,
+            "progress": 45,
+            "confidence": 72
+          },
+          "allAreas": [
+            { "id": "develop-enso-personal-ai-assistant", "title": "Develop Enso into a Truly Useful Personal AI Assistant" },
+            { "id": "develop-alpharank-quant-tool", "title": "Develop AlphaRank into a Market-Beating Quant Tool" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "focusId", "focusTitle"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "signal_scan",
+        "description": "Collect and display behavioral engagement signals for a focus area: cortex growth, app engagement, git velocity, content creation, conversation depth, and deliverable activation scores. Use when the user says: 'check engagement signals', 'behavioral signals', 'how engaged am I with', 'activity signals'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "focusId": {
+              "type": "string",
+              "description": "Focus area ID to scan signals for"
+            },
+            "periodDays": {
+              "type": "number",
+              "description": "Number of days to look back (default: 14)"
+            }
+          },
+          "required": ["focusId"]
+        },
+        "sampleParams": { "focusId": "develop-enso-personal-ai-assistant" },
+        "sampleData": {
+          "tool": "enso_focus_evaluator_signal_scan",
+          "focusId": "develop-enso-personal-ai-assistant",
+          "focusTitle": "Develop Enso into a Truly Useful Personal AI Assistant",
+          "periodDays": 14,
+          "engagementScore": 72,
+          "breakdown": {
+            "cortexGrowth": { "count": 5, "score": 70, "weight": 25 },
+            "appEngagement": { "count": 12, "score": 75, "weight": 20 },
+            "gitVelocity": { "commits": 28, "score": 90, "weight": 20 },
+            "contentCreation": { "count": 2, "score": 60, "weight": 15 },
+            "conversationDepth": { "wordCount": 450, "score": 65, "weight": 10 },
+            "deliverableActivation": { "activated": 3, "total": 5, "score": 60, "weight": 10 }
+          },
+          "summary": "Strong engagement: active Git development (28 commits), regular app usage, growing Cortex knowledge base.",
+          "allAreas": [
+            { "id": "develop-enso-personal-ai-assistant", "title": "Develop Enso into a Truly Useful Personal AI Assistant" },
+            { "id": "develop-alpharank-quant-tool", "title": "Develop AlphaRank into a Market-Beating Quant Tool" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "focusId", "focusTitle", "engagementScore", "breakdown"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "drift_scan",
+        "description": "Run drift detection across all focus areas. Identifies stalling, regressing, disengaged, accelerating, or confidence-drop patterns. Returns alerts with severity and suggested actions. Use when the user says: 'check for drift', 'any focus areas stalling', 'drift detection', 'are any areas stuck', 'focus area health check'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_focus_evaluator_drift_scan",
+          "generatedAt": "2026-04-16T08:00:00Z",
+          "totalAreas": 4,
+          "healthyCount": 2,
+          "alertCount": 2,
+          "alerts": [
+            {
+              "type": "stalling",
+              "severity": "warning",
+              "focusId": "develop-alpharank-quant-tool",
+              "focusTitle": "Develop AlphaRank into a Market-Beating Quant Tool",
+              "message": "Progress velocity dropped below 2pts/cycle for 2 consecutive evaluations",
+              "evidence": ["Progress: 50 → 52 → 55 (velocity: 1.5pts/cycle)", "Engagement score: 35 (below average)"],
+              "suggestedAction": "Re-evaluate approach, consider scope reduction or fresh sprint"
+            },
+            {
+              "type": "disengaged",
+              "severity": "warning",
+              "focusId": "build-media-library",
+              "focusTitle": "Build a complete media library",
+              "message": "Engagement score below 20 for 2 consecutive cycles",
+              "evidence": ["Engagement: 15 → 12 (declining)", "No Cortex updates in 14 days"],
+              "suggestedAction": "Consider pausing or reprioritizing this focus area"
+            }
+          ],
+          "areaStatuses": [
+            { "id": "develop-enso-personal-ai-assistant", "title": "Develop Enso", "status": "healthy", "velocity": 8.5 },
+            { "id": "develop-alpharank-quant-tool", "title": "AlphaRank", "status": "stalling", "velocity": 1.5 },
+            { "id": "develop-photography", "title": "Photography", "status": "healthy", "velocity": 5.2 },
+            { "id": "build-media-library", "title": "Media Library", "status": "disengaged", "velocity": 0.5 }
+          ]
+        },
+        "requiredDataKeys": ["tool", "alerts", "areaStatuses"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "evaluation_report",
+        "description": "Generate a structured evaluation report for a focus area: key findings categorized as strengths/gaps/risks/opportunities, quantitative metrics, and delta from previous evaluation. Use when the user says: 'evaluate focus area', 'focus evaluation report', 'assessment report for', 'structured evaluation'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "focusId": {
+              "type": "string",
+              "description": "Focus area ID to generate evaluation report for"
+            }
+          },
+          "required": ["focusId"]
+        },
+        "sampleParams": { "focusId": "develop-enso-personal-ai-assistant" },
+        "sampleData": {
+          "tool": "enso_focus_evaluator_evaluation_report",
+          "focusId": "develop-enso-personal-ai-assistant",
+          "focusTitle": "Develop Enso into a Truly Useful Personal AI Assistant",
+          "evaluatedAt": "2026-04-16T08:00:00Z",
+          "findings": [
+            { "id": "F1", "category": "strength", "title": "Strong development velocity", "detail": "28 commits in last 14 days with consistent daily activity", "impact": "high" },
+            { "id": "F2", "category": "strength", "title": "Growing knowledge base", "detail": "5 new Cortex entities created relating to AI architecture", "impact": "medium" },
+            { "id": "F3", "category": "gap", "title": "Sprint deliverable activation rate low", "detail": "Only 3 of 5 deliverables from last sprint have been activated", "impact": "medium" },
+            { "id": "F4", "category": "risk", "title": "Scope creep potential", "detail": "Progress acceleration is negative — velocity may be decelerating", "impact": "high" },
+            { "id": "F5", "category": "opportunity", "title": "Cross-focus synergy with AlphaRank", "detail": "Data pipeline patterns could accelerate quant tool development", "impact": "medium" }
+          ],
+          "metrics": {
+            "understanding": 70,
+            "progress": 45,
+            "confidence": 72,
+            "engagementScore": 72,
+            "cortexEntityCount": 47,
+            "sprintCount": 3,
+            "daysSinceCreation": 7
+          },
+          "delta": {
+            "findingsAdded": ["F3", "F5"],
+            "findingsResolved": ["Previous gap: unclear requirements"],
+            "metricsChange": { "understanding": 20, "progress": 15, "confidence": 7, "engagementScore": 12 },
+            "summary": "Since last evaluation: 2 new findings, 1 gap resolved, progress +15%, understanding +20%"
+          },
+          "allAreas": [
+            { "id": "develop-enso-personal-ai-assistant", "title": "Develop Enso into a Truly Useful Personal AI Assistant" },
+            { "id": "develop-alpharank-quant-tool", "title": "Develop AlphaRank into a Market-Beating Quant Tool" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "focusId", "focusTitle", "findings", "metrics"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "compare",
+        "description": "Compare two or more focus areas side-by-side on key metrics: assessment scores, engagement, velocity, drift status, and sprint output. Use when the user says: 'compare focus areas', 'side by side comparison', 'which focus area is doing better', 'cross-area comparison'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "focusIds": {
+              "type": "string",
+              "description": "Comma-separated focus area IDs to compare. If omitted, compares all active areas."
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_focus_evaluator_compare",
+          "generatedAt": "2026-04-16T08:00:00Z",
+          "areas": [
+            {
+              "id": "develop-enso-personal-ai-assistant",
+              "title": "Enso Development",
+              "understanding": 70,
+              "progress": 45,
+              "engagementScore": 72,
+              "velocity": 8.5,
+              "driftStatus": "healthy",
+              "sprintCount": 3,
+              "daysSinceActivity": 2,
+              "cortexEntities": 47,
+              "clarity": "clear"
+            },
+            {
+              "id": "develop-alpharank-quant-tool",
+              "title": "AlphaRank",
+              "understanding": 15,
+              "progress": 55,
+              "engagementScore": 35,
+              "velocity": 2.1,
+              "driftStatus": "stalling",
+              "sprintCount": 1,
+              "daysSinceActivity": 7,
+              "cortexEntities": 12,
+              "clarity": "clear"
+            }
+          ],
+          "rankings": {
+            "byProgress": ["develop-alpharank-quant-tool", "develop-enso-personal-ai-assistant"],
+            "byEngagement": ["develop-enso-personal-ai-assistant", "develop-alpharank-quant-tool"],
+            "byVelocity": ["develop-enso-personal-ai-assistant", "develop-alpharank-quant-tool"]
+          }
+        },
+        "requiredDataKeys": ["tool", "areas"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

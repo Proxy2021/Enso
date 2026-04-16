@@ -1,0 +1,233 @@
+{
+  "version": 1,
+  "createdAt": 1713225600000,
+  "spec": {
+    "toolFamily": "album_pipeline",
+    "toolPrefix": "enso_album_pipeline_",
+    "description": "60-day photo album pipeline: interactive tracker for creating a gift-quality Printique layflat album from curation through print. Daily tasks, phase tracking, theme selection, 5-pass curation methodology, and Printique specifications.",
+    "signatureId": "album_pipeline_tracker",
+    "tools": [
+      {
+        "suffix": "pipeline_dashboard",
+        "description": "Show the 60-day album pipeline dashboard with phase progress, daily task completion, photo counts, page estimates, and cost projection. Use this to see overall project status.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: 'view' to see dashboard, 'start' to begin a new pipeline, 'reset' to start over, 'set_start_date' to change start date",
+              "enum": ["view", "start", "reset", "set_start_date"]
+            },
+            "startDate": {
+              "type": "string",
+              "description": "ISO date string for when the 60-day pipeline begins (YYYY-MM-DD)"
+            },
+            "albumTitle": {
+              "type": "string",
+              "description": "Title for the album project"
+            },
+            "recipient": {
+              "type": "string",
+              "description": "Who the album is a gift for"
+            }
+          }
+        },
+        "sampleParams": { "action": "view" },
+        "sampleData": {
+          "tool": "enso_album_pipeline_pipeline_dashboard",
+          "pipeline": {
+            "albumTitle": "Golden Hours — A Year in Light",
+            "recipient": "Mom",
+            "startDate": "2026-04-16",
+            "currentDay": 5,
+            "totalDays": 60,
+            "currentPhase": "curation",
+            "photosSelected": 87,
+            "targetPhotos": 45,
+            "pagesPlanned": 25,
+            "estimatedCost": 289,
+            "selectedTheme": "golden_hours",
+            "phases": [
+              { "id": "curation", "name": "Curation", "dayRange": [1, 15], "tasks": 15, "completed": 5, "status": "active" },
+              { "id": "sequencing", "name": "Sequencing", "dayRange": [16, 30], "tasks": 15, "completed": 0, "status": "locked" },
+              { "id": "layout", "name": "Layout & Design", "dayRange": [31, 45], "tasks": 15, "completed": 0, "status": "locked" },
+              { "id": "print", "name": "Order & Print", "dayRange": [46, 60], "tasks": 15, "completed": 0, "status": "locked" }
+            ],
+            "completedTasks": [],
+            "dailyStreak": 5
+          }
+        },
+        "requiredDataKeys": ["tool", "pipeline"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "daily_task",
+        "description": "Show today's specific task based on the current pipeline day and phase. Each task has clear instructions, tips, and a completion button. Also allows completing or skipping tasks.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: 'view' for today's task, 'complete' to mark done, 'skip' to skip, 'view_day' to see a specific day",
+              "enum": ["view", "complete", "skip", "view_day"]
+            },
+            "day": {
+              "type": "number",
+              "description": "Specific day number (1-60) to view or complete"
+            },
+            "notes": {
+              "type": "string",
+              "description": "Optional notes when completing a task"
+            }
+          }
+        },
+        "sampleParams": { "action": "view" },
+        "sampleData": {
+          "tool": "enso_album_pipeline_daily_task",
+          "task": {
+            "day": 5,
+            "phase": "curation",
+            "phaseName": "Curation",
+            "title": "Flag 40 Candidate Photos (Day 5 of 5)",
+            "description": "Browse your photo library and flag 40 more candidates. Focus on images that evoke strong emotional responses.",
+            "tips": ["Look for images with strong light and shadow", "Consider photos that tell a story", "Don't overthink — trust your gut reaction"],
+            "targetCount": 40,
+            "isCompleted": false,
+            "dayInPhase": 5,
+            "totalPhaseDays": 15
+          },
+          "pipelineDay": 5,
+          "totalDays": 60
+        },
+        "requiredDataKeys": ["tool", "task"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "printique_guide",
+        "description": "Show Printique layflat album specifications, pricing, paper options, cover materials, recommended specs, image resolution requirements, Lightroom export settings, and cost breakdown.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "section": {
+              "type": "string",
+              "description": "Which section to view: 'overview' for all specs, 'pricing' for cost details, 'export' for Lightroom settings, 'recommended' for first-album recommendations",
+              "enum": ["overview", "pricing", "export", "recommended"]
+            }
+          }
+        },
+        "sampleParams": { "section": "overview" },
+        "sampleData": {
+          "tool": "enso_album_pipeline_printique_guide",
+          "guide": {
+            "section": "overview",
+            "sizes": [
+              { "name": "10x10", "spreads": "10-50", "priceRange": "$149-$399" },
+              { "name": "12x12", "spreads": "10-50", "priceRange": "$179-$449", "recommended": true }
+            ],
+            "papers": ["Silk", "Pearl", "Linen"],
+            "covers": ["Leather", "Linen", "Photo Cover", "Silk"],
+            "recommended": {
+              "size": "12x12",
+              "paper": "Silk",
+              "cover": "Linen",
+              "spreads": 25,
+              "estimatedCost": 289
+            }
+          }
+        },
+        "requiredDataKeys": ["tool", "guide"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "album_theme_picker",
+        "description": "Browse and select from 5 curated album theme concepts. Each theme includes concept description, recommended page count, layout style, mood guidance, and photo selection criteria. Picking a theme sets the creative direction for the entire pipeline.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: 'browse' to see all themes, 'select' to pick a theme, 'custom' to define your own",
+              "enum": ["browse", "select", "custom"]
+            },
+            "themeId": {
+              "type": "string",
+              "description": "Theme ID to select: golden_hours, street_life, landscapes_light, year_in_photos, one_trip_one_story"
+            },
+            "customTheme": {
+              "type": "string",
+              "description": "Description of a custom theme if action is 'custom'"
+            }
+          }
+        },
+        "sampleParams": { "action": "browse" },
+        "sampleData": {
+          "tool": "enso_album_pipeline_album_theme_picker",
+          "themes": [
+            {
+              "id": "golden_hours",
+              "name": "Golden Hours",
+              "tagline": "Best sunrise & sunset shots across all trips",
+              "pageCount": "20-25 spreads",
+              "layoutStyle": "Full-bleed hero images with minimal text",
+              "mood": "Warm, contemplative, awe-inspiring",
+              "selectionCriteria": "Strong golden/blue hour light, silhouettes, reflections, long shadows",
+              "selected": false
+            }
+          ],
+          "selectedTheme": null
+        },
+        "requiredDataKeys": ["tool", "themes"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "curation_checklist",
+        "description": "The 5-pass curation methodology for narrowing 124K photos to 40-50 album-ready images. Shows each pass with criteria, tips, common mistakes, time estimates, and progress tracking.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: 'view' for the full checklist, 'update_pass' to record pass progress, 'tips' for a specific pass",
+              "enum": ["view", "update_pass", "tips"]
+            },
+            "passNumber": {
+              "type": "number",
+              "description": "Pass number (1-5) for update or tips"
+            },
+            "remainingCount": {
+              "type": "number",
+              "description": "Number of photos remaining after this pass"
+            },
+            "notes": {
+              "type": "string",
+              "description": "Notes about what was culled or kept"
+            }
+          }
+        },
+        "sampleParams": { "action": "view" },
+        "sampleData": {
+          "tool": "enso_album_pipeline_curation_checklist",
+          "curation": {
+            "totalPhotos": 124626,
+            "targetPhotos": 45,
+            "passes": [
+              { "number": 1, "name": "Technical Quality", "criteria": "Sharp, well-exposed, correct WB", "startCount": 200, "remainingCount": null, "completed": false, "estimatedTime": "2-3 hours" },
+              { "number": 2, "name": "Emotional Impact", "criteria": "Does it make you feel something?", "startCount": null, "remainingCount": null, "completed": false, "estimatedTime": "1-2 hours" },
+              { "number": 3, "name": "Story Fit", "criteria": "Does it advance the narrative?", "startCount": null, "remainingCount": null, "completed": false, "estimatedTime": "1-2 hours" },
+              { "number": 4, "name": "Visual Variety", "criteria": "Avoid repetition in subject, color, composition", "startCount": null, "remainingCount": null, "completed": false, "estimatedTime": "1 hour" },
+              { "number": 5, "name": "Flow & Rhythm", "criteria": "Do adjacent images create rhythm?", "startCount": null, "remainingCount": null, "completed": false, "estimatedTime": "1 hour" }
+            ],
+            "overallProgress": 0
+          }
+        },
+        "requiredDataKeys": ["tool", "curation"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

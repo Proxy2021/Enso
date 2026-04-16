@@ -1832,7 +1832,12 @@ export async function assessFocusUnderstanding(
 ): Promise<void> {
   try {
     const { llm } = await import("./llm.js");
-    const briefingSnippet = area.preparedBriefing ? area.preparedBriefing.slice(0, 500) : "No briefing available yet";
+    // Provide up to 2000 chars of briefing context, and extract any numerical verdicts for grounding
+    const briefingContext = area.preparedBriefing ? area.preparedBriefing.slice(0, 2000) : "No briefing available yet";
+    // Extract explicit numerical verdicts from briefing (e.g., "2.7/10", "55-60% complete", "0% implemented")
+    const numericalVerdicts = area.preparedBriefing
+      ? (area.preparedBriefing.match(/\d+(?:\.\d+)?(?:\s*\/\s*10|\s*%\s*(?:complete|implemented|done|enriched|printed))/gi) || []).slice(0, 5).join("; ")
+      : "";
     const assessResult = await llm({
       prompt: `You are the Team Leader assessing your understanding of a focus area after evaluation.
 
@@ -1841,19 +1846,18 @@ DESCRIPTION: ${area.description}
 INTENT: ${area.intent || "Not yet defined"}
 TYPE: ${area.focusType || "general"}
 HAS BRIEFING: ${area.preparedBriefing ? "Yes" : "No"}
-BRIEFING PREVIEW: ${briefingSnippet}
+BRIEFING CONTENT: ${briefingContext}
+${numericalVerdicts ? `KEY METRICS FROM BRIEFING: ${numericalVerdicts}` : ""}
 HAS PRIOR SPRINTS: ${area.lastSprintResults ? "Yes" : "No"}
 EVIDENCE POINTS: ${area.evidence?.length || 0}
 EXPERTS ASSIGNED: ${area.experts?.length || 0}
 
-Rate your UNDERSTANDING of this goal on 0-100:
+Rate your UNDERSTANDING of this goal on 0-100. Base your score strictly on the evidence provided above — do not default to any particular range.
 - 0-20: Barely know what this is. Just inferred from data.
 - 20-40: Surface understanding. Know the topic, not the user's specific angle.
 - 40-60: Good understanding. Know what they want and why, gaps in specifics.
 - 60-80: Strong. Clear picture of goals, constraints, approach.
 - 80-100: Deep. Could independently make strategic decisions.
-
-First evaluation with briefing: typically 35-55. Only with sprint results and user feedback: 60+.
 
 Return ONLY valid JSON: { "understanding": <number>, "notes": "<one sentence>" }`,
       tier: "utility",
@@ -1917,6 +1921,13 @@ export async function assessFocusProgress(
     ).join("\n") || "No structured deliverables";
     const sprintSummary = area.lastSprintSummary?.sprintSummary || "Sprint completed.";
 
+    // Include briefing context so progress assessment isn't blind to evaluation findings
+    const briefingContext = area.preparedBriefing ? area.preparedBriefing.slice(0, 1500) : "";
+    // Extract explicit numerical verdicts from briefing for grounding
+    const numericalVerdicts = area.preparedBriefing
+      ? (area.preparedBriefing.match(/\d+(?:\.\d+)?(?:\s*\/\s*10|\s*%\s*(?:complete|implemented|done|enriched|printed))/gi) || []).slice(0, 5).join("; ")
+      : "";
+
     const result = await llm({
       prompt: `You are the Team Leader assessing OVERALL PROGRESS toward a focus area goal.
 
@@ -1925,6 +1936,8 @@ GOAL: ${area.intent || area.description}
 TYPE: ${area.focusType || "general"}
 CURRENT UNDERSTANDING: ${area.assessment?.understanding ?? 30}%
 CURRENT PROGRESS: ${area.assessment?.progress ?? 0}%
+${briefingContext ? `\nEVALUATION BRIEFING (from latest evaluation):\n${briefingContext}` : ""}
+${numericalVerdicts ? `KEY METRICS FROM BRIEFING: ${numericalVerdicts}` : ""}
 
 LATEST SPRINT RESULTS:
 ${sprintSummary}
@@ -1937,8 +1950,9 @@ Assess how far the user is toward COMPLETING this goal, considering ALL factors:
 - How much of the original goal remains?
 - Are there tangible deliverables the user can use?
 - Has the direction become clearer?
+- Do the evaluation briefing findings support or contradict the current progress score?
 
-PROGRESS SCALE (holistic — this is NOT sprint counting):
+PROGRESS SCALE (holistic — this is NOT sprint counting). Base your score strictly on the evidence, not on defaults:
 - 0-10: Just getting started. Goal identified but no real work done.
 - 10-25: Foundation laid. Research done, direction chosen, first outputs produced.
 - 25-40: Early momentum. Several deliverables exist, approach is clear.

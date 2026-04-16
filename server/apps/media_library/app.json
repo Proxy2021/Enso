@@ -665,6 +665,60 @@
         },
         "requiredDataKeys": ["tool", "genreAffinities", "tasteDNA"],
         "isPrimary": false
+      },
+      {
+        "suffix": "franchise",
+        "description": "Detect, browse, and manage franchise/series groupings across your media library. Groups related entities (books, movies, TV, games) into franchises using title similarity and cross-references. Actions: detect (analyze & group), list (show all franchises), view (detailed franchise), merge (combine franchises or add entity). Use when the user says: 'find franchises', 'group related media', 'show series', 'what franchise is this part of', 'detect franchises'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: detect (analyze entities, build franchise groups), list (show all franchises), view (detailed franchise), merge (combine franchises or add entity)"
+            },
+            "franchiseId": {
+              "type": "string",
+              "description": "Franchise ID (for view, merge target)"
+            },
+            "entityId": {
+              "type": "string",
+              "description": "Entity ID — for list: find franchise containing this entity; for merge: add this entity to franchise"
+            },
+            "sourceFranchiseId": {
+              "type": "string",
+              "description": "Source franchise ID to merge into the target (for merge action)"
+            },
+            "limit": {
+              "type": "number",
+              "description": "Max results (default: 20)"
+            }
+          },
+          "required": ["action"]
+        },
+        "sampleParams": { "action": "list" },
+        "sampleData": {
+          "tool": "enso_media_library_franchise",
+          "action": "list",
+          "totalFranchises": 42,
+          "detectedAt": "2026-04-16T12:00:00.000Z",
+          "franchises": [
+            {
+              "franchiseId": "franchise:dune-abc123",
+              "name": "Dune",
+              "description": "5 items across 2 books, 2 movies, 1 game",
+              "entityCount": 5,
+              "mediaTypes": ["book", "movie", "game"],
+              "crossMediaCount": 3,
+              "sampleEntities": [
+                { "entityId": "kindle:book:dune", "title": "Dune", "type": "book", "role": "original", "imageUrl": null },
+                { "entityId": "movies_tv:movie:dune-part-two-2024", "title": "Dune: Part Two", "type": "movie", "role": "adaptation", "imageUrl": null }
+              ]
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "action"],
+        "isPrimary": false
       }
     ]
   }

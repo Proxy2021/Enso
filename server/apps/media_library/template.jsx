@@ -54,6 +54,7 @@ export default function GeneratedUI({ data, onAction }) {
   var isDashboard = tool === "enso_media_library_dashboard";
   var isTimeline = tool === "enso_media_library_timeline";
   var isTasteProfile = tool === "enso_media_library_taste_profile";
+  var isFranchise = tool === "enso_media_library_franchise";
 
   // ── Error handling ──
   if (data && data.error) {
