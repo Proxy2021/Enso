@@ -21,7 +21,7 @@ import { homedir } from "node:os";
 import { readdirSync } from "node:fs";
 import { logAction, logError } from "./action-log.js";
 import { llm } from "./llm.js";
-import { renderPodcastAudio, pcmToWav } from "./podcast.js";
+import { renderPodcastSegment, pcmToWav } from "./podcast.js";
 import { resolveEntity, lookupEntity, getEntityIndex, type EntityId } from "./entity-model.js";
 import { braveWebSearch, fetchPageContent } from "./researcher-tools.js";
 import { registerPage, type PageConfig, type PageSection } from "./shareable-pages.js";
@@ -829,8 +829,13 @@ export async function generateFullScript(
 
 /**
  * Split a script into segments of ≤maxChars, breaking at Host A/B boundaries.
+ *
+ * NOTE: 2000 chars (~2 min audio) keeps each TTS response inside the preview
+ * model's clean quality range. Longer single-shot prompts (3000-4000 chars)
+ * produce audible decoder drift — voice gets deeper and coarser toward the
+ * end of the segment.
  */
-function splitScriptIntoSegments(script: string, maxChars = 4000): string[] {
+function splitScriptIntoSegments(script: string, maxChars = 2000): string[] {
   const lines = script.split("\n");
   const segments: string[] = [];
   let current = "";
@@ -855,7 +860,7 @@ export async function renderLongformAudio(
   // Split all sections into TTS-sized segments
   const allSegments: string[] = [];
   for (const script of sectionScripts) {
-    const segs = splitScriptIntoSegments(script, 4000);
+    const segs = splitScriptIntoSegments(script);
     allSegments.push(...segs);
   }
 
@@ -863,16 +868,20 @@ export async function renderLongformAudio(
 
   // Render all segments through the global TTS semaphore — keeps total Gemini
   // TTS concurrency capped across every running deep-content job, not just
-  // this one.
+  // this one. We keep the per-segment sample rate (from mimeType) so the
+  // final WAV is written at whatever rate the model declared for the first
+  // segment; all segments from a single pipeline should match.
   const { withTtsSlot } = await import("./deep-content-jobs.js");
   const pcmBuffers: Buffer[] = new Array(allSegments.length).fill(Buffer.alloc(0));
+  const sampleRates: number[] = new Array(allSegments.length).fill(0);
   let completed = 0;
 
   await Promise.all(
     allSegments.map((seg, idx) =>
-      withTtsSlot(() => renderPodcastAudio(seg, geminiKey))
-        .then((buf) => {
-          pcmBuffers[idx] = buf;
+      withTtsSlot(() => renderPodcastSegment(seg, geminiKey))
+        .then((res) => {
+          pcmBuffers[idx] = res.pcm;
+          sampleRates[idx] = res.sampleRate;
           completed++;
           onProgress?.(completed - 1, allSegments.length);
         })
@@ -885,9 +894,19 @@ export async function renderLongformAudio(
     ),
   );
 
+  // Verify sample rate consistency across segments — drift here would cause
+  // chipmunk/deep-voice artifacts in the concatenated audio. Log and use the
+  // mode rate if anything mismatches.
+  const validRates = sampleRates.filter((r) => r > 0);
+  const firstRate = validRates[0] ?? 24000;
+  const drift = validRates.some((r) => r !== firstRate);
+  if (drift) {
+    logError("book-podcast", `TTS sample rate drift across segments: ${JSON.stringify(sampleRates)} — using ${firstRate}`, null);
+  }
+
   // Concatenate PCM in order (preserves audio sequence) and wrap with WAV header
-  const totalPcm = Buffer.concat(pcmBuffers.filter(b => b.length > 0));
-  return pcmToWav(totalPcm);
+  const totalPcm = Buffer.concat(pcmBuffers.filter((b) => b.length > 0));
+  return pcmToWav(totalPcm, firstRate);
 }
 
 // ─── Full Pipeline ───────────────────────────────────────────────────────────

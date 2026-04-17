@@ -94,7 +94,27 @@ ${content.narrative ? `\nDetailed Narrative (condensed):\n${content.narrative.sl
 
 // ── Audio Rendering (Gemini TTS only) ──
 
+/** Output of a single TTS call — PCM bytes plus the sample rate the model declared. */
+export interface TTSSegment {
+  pcm: Buffer;
+  sampleRate: number;
+}
+
+/**
+ * Render a single TTS segment. Returns the raw PCM plus the sample rate
+ * declared in the response's mimeType (defaults to 24000 Hz).
+ *
+ * Prompts kept under ~2000 chars — the preview TTS model's audio quality
+ * degrades noticeably within a single response past roughly 3-4 min of
+ * generated audio (voice gets deeper/distorted as the decoder drifts).
+ * Segments are sized to keep each response in the model's clean range.
+ */
 export async function renderPodcastAudio(script: string, geminiKey: string): Promise<Buffer> {
+  const seg = await renderPodcastSegment(script, geminiKey);
+  return seg.pcm;
+}
+
+export async function renderPodcastSegment(script: string, geminiKey: string): Promise<TTSSegment> {
   const endpoint = `${GEMINI_API_BASE}/models/gemini-3.1-flash-tts-preview:generateContent`;
 
   const body = {
@@ -137,12 +157,24 @@ export async function renderPodcastAudio(script: string, geminiKey: string): Pro
       }
 
       const json = await res.json() as {
-        candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string } }> } }>;
+        candidates?: Array<{ content?: { parts?: Array<{ inlineData?: { data?: string; mimeType?: string } }> } }>;
       };
-      const b64 = json.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      const inline = json.candidates?.[0]?.content?.parts?.[0]?.inlineData;
+      const b64 = inline?.data;
       if (!b64) throw new Error("No audio data in Gemini TTS response");
 
-      return Buffer.from(b64, "base64");
+      // Parse sample rate from mimeType (e.g. "audio/L16;codec=pcm;rate=24000")
+      const mime = inline?.mimeType ?? "";
+      const rateMatch = mime.match(/rate=(\d+)/i);
+      const sampleRate = rateMatch ? Number(rateMatch[1]) : 24000;
+      if (!Number.isFinite(sampleRate) || sampleRate < 8000 || sampleRate > 96000) {
+        logError("podcast", `Unexpected TTS sample rate from mimeType "${mime}" — falling back to 24000`, null);
+      }
+
+      return {
+        pcm: Buffer.from(b64, "base64"),
+        sampleRate: Number.isFinite(sampleRate) && sampleRate >= 8000 && sampleRate <= 96000 ? sampleRate : 24000,
+      };
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       const msg = lastError.message;
@@ -160,8 +192,7 @@ export async function renderPodcastAudio(script: string, geminiKey: string): Pro
 
 // ── WAV Encoding ──
 
-export function pcmToWav(pcm: Buffer): Buffer {
-  const sampleRate = 24000;
+export function pcmToWav(pcm: Buffer, sampleRate: number = 24000): Buffer {
   const bitsPerSample = 16;
   const numChannels = 1;
   const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
@@ -266,8 +297,8 @@ export async function generatePodcastAudio(params: {
   onProgress?.("rendering_audio");
   logAction({ ts: Date.now(), type: "action", category: "podcast", message: `rendering audio for "${content.title}"` });
 
-  const pcmData = await renderPodcastAudio(script, geminiKey);
-  const wavData = pcmToWav(pcmData);
+  const seg = await renderPodcastSegment(script, geminiKey);
+  const wavData = pcmToWav(seg.pcm, seg.sampleRate);
 
   const { join } = await import("node:path");
   const { mkdirSync, writeFileSync } = await import("node:fs");
