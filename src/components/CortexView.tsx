@@ -191,7 +191,7 @@ export default function CortexView() {
         appFamily: activeApp.family,
         // Only send currentData for tool actions (browse, search, etc.)
         // Skip for entity actions to avoid 413 payload-too-large with large browse data
-        ...(!["view_entity", "deep_content", "book_podcast", "regenerate_podcast", "add_to_cortex", "entity_share_email", "book_share_email", "share_wechat"].includes(action)
+        ...(!["view_entity", "deep_content", "book_podcast", "regenerate_podcast", "add_to_cortex", "entity_share_email", "book_share_email", "share_wechat", "author_interview", "regenerate_author_interview", "generate_argument_graph", "regenerate_argument_graph"].includes(action)
           ? { currentData: appStates[activeApp.family]?.data }
           : {}),
       }),
@@ -240,6 +240,120 @@ export default function CortexView() {
             const merged = { ...(current?.data as Record<string, unknown> || {}), _addedToCortex: data._addedToCortex };
             return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
           });
+          return;
+        }
+
+        // Author Interview — merge status into current detail + poll for completion
+        if ((action === "author_interview" || action === "regenerate_author_interview") && (data.interviewStatus || data.entity)) {
+          const entityId = (payload as Record<string, unknown>)?.entityId as string;
+          setAppStates(prev => {
+            const current = prev[activeApp.family];
+            const currentData = current?.data as Record<string, unknown> || {};
+            if (data.entity) {
+              const merged = { ...data, navStack: currentData.navStack, focusEntity: true, tool: "entity_detail" };
+              return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+            }
+            const cleared = action === "regenerate_author_interview"
+              ? { ...currentData, interviewAudioUrl: undefined, interviewScript: undefined, interviewDuration: undefined, interviewQuestions: undefined, interviewPercent: 0 }
+              : currentData;
+            const merged = { ...cleared, interviewStatus: data.interviewStatus, interviewStatusDetail: data.message };
+            return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+          });
+
+          if (data.interviewStatus === "processing" && entityId) {
+            const pollInterval = setInterval(() => {
+              const baseUrl2 = getBackendBaseUrl();
+              fetch(`${baseUrl2}/api/cortex/action`, {
+                method: "POST",
+                headers: { ...authHeaders(), "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "author_interview", payload: { entityId }, appFamily: activeApp.family }),
+              })
+                .then(r => r.json())
+                .then(pollData => {
+                  if (pollData.interviewStatus === "ready" || pollData.entity) {
+                    clearInterval(pollInterval);
+                    setAppStates(prev => {
+                      const current = prev[activeApp.family];
+                      const currentData = current?.data as Record<string, unknown> || {};
+                      if (pollData.entity) {
+                        const merged = { ...pollData, navStack: currentData.navStack, focusEntity: true, tool: "entity_detail" };
+                        return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+                      }
+                      const merged = { ...currentData, ...pollData };
+                      return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+                    });
+                  } else {
+                    setAppStates(prev => {
+                      const current = prev[activeApp.family];
+                      const currentData = current?.data as Record<string, unknown> || {};
+                      const merged = { ...currentData, interviewStatus: pollData.interviewStatus || "processing", interviewStatusDetail: pollData.message || currentData.interviewStatusDetail };
+                      return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+                    });
+                  }
+                })
+                .catch(() => {});
+            }, 30000);
+            setTimeout(() => clearInterval(pollInterval), 15 * 60 * 1000);
+          }
+          return;
+        }
+
+        // Argument Graph — merge + poll (generation is fast, ~60s, poll more often)
+        if ((action === "generate_argument_graph" || action === "regenerate_argument_graph") && (data.argumentGraphStatus || data.entity || data.argumentGraph)) {
+          const entityId = (payload as Record<string, unknown>)?.entityId as string;
+          setAppStates(prev => {
+            const current = prev[activeApp.family];
+            const currentData = current?.data as Record<string, unknown> || {};
+            if (data.entity) {
+              const merged = { ...data, navStack: currentData.navStack, focusEntity: true, tool: "entity_detail" };
+              return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+            }
+            if (data.argumentGraph) {
+              const merged = { ...currentData, argumentGraph: data.argumentGraph, argumentGraphStatus: "ready" };
+              return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+            }
+            const cleared = action === "regenerate_argument_graph"
+              ? { ...currentData, argumentGraph: undefined, argumentGraphPercent: 0 }
+              : currentData;
+            const merged = { ...cleared, argumentGraphStatus: data.argumentGraphStatus, argumentGraphStatusDetail: data.message };
+            return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+          });
+
+          if (data.argumentGraphStatus === "processing" && entityId) {
+            const pollInterval = setInterval(() => {
+              const baseUrl2 = getBackendBaseUrl();
+              fetch(`${baseUrl2}/api/cortex/action`, {
+                method: "POST",
+                headers: { ...authHeaders(), "Content-Type": "application/json" },
+                body: JSON.stringify({ action: "generate_argument_graph", payload: { entityId }, appFamily: activeApp.family }),
+              })
+                .then(r => r.json())
+                .then(pollData => {
+                  if (pollData.argumentGraph || pollData.entity) {
+                    clearInterval(pollInterval);
+                    setAppStates(prev => {
+                      const current = prev[activeApp.family];
+                      const currentData = current?.data as Record<string, unknown> || {};
+                      if (pollData.entity) {
+                        const merged = { ...pollData, navStack: currentData.navStack, focusEntity: true, tool: "entity_detail" };
+                        return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+                      }
+                      const merged = { ...currentData, argumentGraph: pollData.argumentGraph, argumentGraphStatus: "ready" };
+                      return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+                    });
+                  } else {
+                    setAppStates(prev => {
+                      const current = prev[activeApp.family];
+                      const currentData = current?.data as Record<string, unknown> || {};
+                      const merged = { ...currentData, argumentGraphStatus: pollData.argumentGraphStatus || "processing", argumentGraphStatusDetail: pollData.message || currentData.argumentGraphStatusDetail };
+                      return { ...prev, [activeApp.family]: { data: merged, loading: false, navStack: current?.navStack } };
+                    });
+                  }
+                })
+                .catch(() => {});
+            }, 10000);
+            setTimeout(() => clearInterval(pollInterval), 10 * 60 * 1000);
+          }
           return;
         }
 
