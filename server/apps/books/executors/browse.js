@@ -116,21 +116,30 @@ function slugify(title) {
   return title.toLowerCase().replace(/[^\u4e00-\u9fff\u3400-\u4dbfa-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 80);
 }
 
-// Check deep-processed books
+// Check deep-processed books — only discussion-variant podcast files count
+// toward the listing. Interview (`-interview.json`) and argument graph
+// (`-argument.json`) are sibling variants of the same entity, not standalone
+// podcasts. Dedup by entityId so the same book never appears twice.
 var deepContentDir = path.join(os.homedir(), ".enso", "data", "deep-content");
 var oldPodcastDir = path.join(os.homedir(), ".enso", "data", "kindle", "podcasts");
 var processedSlugs = new Set();
+var processedEntityIds = new Set();
 var processedBooks = [];
 try {
   [deepContentDir, oldPodcastDir].forEach(function(dir) {
     if (fs.existsSync(dir)) {
       fs.readdirSync(dir).forEach(function(f) {
-        if (f.endsWith(".json") && (f.startsWith("kindle_book_") || f.startsWith("weread_book_") || f.startsWith("research_book_"))) {
+        if (f.endsWith(".json")
+            && !f.endsWith("-interview.json")
+            && !f.endsWith("-argument.json")
+            && (f.startsWith("kindle_book_") || f.startsWith("weread_book_") || f.startsWith("research_book_"))) {
           var slug = f.replace(".json", "");
           if (!processedSlugs.has(slug)) {
             processedSlugs.add(slug);
             try {
               var meta = JSON.parse(fs.readFileSync(path.join(dir, f), "utf-8"));
+              if (meta.entityId && processedEntityIds.has(meta.entityId)) return;
+              if (meta.entityId) processedEntityIds.add(meta.entityId);
               // Find cover URL from entity index or book caches
               var pbCover = "";
               try {
