@@ -50,6 +50,60 @@ export function deleteArgumentGraph(entityId: string): boolean {
   return false;
 }
 
+// ─── JSON repair ─────────────────────────────────────────────────────────────
+
+/**
+ * Tolerant parser — strips code fences, comments, trailing commas, and stray
+ * prose. Returns null if the repaired text still isn't valid JSON.
+ */
+function tryParseArgumentJson(raw: string): { thesis: string; cruxNodeId: string; nodes: ArgumentGraphNode[]; edges: ArgumentGraphEdge[] } | null {
+  let text = raw.replace(/```json\n?|\n?```/g, "").trim();
+
+  // Slice from first `{` to matching final `}` — cuts narration before/after.
+  const first = text.indexOf("{");
+  const last = text.lastIndexOf("}");
+  if (first < 0 || last < 0) return null;
+  text = text.slice(first, last + 1);
+
+  // Strip // line comments and /* block */ comments that some models add.
+  text = text.replace(/\/\*[\s\S]*?\*\//g, "");
+  text = text.replace(/(^|[^:])\/\/[^\n\r]*/g, "$1");
+
+  // Strip trailing commas before `}` or `]`.
+  text = text.replace(/,(\s*[}\]])/g, "$1");
+
+  try { return JSON.parse(text); } catch { /* fall through */ }
+
+  // Last-ditch: try parsing each object in the nodes/edges arrays individually
+  // and rebuild. Only useful when a single element is malformed.
+  try {
+    const nodesMatch = text.match(/"nodes"\s*:\s*\[([\s\S]*?)\]\s*,\s*"edges"/);
+    const edgesMatch = text.match(/"edges"\s*:\s*\[([\s\S]*?)\]\s*\}/);
+    const thesisMatch = text.match(/"thesis"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    const cruxMatch = text.match(/"cruxNodeId"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+    if (!nodesMatch || !edgesMatch || !thesisMatch || !cruxMatch) return null;
+    const parseItems = <T>(inner: string): T[] => {
+      const items: T[] = [];
+      let depth = 0, start = -1;
+      for (let i = 0; i < inner.length; i++) {
+        const c = inner[i];
+        if (c === "{") { if (depth === 0) start = i; depth++; }
+        else if (c === "}") { depth--; if (depth === 0 && start >= 0) {
+          try { items.push(JSON.parse(inner.slice(start, i + 1))); } catch { /* skip bad item */ }
+          start = -1;
+        } }
+      }
+      return items;
+    };
+    return {
+      thesis: thesisMatch[1],
+      cruxNodeId: cruxMatch[1],
+      nodes: parseItems<ArgumentGraphNode>(nodesMatch[1]),
+      edges: parseItems<ArgumentGraphEdge>(edgesMatch[1]),
+    };
+  } catch { return null; }
+}
+
 // ─── Validation ──────────────────────────────────────────────────────────────
 
 function validateAndPrune(graph: ArgumentGraph): ArgumentGraph {
@@ -159,7 +213,7 @@ CONSTRAINTS
 - The cruxNodeId should be the claim that, if falsified, would invalidate the most other nodes.
 - Every node's label is a FULL CLAIM, not a topic. "System 1 is automatic" ✓ — "System 1" ✗
 
-Output ONLY the JSON, no commentary.`;
+Output MINIFIED JSON on a single line (no pretty-printing, no newlines between keys). No commentary. No markdown fences.`;
 }
 
 export async function generateArgumentGraph(params: {
@@ -211,22 +265,20 @@ export async function generateArgumentGraph(params: {
 
   onProgress?.({ phase: "writing_section", detail: "Extracting argument structure...", percentComplete: 60 });
   const prompt = buildPrompt({ title, author, research });
-  const raw = await llm({ prompt, tier: "pro", timeoutMs: 90_000, maxOutputTokens: 8192 });
-  if (!raw) throw new Error("LLM returned empty response for argument graph");
 
-  // Parse — tolerate code fences and stray prose before the opening brace.
-  const jsonStr = raw.replace(/```json\n?|\n?```/g, "").trim();
-  const firstBrace = jsonStr.indexOf("{");
-  const lastBrace = jsonStr.lastIndexOf("}");
-  if (firstBrace < 0 || lastBrace < 0) throw new Error(`Invalid JSON response: ${jsonStr.slice(0, 200)}`);
-  const sliced = jsonStr.slice(firstBrace, lastBrace + 1);
-
-  let parsed: { thesis: string; cruxNodeId: string; nodes: ArgumentGraphNode[]; edges: ArgumentGraphEdge[] };
-  try {
-    parsed = JSON.parse(sliced);
-  } catch (err) {
-    logError("argument-graph", `Failed to parse JSON for ${entityId}`, err, { snippet: sliced.slice(0, 500) });
-    throw new Error(`Argument graph JSON parse failed: ${err instanceof Error ? err.message : String(err)}`);
+  // Retry once on parse failure — LLMs occasionally emit malformed JSON.
+  let parsed: { thesis: string; cruxNodeId: string; nodes: ArgumentGraphNode[]; edges: ArgumentGraphEdge[] } | null = null;
+  let lastErr: unknown;
+  for (let attempt = 0; attempt < 2 && !parsed; attempt++) {
+    const raw = await llm({ prompt, tier: "pro", timeoutMs: 120_000, maxOutputTokens: 16384 });
+    if (!raw) { lastErr = new Error("LLM returned empty response"); continue; }
+    const attemptParsed = tryParseArgumentJson(raw);
+    if (attemptParsed) { parsed = attemptParsed; break; }
+    lastErr = new Error("Malformed JSON from LLM");
+    logError("argument-graph", `Parse attempt ${attempt + 1} failed for ${entityId}`, lastErr, { snippet: raw.slice(0, 800) });
+  }
+  if (!parsed) {
+    throw new Error(`Argument graph JSON parse failed: ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`);
   }
 
   const graph: ArgumentGraph = validateAndPrune({

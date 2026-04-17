@@ -18,6 +18,7 @@ function GeneratedUI({ data, onAction }) {
   var [showTranscript, setShowTranscript] = React.useState(false);
   var [showInterviewTranscript, setShowInterviewTranscript] = React.useState(false);
   var [showInterviewQuestions, setShowInterviewQuestions] = React.useState(false);
+  var [selectedGraphNodeId, setSelectedGraphNodeId] = React.useState(null);
   var [activeTab, setActiveTab] = React.useState(isDiscover ? "daily" : (d.tab || "all"));
   var [playingVideo, setPlayingVideo] = React.useState(null);
   var [addBookInput, setAddBookInput] = React.useState("");
@@ -70,6 +71,10 @@ function GeneratedUI({ data, onAction }) {
     var interviewDetail = d.interviewStatusDetail;
     var interviewPercent = d.interviewPercent || 0;
     var interviewQuestions = d.interviewQuestions;
+    var argumentGraph = d.argumentGraph;
+    var argumentGraphStatus = d.argumentGraphStatus;
+    var argumentGraphDetail = d.argumentGraphStatusDetail;
+    var argumentGraphPercent = d.argumentGraphPercent || 0;
 
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -114,6 +119,11 @@ function GeneratedUI({ data, onAction }) {
                   <Button size="sm" style={{ background: "#db2777", color: "white" }}
                     onClick={function() { onAction("author_interview", { entityId: entity.entityId || d.focusEntity }); }}
                   >🎤 Author Interview</Button>
+                )}
+                {!argumentGraph && !argumentGraphStatus && (
+                  <Button size="sm" style={{ background: "#0891b2", color: "white" }}
+                    onClick={function() { onAction("generate_argument_graph", { entityId: entity.entityId || d.focusEntity }); }}
+                  >🕸️ Argument Graph</Button>
                 )}
                 {podcastAudioUrl && (
                   <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
@@ -358,6 +368,215 @@ function GeneratedUI({ data, onAction }) {
             <div style={{ fontSize: "12px", color: "#ef4444" }}>Interview generation failed: {d.interviewError || "Unknown error"}</div>
             <Button variant="outline" size="sm" style={{ marginTop: "6px", fontSize: "10px" }}
               onClick={function() { onAction("author_interview", { entityId: entity.entityId || d.focusEntity }); }}
+            >🔄 Retry</Button>
+          </UICard>
+        )}
+
+        {/* Argument Graph — Variant A (structured SVG) */}
+        {argumentGraph && (
+          <UICard style={{ padding: "12px", borderColor: "#0891b244" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px", flexWrap: "wrap" }}>
+              <span style={{ fontSize: "16px" }}>🕸️</span>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#67e8f9" }}>Argument Graph</span>
+              <Badge variant="secondary">{argumentGraph.nodes.length} nodes · {argumentGraph.edges.length} edges</Badge>
+              <div style={{ marginLeft: "auto", display: "flex", gap: "6px" }}>
+                <button onClick={function() {
+                  if (confirm("Regenerate the argument graph?")) {
+                    onAction("regenerate_argument_graph", { entityId: entity.entityId || d.focusEntity });
+                  }
+                }}
+                  style={{ background: "none", border: "1px solid #475569", borderRadius: "4px", color: "#94a3b8", fontSize: "11px", cursor: "pointer", padding: "2px 8px" }}
+                  title="Delete cached graph and regenerate"
+                >🔄 Regenerate</button>
+              </div>
+            </div>
+            {/* Thesis */}
+            <div style={{ padding: "8px 10px", background: "#1e1b4b44", borderLeft: "3px solid #8b5cf6", borderRadius: "3px", fontSize: "12px", color: "#ddd6fe", marginBottom: "10px" }}>
+              <span style={{ color: "#a78bfa", fontWeight: 600 }}>Thesis: </span>{argumentGraph.thesis}
+            </div>
+            {(function() {
+              var nodes = argumentGraph.nodes || [];
+              var edges = argumentGraph.edges || [];
+              // Compute per-type layer
+              var layerFor = function(t) {
+                if (t === "thesis") return 0;
+                if (t === "claim") return 1;
+                if (t === "assumption") return 2;
+                if (t === "evidence") return 3;
+                if (t === "counter") return 3;
+                if (t === "conclusion") return 4;
+                return 1;
+              };
+              var layers = [[], [], [], [], []];
+              nodes.forEach(function(n) { layers[layerFor(n.type)].push(n); });
+              var W = 680, LH = 110; // layer height
+              var H = LH * layers.length + 40;
+              var positions = {};
+              layers.forEach(function(arr, li) {
+                var n = arr.length;
+                if (n === 0) return;
+                var gap = W / (n + 1);
+                arr.forEach(function(node, i) {
+                  positions[node.id] = { x: gap * (i + 1), y: li * LH + 40, layer: li };
+                });
+              });
+
+              var relationColor = function(r) {
+                if (r === "supports") return "#22c55e";
+                if (r === "requires") return "#60a5fa";
+                if (r === "contradicts") return "#ef4444";
+                if (r === "weakens") return "#f59e0b";
+                if (r === "exemplifies") return "#a78bfa";
+                if (r === "concludes") return "#e879f9";
+                return "#64748b";
+              };
+              var relationDash = function(r) { return (r === "weakens" || r === "contradicts") ? "5 3" : undefined; };
+              var typeColor = function(t) {
+                if (t === "thesis") return "#8b5cf6";
+                if (t === "claim") return "#3b82f6";
+                if (t === "assumption") return "#64748b";
+                if (t === "evidence") return "#22c55e";
+                if (t === "counter") return "#ef4444";
+                if (t === "conclusion") return "#e879f9";
+                return "#475569";
+              };
+
+              var selected = selectedGraphNodeId && nodes.find(function(n) { return n.id === selectedGraphNodeId; });
+              var selectedEdges = selected ? edges.filter(function(e) { return e.from === selected.id || e.to === selected.id; }) : [];
+
+              var cruxId = argumentGraph.cruxNodeId;
+
+              return (
+                <div>
+                  <div style={{ width: "100%", overflowX: "auto", background: "#020617", borderRadius: "6px", padding: "6px" }}>
+                    <svg width={W} height={H} style={{ display: "block" }}>
+                      <defs>
+                        {["supports", "requires", "contradicts", "weakens", "exemplifies", "concludes"].map(function(r) {
+                          return (
+                            <marker key={r} id={"arrow-" + r} viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                              <path d="M 0 0 L 10 5 L 0 10 z" fill={relationColor(r)} />
+                            </marker>
+                          );
+                        })}
+                      </defs>
+                      {edges.map(function(e, i) {
+                        var a = positions[e.from], b = positions[e.to];
+                        if (!a || !b) return null;
+                        var mx = (a.x + b.x) / 2;
+                        var my = (a.y + b.y) / 2 - 20;
+                        var isHighlighted = selected && (e.from === selected.id || e.to === selected.id);
+                        var opacity = selected ? (isHighlighted ? 1 : 0.15) : 0.75;
+                        return (
+                          <path key={i}
+                            d={"M " + a.x + " " + (a.y + 14) + " Q " + mx + " " + my + " " + b.x + " " + (b.y - 14)}
+                            stroke={relationColor(e.relation)}
+                            strokeWidth={isHighlighted ? 2.5 : 1.5}
+                            strokeDasharray={relationDash(e.relation)}
+                            fill="none"
+                            opacity={opacity}
+                            markerEnd={"url(#arrow-" + e.relation + ")"}
+                          />
+                        );
+                      })}
+                      {nodes.map(function(n) {
+                        var pos = positions[n.id];
+                        if (!pos) return null;
+                        var isCrux = n.id === cruxId;
+                        var isSelected = selected && selected.id === n.id;
+                        var fill = typeColor(n.type);
+                        var truncated = n.label.length > 36 ? n.label.slice(0, 34) + "…" : n.label;
+                        return (
+                          <g key={n.id} style={{ cursor: "pointer" }} onClick={function() { setSelectedGraphNodeId(isSelected ? null : n.id); }}>
+                            {isCrux && (
+                              <rect x={pos.x - 110} y={pos.y - 18} width="220" height="36" rx="18" fill="none" stroke="#fbbf24" strokeWidth="2" strokeDasharray="4 3" opacity="0.9" />
+                            )}
+                            <rect x={pos.x - 100} y={pos.y - 14} width="200" height="28" rx="14"
+                              fill={fill}
+                              stroke={isSelected ? "#fff" : "#0f172a"}
+                              strokeWidth={isSelected ? 2 : 1}
+                              opacity={selected && !isSelected ? 0.4 : 1}
+                            />
+                            <text x={pos.x} y={pos.y + 4} textAnchor="middle" fontSize="10.5" fill="white" fontWeight={isCrux ? 700 : 500}>{truncated}</text>
+                            {isCrux && <text x={pos.x + 92} y={pos.y - 6} fontSize="10" fill="#fbbf24">⚠️</text>}
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+
+                  {/* Detail panel */}
+                  {selected && (
+                    <div style={{ marginTop: "10px", padding: "10px", background: "#0c1629", borderRadius: "6px", border: "1px solid #1e293b" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "6px" }}>
+                        <Badge variant="secondary" style={{ background: typeColor(selected.type), color: "white" }}>{selected.type}</Badge>
+                        {selected.id === cruxId && <Badge variant="default" style={{ background: "#fbbf24", color: "black" }}>⚠️ Crux</Badge>}
+                        {selected.chapter && <span style={{ fontSize: "11px", color: "#94a3b8" }}>{selected.chapter}</span>}
+                        <button onClick={function() { setSelectedGraphNodeId(null); }}
+                          style={{ marginLeft: "auto", background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: "14px" }}
+                        >×</button>
+                      </div>
+                      <div style={{ fontSize: "13px", color: "#e2e8f0", fontWeight: 500, marginBottom: "4px" }}>{selected.label}</div>
+                      <div style={{ fontSize: "12px", color: "#94a3b8", lineHeight: 1.5, marginBottom: "8px" }}>{selected.description}</div>
+                      {selectedEdges.length > 0 && (
+                        <div style={{ fontSize: "11px", color: "#94a3b8" }}>
+                          <div style={{ marginBottom: "4px", color: "#64748b" }}>Connections:</div>
+                          {selectedEdges.map(function(e, i) {
+                            var other = nodes.find(function(n) { return n.id === (e.from === selected.id ? e.to : e.from); });
+                            if (!other) return null;
+                            var dir = e.from === selected.id ? "→" : "←";
+                            return (
+                              <div key={i} style={{ padding: "2px 0" }}>
+                                <span style={{ color: relationColor(e.relation) }}>{dir} {e.relation}</span>
+                                <span style={{ color: "#cbd5e1" }}>&nbsp;{other.label.slice(0, 60)}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Legend */}
+                  <div style={{ marginTop: "10px", display: "flex", flexWrap: "wrap", gap: "10px 14px", fontSize: "10px", color: "#94a3b8" }}>
+                    <div><span style={{ display: "inline-block", width: "10px", height: "10px", background: "#8b5cf6", marginRight: "4px", verticalAlign: "middle" }}></span>thesis</div>
+                    <div><span style={{ display: "inline-block", width: "10px", height: "10px", background: "#3b82f6", marginRight: "4px", verticalAlign: "middle" }}></span>claim</div>
+                    <div><span style={{ display: "inline-block", width: "10px", height: "10px", background: "#64748b", marginRight: "4px", verticalAlign: "middle" }}></span>assumption</div>
+                    <div><span style={{ display: "inline-block", width: "10px", height: "10px", background: "#22c55e", marginRight: "4px", verticalAlign: "middle" }}></span>evidence</div>
+                    <div><span style={{ display: "inline-block", width: "10px", height: "10px", background: "#ef4444", marginRight: "4px", verticalAlign: "middle" }}></span>counter</div>
+                    <div><span style={{ display: "inline-block", width: "10px", height: "10px", background: "#e879f9", marginRight: "4px", verticalAlign: "middle" }}></span>conclusion</div>
+                    <span style={{ color: "#475569" }}>|</span>
+                    <div><span style={{ color: "#22c55e" }}>→</span> supports</div>
+                    <div><span style={{ color: "#60a5fa" }}>→</span> requires</div>
+                    <div><span style={{ color: "#ef4444" }}>⇢</span> contradicts</div>
+                    <div><span style={{ color: "#f59e0b" }}>⇢</span> weakens</div>
+                    <div><span style={{ color: "#a78bfa" }}>→</span> exemplifies</div>
+                    <div><span style={{ color: "#e879f9" }}>→</span> concludes</div>
+                  </div>
+                </div>
+              );
+            })()}
+          </UICard>
+        )}
+
+        {/* Argument graph generation progress */}
+        {argumentGraphStatus && argumentGraphStatus !== "ready" && argumentGraphStatus !== "error" && !argumentGraph && (
+          <UICard style={{ padding: "12px", borderColor: "#0891b244" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ width: "14px", height: "14px", border: "2px solid #0891b2", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+              <span style={{ fontSize: "12px", color: "#67e8f9" }}>{argumentGraphDetail || "Extracting argument structure..."}</span>
+            </div>
+            {argumentGraphPercent > 0 && (
+              <div style={{ marginTop: "8px", height: "4px", background: "#042f2e", borderRadius: "2px", overflow: "hidden" }}>
+                <div style={{ height: "100%", background: "#0891b2", width: argumentGraphPercent + "%", transition: "width 0.5s" }} />
+              </div>
+            )}
+          </UICard>
+        )}
+        {argumentGraphStatus === "error" && (
+          <UICard style={{ padding: "12px", borderColor: "#ef444444" }}>
+            <div style={{ fontSize: "12px", color: "#ef4444" }}>Argument graph failed: {d.argumentGraphError || "Unknown error"}</div>
+            <Button variant="outline" size="sm" style={{ marginTop: "6px", fontSize: "10px" }}
+              onClick={function() { onAction("generate_argument_graph", { entityId: entity.entityId || d.focusEntity }); }}
             >🔄 Retry</Button>
           </UICard>
         )}

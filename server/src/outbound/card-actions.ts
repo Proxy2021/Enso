@@ -29,7 +29,7 @@ import { logAction, logError, logFix } from "../action-log.js";
 import { setResearchProgressCallback, setDeepResearchLauncher } from "../researcher-tools.js";
 import { generateResearchFollowUps } from "../followup-generator.js";
 import { runClaudeCode } from "../claude-code.js";
-import { handleDeepResearchBuild, handleBuildAppViaClaude, handleArgumentGraphBuild } from "../build-via-claude.js";
+import { handleDeepResearchBuild, handleBuildAppViaClaude } from "../build-via-claude.js";
 // fs imports removed — no longer needed after deep research refactor
 import { recordAppInteraction, buildFailureContext } from "../interaction-tracker.js";
 import { sendHtmlEmail } from "../email.js";
@@ -1764,84 +1764,6 @@ export async function handlePluginCardAction(params: {
         cardMode: cardModeFromContext(ctx),
         operation: { operationId, stage: "error", label: "Argument graph failed", message: msg, cancellable: false },
         timestamp: Date.now(),
-      });
-    });
-
-    return;
-  }
-
-  // ── Argument Graph (Variant B — bespoke UI via Claude Code) ──
-  if (action === "generate_argument_graph_bespoke" || action === "regenerate_argument_graph_bespoke") {
-    const p = (payload ?? {}) as Record<string, unknown>;
-    const entityId = String(p.entityId ?? "").trim();
-    if (!entityId) { sendOperation("error", "No entity ID"); return; }
-
-    logAction({ ts: Date.now(), type: "action", category: "action:argument-graph-bespoke", message: `generate bespoke graph: ${entityId}`, cardId });
-
-    // Need a structured graph first — generate it if not cached.
-    const { generateArgumentGraph, getArgumentGraph } = await import("../argument-graph.js");
-    let graph = getArgumentGraph(entityId);
-    if (!graph) {
-      sendOperation("processing", "Extracting argument structure first...");
-      try {
-        graph = await generateArgumentGraph({ entityId });
-        const dd0 = ctx.currentData as Record<string, unknown>;
-        dd0.argumentGraph = graph;
-        dd0.argumentGraphStatus = "ready";
-        ctx.currentData = dd0;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        sendOperation("error", `Structured graph prerequisite failed: ${msg}`);
-        return;
-      }
-    }
-
-    sendOperation("processing", "Launching Claude Code for bespoke visualization...");
-    const dd1 = ctx.currentData as Record<string, unknown>;
-    dd1.argumentGraphBespokeStatus = "building";
-    ctx.currentData = dd1;
-    client.send({
-      id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
-      state: "delta", targetCardId: cardId,
-      data: dd1,
-      generatedUI: ctx.currentGeneratedUI,
-      cardMode: cardModeFromContext(ctx),
-      timestamp: Date.now(),
-    });
-
-    // Fire and forget — Claude Code session will stream into the card; we
-    // patch the card with the JSX result when it finishes.
-    handleArgumentGraphBuild({
-      entityId,
-      graphJson: JSON.stringify(graph, null, 2),
-      bookTitle: graph.title,
-      bookAuthor: graph.author,
-      cardId,
-      client,
-      account: ctx.account,
-    }).then((jsx) => {
-      const dd = ctx.currentData as Record<string, unknown>;
-      if (jsx) {
-        dd.argumentGraphBespokeUI = jsx;
-        dd.argumentGraphBespokeStatus = "ready";
-      } else {
-        dd.argumentGraphBespokeStatus = "error";
-        dd.argumentGraphBespokeError = "Claude Code build failed — see terminal output";
-      }
-      ctx.currentData = dd;
-      client.send({
-        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
-        state: "final", targetCardId: cardId,
-        data: dd,
-        generatedUI: ctx.currentGeneratedUI,
-        cardMode: cardModeFromContext(ctx),
-        operation: { operationId, stage: jsx ? "complete" : "error", label: jsx ? "Bespoke graph ready" : "Bespoke graph failed", cancellable: false },
-        timestamp: Date.now(),
-      });
-      persistCard(client.id, capturedConvId, {
-        id: cardId, runId: "", type: "dynamic-ui", role: "assistant",
-        data: dd, generatedUI: ctx.currentGeneratedUI,
-        cardMode: cardModeFromContext(ctx), timestamp: Date.now(),
       });
     });
 
