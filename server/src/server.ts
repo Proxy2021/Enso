@@ -909,7 +909,8 @@ export async function startEnsoServer(opts: {
         const { getProcessedContent, generateDeepContent } = await import("./deep-content.js");
         const cached = action !== "regenerate_podcast" ? getProcessedContent(entityId) : null;
         if (cached) {
-          // Return cached podcast data
+          // Return cached podcast data + any existing interview / argument graph
+          // so the frontend replace-state merge doesn't wipe them out.
           const { buildEntityDetailData: buildDetail } = await import("./entity-model.js");
           const detailData = await buildDetail(entityId) || {};
           detailData.processedBook = cached;
@@ -917,6 +918,19 @@ export async function startEnsoServer(opts: {
           detailData.podcastScript = cached.script;
           detailData.podcastDuration = cached.durationMinutes;
           detailData.podcastStatus = "ready";
+          const interview = getProcessedContent(entityId, "interview");
+          if (interview) {
+            detailData.interviewAudioUrl = interview.audioUrl;
+            detailData.interviewScript = interview.script;
+            detailData.interviewDuration = interview.durationMinutes;
+            detailData.interviewQuestions = interview.interviewQuestions;
+            detailData.interviewStatus = "ready";
+          }
+          try {
+            const { getArgumentGraph: gAG2 } = await import("./argument-graph.js");
+            const graph = gAG2(entityId);
+            if (graph) { detailData.argumentGraph = graph; detailData.argumentGraphStatus = "ready"; }
+          } catch { /* ignore */ }
           detailData.focusEntity = true;
           detailData.tool = "entity_detail";
           res.json(detailData);
@@ -980,6 +994,21 @@ export async function startEnsoServer(opts: {
         if (cached) {
           const { buildEntityDetailData: bD } = await import("./entity-model.js");
           const detailData = await bD(entityId) || {};
+          // Preserve any existing discussion podcast + argument graph so the
+          // frontend's replace-state merge doesn't blow them away.
+          const discussion = getProcessedContent(entityId);
+          if (discussion) {
+            detailData.processedBook = discussion;
+            detailData.podcastAudioUrl = discussion.audioUrl;
+            detailData.podcastScript = discussion.script;
+            detailData.podcastDuration = discussion.durationMinutes;
+            detailData.podcastStatus = "ready";
+          }
+          try {
+            const { getArgumentGraph: gAG } = await import("./argument-graph.js");
+            const graph = gAG(entityId);
+            if (graph) { detailData.argumentGraph = graph; detailData.argumentGraphStatus = "ready"; }
+          } catch { /* ignore */ }
           detailData.interviewAudioUrl = cached.audioUrl;
           detailData.interviewScript = cached.script;
           detailData.interviewDuration = cached.durationMinutes;
@@ -1033,7 +1062,25 @@ export async function startEnsoServer(opts: {
         const cached = action !== "regenerate_argument_graph" ? getArgumentGraph(entityId) : null;
         if (cached) {
           const { buildEntityDetailData: bD } = await import("./entity-model.js");
+          const { getProcessedContent: gPC } = await import("./deep-content.js");
           const detailData = await bD(entityId) || {};
+          // Preserve discussion podcast + interview so the frontend merge doesn't drop them.
+          const discussion = gPC(entityId);
+          if (discussion) {
+            detailData.processedBook = discussion;
+            detailData.podcastAudioUrl = discussion.audioUrl;
+            detailData.podcastScript = discussion.script;
+            detailData.podcastDuration = discussion.durationMinutes;
+            detailData.podcastStatus = "ready";
+          }
+          const interview = gPC(entityId, "interview");
+          if (interview) {
+            detailData.interviewAudioUrl = interview.audioUrl;
+            detailData.interviewScript = interview.script;
+            detailData.interviewDuration = interview.durationMinutes;
+            detailData.interviewQuestions = interview.interviewQuestions;
+            detailData.interviewStatus = "ready";
+          }
           detailData.argumentGraph = cached;
           detailData.argumentGraphStatus = "ready";
           detailData.focusEntity = true;
