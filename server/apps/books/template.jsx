@@ -409,7 +409,21 @@ function GeneratedUI({ data, onAction }) {
               };
               var layers = [[], [], [], [], []];
               nodes.forEach(function(n) { layers[layerFor(n.type)].push(n); });
-              var W = 680, LH = 110; // layer height
+
+              // Short IDs keyed on type+ordinal (T1, C1, A1, E1, X1, K1) — display
+              // inside the circle. Full label shows under the circle + side panel.
+              var typeCode = { thesis: "T", claim: "C", assumption: "A", evidence: "E", counter: "X", conclusion: "K" };
+              var shortId = {};
+              var counts = {};
+              nodes.forEach(function(n) {
+                counts[n.type] = (counts[n.type] || 0) + 1;
+                shortId[n.id] = (typeCode[n.type] || "N") + counts[n.type];
+              });
+
+              // Dynamic width: 160px per node in the widest layer, min 720.
+              var maxInLayer = Math.max.apply(null, layers.map(function(a){return a.length;}));
+              var W = Math.max(720, maxInLayer * 160);
+              var LH = 150; // more vertical room for label text below each circle
               var H = LH * layers.length + 40;
               var positions = {};
               layers.forEach(function(arr, li) {
@@ -417,7 +431,7 @@ function GeneratedUI({ data, onAction }) {
                 if (n === 0) return;
                 var gap = W / (n + 1);
                 arr.forEach(function(node, i) {
-                  positions[node.id] = { x: gap * (i + 1), y: li * LH + 40, layer: li };
+                  positions[node.id] = { x: gap * (i + 1), y: li * LH + 60, layer: li };
                 });
               });
 
@@ -446,10 +460,26 @@ function GeneratedUI({ data, onAction }) {
 
               var cruxId = argumentGraph.cruxNodeId;
 
+              // Edge endpoint offset to node boundary so arrows don't poke
+              // into the circle interior.
+              var edgePath = function(a, b, radiusA, radiusB) {
+                var dx = b.x - a.x, dy = b.y - a.y;
+                var dist = Math.sqrt(dx*dx + dy*dy) || 1;
+                var ux = dx/dist, uy = dy/dist;
+                var sx = a.x + ux*radiusA, sy = a.y + uy*radiusA;
+                var ex = b.x - ux*(radiusB+6), ey = b.y - uy*(radiusB+6);
+                // Gentle curve via perpendicular offset for non-vertical edges
+                var mx = (sx+ex)/2, my = (sy+ey)/2;
+                var perpX = -uy * 18, perpY = ux * 18;
+                return "M " + sx + " " + sy + " Q " + (mx + perpX) + " " + (my + perpY) + " " + ex + " " + ey;
+              };
+
+              var radius = function(n) { return n.id === cruxId ? 30 : 22; };
+
               return (
                 <div>
                   <div style={{ width: "100%", overflowX: "auto", background: "#020617", borderRadius: "6px", padding: "6px" }}>
-                    <svg width={W} height={H} style={{ display: "block" }}>
+                    <svg viewBox={"0 0 " + W + " " + H} style={{ display: "block", width: "100%", minWidth: Math.min(W, 900) + "px", height: "auto" }} preserveAspectRatio="xMidYMid meet">
                       <defs>
                         {["supports", "requires", "contradicts", "weakens", "exemplifies", "concludes"].map(function(r) {
                           return (
@@ -462,13 +492,13 @@ function GeneratedUI({ data, onAction }) {
                       {edges.map(function(e, i) {
                         var a = positions[e.from], b = positions[e.to];
                         if (!a || !b) return null;
-                        var mx = (a.x + b.x) / 2;
-                        var my = (a.y + b.y) / 2 - 20;
+                        var na = nodes.find(function(x){return x.id===e.from;});
+                        var nb = nodes.find(function(x){return x.id===e.to;});
                         var isHighlighted = selected && (e.from === selected.id || e.to === selected.id);
-                        var opacity = selected ? (isHighlighted ? 1 : 0.15) : 0.75;
+                        var opacity = selected ? (isHighlighted ? 1 : 0.1) : 0.6;
                         return (
                           <path key={i}
-                            d={"M " + a.x + " " + (a.y + 14) + " Q " + mx + " " + my + " " + b.x + " " + (b.y - 14)}
+                            d={edgePath(a, b, radius(na), radius(nb))}
                             stroke={relationColor(e.relation)}
                             strokeWidth={isHighlighted ? 2.5 : 1.5}
                             strokeDasharray={relationDash(e.relation)}
@@ -483,21 +513,24 @@ function GeneratedUI({ data, onAction }) {
                         if (!pos) return null;
                         var isCrux = n.id === cruxId;
                         var isSelected = selected && selected.id === n.id;
+                        var conn = selected && edges.some(function(e){return (e.from===selected.id&&e.to===n.id) || (e.to===selected.id&&e.from===n.id);});
                         var fill = typeColor(n.type);
-                        var truncated = n.label.length > 36 ? n.label.slice(0, 34) + "…" : n.label;
+                        var r = radius(n);
+                        var fade = selected && !isSelected && !conn;
+                        // Truncate label for below-node display (short — ~14 chars).
+                        var short = n.label.length > 14 ? n.label.slice(0, 13) + "…" : n.label;
                         return (
-                          <g key={n.id} style={{ cursor: "pointer" }} onClick={function() { setSelectedGraphNodeId(isSelected ? null : n.id); }}>
+                          <g key={n.id} style={{ cursor: "pointer", opacity: fade ? 0.25 : 1, transition: "opacity 0.2s" }} onClick={function() { setSelectedGraphNodeId(isSelected ? null : n.id); }}>
                             {isCrux && (
-                              <rect x={pos.x - 110} y={pos.y - 18} width="220" height="36" rx="18" fill="none" stroke="#fbbf24" strokeWidth="2" strokeDasharray="4 3" opacity="0.9" />
+                              <circle cx={pos.x} cy={pos.y} r={r + 6} fill="none" stroke="#fbbf24" strokeWidth="2" strokeDasharray="4 3" opacity="0.85" />
                             )}
-                            <rect x={pos.x - 100} y={pos.y - 14} width="200" height="28" rx="14"
+                            <circle cx={pos.x} cy={pos.y} r={r}
                               fill={fill}
                               stroke={isSelected ? "#fff" : "#0f172a"}
                               strokeWidth={isSelected ? 2 : 1}
-                              opacity={selected && !isSelected ? 0.4 : 1}
                             />
-                            <text x={pos.x} y={pos.y + 4} textAnchor="middle" fontSize="10.5" fill="white" fontWeight={isCrux ? 700 : 500}>{truncated}</text>
-                            {isCrux && <text x={pos.x + 92} y={pos.y - 6} fontSize="10" fill="#fbbf24">⚠️</text>}
+                            <text x={pos.x} y={pos.y + 5} textAnchor="middle" fontSize={isCrux ? 14 : 12} fill="white" fontWeight="700" style={{pointerEvents:"none"}}>{shortId[n.id]}</text>
+                            <text x={pos.x} y={pos.y + r + 16} textAnchor="middle" fontSize="10.5" fill="#cbd5e1" fontWeight={isCrux ? 600 : 500} style={{pointerEvents:"none"}}>{short}</text>
                           </g>
                         );
                       })}
