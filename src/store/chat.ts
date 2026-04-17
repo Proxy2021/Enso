@@ -175,6 +175,10 @@ interface CardStore {
   // Scheduled tasks
   scheduledTasks: import("@shared/types").ScheduledTaskDef[];
 
+  // Live deep-content (podcast) jobs, keyed by entityId. Driven by server
+  // broadcasts of `deepContentJobs`. BackgroundTaskBar renders each as a pill.
+  deepJobs: Record<string, import("@shared/types").DeepContentJob>;
+
   // Standalone deploy (from Evolve view)
   deployProgress: string | null;
   deployStatus: "idle" | "deploying" | "done" | null;
@@ -423,6 +427,7 @@ export const useChatStore = create<CardStore>((set, get) => ({
   deployProgress: null,
   deployStatus: null,
   scheduledTasks: [],
+  deepJobs: {},
 
   pendingFocusNavigation: null,
   setActiveTab: (tab) => set({ activeTab: tab, chatViewOpen: false }),
@@ -1469,13 +1474,16 @@ export const useChatStore = create<CardStore>((set, get) => ({
   },
 
   hasActiveBackgroundTask: () => {
-    const { cardOrder, cards } = get();
+    const { cardOrder, cards, deepJobs } = get();
     for (const id of cardOrder) {
       const c = cards[id];
       if (!c || c.status !== "streaming") continue;
       if (c.type === "terminal" || c.type === "shell" || c.type === "orchestration" || c.deepResearchStatus === "building") {
         return true;
       }
+    }
+    for (const id of Object.keys(deepJobs)) {
+      if (deepJobs[id]?.status === "running") return true;
     }
     return false;
   },
@@ -2160,6 +2168,30 @@ export const useChatStore = create<CardStore>((set, get) => ({
   },
 
   _handleServerMessage: (msg: ServerMessage) => {
+    // Deep-content (podcast) jobs snapshot — drives BackgroundTaskBar pills.
+    // Keyed by entityId+variant so discussion and interview stay separate.
+    if (msg.deepContentJobs) {
+      const keyFor = (j: { entityId: string; variant?: string }) => `${j.entityId}::${j.variant ?? "discussion"}`;
+      const next: Record<string, import("@shared/types").DeepContentJob> = {};
+      for (const job of msg.deepContentJobs) next[keyFor(job)] = job;
+
+      // Fire completion/error notification for jobs that just finished.
+      const prev = get().deepJobs;
+      for (const job of msg.deepContentJobs) {
+        const was = prev[keyFor(job)];
+        if (was && was.status === "running" && job.status !== "running") {
+          const label = job.variant === "interview" ? "Interview" : "Podcast";
+          notifyTaskComplete({
+            type: "general",
+            title: job.status === "complete" ? `${label} ready` : `${label} failed`,
+            body: job.title,
+            success: job.status === "complete",
+          });
+        }
+      }
+      set({ deepJobs: next });
+    }
+
     // Handle scheduled task messages
     if (msg.scheduledTasks) {
       set({ scheduledTasks: msg.scheduledTasks });

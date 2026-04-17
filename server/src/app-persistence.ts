@@ -258,7 +258,14 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
 
     async search(query: string, options?: { count?: number; country?: string }) {
       return withTimeout(`search("${query}")`, async () => {
-        const apiKey = process.env.BRAVE_API_KEY;
+        let apiKey = process.env.BRAVE_API_KEY;
+        if (!apiKey) {
+          try {
+            const keysPath = path.join(ENSO_HOME, "api-keys.json");
+            const keys = JSON.parse(fs.readFileSync(keysPath, "utf-8")) as Record<string, string>;
+            if (keys.brave) { process.env.BRAVE_API_KEY = keys.brave; apiKey = keys.brave; }
+          } catch { /* ignore */ }
+        }
         if (!apiKey) {
           logAction({ ts: Date.now(), type: "action", category: "persistence", message: `executor-ctx ${tag} → search: no BRAVE_API_KEY, returning empty` });
           return { ok: false as const, results: [] };

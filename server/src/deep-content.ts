@@ -51,6 +51,9 @@ export interface PodcastOutline {
   }>;
 }
 
+/** Which podcast style this processed content represents. */
+export type DeepContentVariant = "discussion" | "interview";
+
 export interface ProcessedContent {
   entityId: string;
   title: string;
@@ -59,11 +62,16 @@ export interface ProcessedContent {
   entityType?: string;
   processedAt: string;
   research: EntityResearchResult;
-  outline: PodcastOutline;
+  /** Discussion variant only. Interview variant stores questions instead. */
+  outline?: PodcastOutline;
+  /** Interview variant only — the question list used to generate the dialogue. */
+  interviewQuestions?: Array<{ question: string; probes: string; rationale: string }>;
   script: string;
   audioUrl: string;
   audioSizeBytes: number;
   durationMinutes: number;
+  /** Defaults to "discussion" for backwards compatibility with older cache files. */
+  variant?: DeepContentVariant;
 }
 
 export type DeepContentPhase =
@@ -222,17 +230,27 @@ function slugFromEntityId(entityId: string): string {
   return entityId.replace(/[^\p{L}\p{N}-]/gu, "_").slice(0, 120);
 }
 
+/** Slug for a specific variant — interview variant gets a -interview suffix. */
+function slugForVariant(entityId: string, variant: DeepContentVariant = "discussion"): string {
+  const base = slugFromEntityId(entityId);
+  return variant === "interview" ? `${base}-interview` : base;
+}
+
 // ─── Cache ───────────────────────────────────────────────────────────────────
 
-export function getProcessedContent(entityId: string): ProcessedContent | null {
+export function getProcessedContent(entityId: string, variant: DeepContentVariant = "discussion"): ProcessedContent | null {
   ensureDirs();
-  const slug = slugFromEntityId(entityId);
-  // Also try the old ASCII-only slug for backward compatibility
-  const oldSlug = entityId.replace(/[^a-zA-Z0-9-]/g, "_").slice(0, 80);
+  const slug = slugForVariant(entityId, variant);
+  // Also try the old ASCII-only slug for backward compatibility (discussion only).
+  const oldSlug = variant === "discussion"
+    ? entityId.replace(/[^a-zA-Z0-9-]/g, "_").slice(0, 80)
+    : slug;
 
-  // Search in both new (deep-content/) and old (kindle/podcasts/) directories
+  // Search in both new (deep-content/) and old (kindle/podcasts/) directories.
+  // The old kindle dir only ever held discussion-variant podcasts, so skip it
+  // when looking up an interview variant.
   const OLD_KINDLE_DIR = join(homedir(), ".enso", "data", "kindle", "podcasts");
-  const searchDirs = [CONTENT_DIR, OLD_KINDLE_DIR];
+  const searchDirs = variant === "interview" ? [CONTENT_DIR] : [CONTENT_DIR, OLD_KINDLE_DIR];
 
   let result: ProcessedContent | null = null;
 
@@ -249,13 +267,14 @@ export function getProcessedContent(entityId: string): ProcessedContent | null {
       } catch { /* continue */ }
     }
 
-    // Try prefix match (handles different slug truncation lengths)
-    if (!result) {
+    // Try prefix match (handles different slug truncation lengths).
+    // Skip for interview variant to avoid matching the discussion file by prefix.
+    if (!result && variant !== "interview") {
       try {
         if (existsSync(dir)) {
           const files = readdirSync(dir);
           const prefix = slug.slice(0, 40);
-          const match = files.find(f => f.startsWith(prefix) && f.endsWith(".json"));
+          const match = files.find(f => f.startsWith(prefix) && f.endsWith(".json") && !f.endsWith("-interview.json"));
           if (match) {
             result = JSON.parse(readFileSync(join(dir, match), "utf-8")) as ProcessedContent;
           }
@@ -266,18 +285,21 @@ export function getProcessedContent(entityId: string): ProcessedContent | null {
 
   if (!result) return null;
 
-  // Recompute audioUrl from actual MP3 file on disk
+  // Recompute audioUrl from actual MP3 file on disk.
   const mp3Path = join(AUDIO_DIR, `${slug}.mp3`);
   if (existsSync(mp3Path)) {
     const encoded = Buffer.from(mp3Path, "utf-8").toString("base64url");
     result.audioUrl = `/media/${encoded}?ext=.mp3`;
   }
 
+  // Tag legacy records that don't have the variant field.
+  if (!result.variant) result.variant = variant;
+
   return result;
 }
 
-export function isContentProcessed(entityId: string): boolean {
-  return getProcessedContent(entityId) !== null;
+export function isContentProcessed(entityId: string, variant: DeepContentVariant = "discussion"): boolean {
+  return getProcessedContent(entityId, variant) !== null;
 }
 
 /**
@@ -325,11 +347,13 @@ export function listProcessedContent(): string[] {
   } catch { return []; }
 }
 
-/** Delete cached podcast for an entity so it can be regenerated. */
-export function deleteProcessedContent(entityId: string): boolean {
+/** Delete cached podcast for an entity (variant-scoped) so it can be regenerated. */
+export function deleteProcessedContent(entityId: string, variant: DeepContentVariant = "discussion"): boolean {
   ensureDirs();
-  const slug = slugFromEntityId(entityId);
-  const oldSlug = entityId.replace(/[^a-zA-Z0-9-]/g, "_").slice(0, 80);
+  const slug = slugForVariant(entityId, variant);
+  const oldSlug = variant === "discussion"
+    ? entityId.replace(/[^a-zA-Z0-9-]/g, "_").slice(0, 80)
+    : slug;
   let deleted = false;
 
   // Delete JSON metadata
@@ -347,14 +371,14 @@ export function deleteProcessedContent(entityId: string): boolean {
   }
 
   if (deleted) {
-    logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Deleted cached podcast for ${entityId}` });
+    logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Deleted cached ${variant} for ${entityId}` });
   }
   return deleted;
 }
 
 function saveProcessedContent(book: ProcessedContent): void {
   ensureDirs();
-  const slug = slugFromEntityId(book.entityId);
+  const slug = slugForVariant(book.entityId, book.variant);
   writeFileSync(join(CONTENT_DIR, `${slug}.json`), JSON.stringify(book, null, 2));
 }
 
@@ -837,29 +861,29 @@ export async function renderLongformAudio(
 
   logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Rendering ${allSegments.length} audio segments` });
 
-  // Render segments with concurrency limit of 5
+  // Render all segments through the global TTS semaphore — keeps total Gemini
+  // TTS concurrency capped across every running deep-content job, not just
+  // this one.
+  const { withTtsSlot } = await import("./deep-content-jobs.js");
   const pcmBuffers: Buffer[] = new Array(allSegments.length).fill(Buffer.alloc(0));
-  const concurrency = 5;
-
   let completed = 0;
-  for (let i = 0; i < allSegments.length; i += concurrency) {
-    const batch = allSegments.slice(i, i + concurrency);
-    const promises = batch.map((seg, j) => {
-      const idx = i + j;
-      return renderPodcastAudio(seg, geminiKey).then(buf => {
-        pcmBuffers[idx] = buf;
-        completed++;
-        onProgress?.(completed - 1, allSegments.length);
-      }).catch(err => {
-        logError("book-podcast", `Failed to render segment ${idx}`, err);
-        completed++;
-        onProgress?.(completed - 1, allSegments.length);
-        // pcmBuffers[idx] stays as empty Buffer — segment skipped
-      });
-    });
 
-    await Promise.all(promises);
-  }
+  await Promise.all(
+    allSegments.map((seg, idx) =>
+      withTtsSlot(() => renderPodcastAudio(seg, geminiKey))
+        .then((buf) => {
+          pcmBuffers[idx] = buf;
+          completed++;
+          onProgress?.(completed - 1, allSegments.length);
+        })
+        .catch((err) => {
+          logError("book-podcast", `Failed to render segment ${idx}`, err);
+          completed++;
+          onProgress?.(completed - 1, allSegments.length);
+          // pcmBuffers[idx] stays as empty Buffer — segment skipped
+        }),
+    ),
+  );
 
   // Concatenate PCM in order (preserves audio sequence) and wrap with WAV header
   const totalPcm = Buffer.concat(pcmBuffers.filter(b => b.length > 0));
@@ -871,9 +895,11 @@ export async function renderLongformAudio(
 export async function generateDeepContent(params: {
   entityId: EntityId;
   language?: string;
+  variant?: DeepContentVariant;
   onProgress?: (progress: DeepContentProgress) => void;
 }): Promise<ProcessedContent> {
   const { entityId, language, onProgress } = params;
+  const variant: DeepContentVariant = params.variant ?? "discussion";
   // Resolve language: explicit param > detect from title > "English"
   const resolveLanguage = (title: string): string => {
     if (language === "zh") return "Chinese";
@@ -885,10 +911,10 @@ export async function generateDeepContent(params: {
     return "English";
   };
 
-  // Check cache first
-  const cached = getProcessedContent(entityId);
+  // Check cache first (variant-scoped)
+  const cached = getProcessedContent(entityId, variant);
   if (cached) {
-    logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Cache hit for ${entityId}` });
+    logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Cache hit for ${entityId} (${variant})` });
     onProgress?.({ phase: "complete", percentComplete: 100 });
     return cached;
   }
@@ -1025,28 +1051,78 @@ export async function generateDeepContent(params: {
 
   logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Research quality for "${title}": ${researchQuality.chapters} chapters, ${researchQuality.insights} insights, depth=${researchQuality.depth}, sources=${researchQuality.sources}, retried=${researchQuality.retried}` });
 
-  // Phase 2: Outline
-  onProgress?.({ phase: "generating_outline", detail: "Planning podcast structure...", percentComplete: 25 });
-  const outline = await generatePodcastOutline(title, author, research, contentLanguage);
+  // Phase 2 + 3: Outline/questions + script — branches on variant
+  let outline: PodcastOutline | undefined;
+  let fullScript: string;
+  let sectionScripts: string[];
+  let interviewQuestions: Array<{ question: string; probes: string; rationale: string }> | undefined;
 
-  logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Outline: ${outline.sections.length} sections, ~${outline.estimatedMinutes} min for "${title}"` });
+  if (variant === "interview") {
+    // Author voice research (new) — keeps author answers grounded
+    onProgress?.({ phase: "generating_outline", detail: `Researching ${author}'s voice...`, percentComplete: 25 });
+    const { researchAuthorVoice, designInterviewQuestions, writeInterviewDialogue } = await import("./interview-prompts.js");
+    const authorVoice = await researchAuthorVoice({ author, title, onProgress: (detail) => onProgress?.({ phase: "generating_outline", detail, percentComplete: 30 }) });
 
-  // Phase 3: Script
-  const { fullScript, sectionScripts } = await generateFullScript(
-    title, author, outline, research, contentLanguage,
-    (sectionIdx, total) => {
-      const pct = 30 + Math.round((sectionIdx / total) * 30);
-      onProgress?.({
-        phase: "writing_section",
-        detail: `Writing section ${sectionIdx + 1}/${total}: "${outline.sections[sectionIdx]?.title}"`,
-        sectionIndex: sectionIdx,
-        totalSections: total,
-        percentComplete: pct,
-      });
-    },
-  );
+    // Question design
+    onProgress?.({ phase: "generating_outline", detail: "Designing interview questions...", percentComplete: 40 });
+    const userFocuses: string[] = [];
+    try {
+      const focusesDir = join(homedir(), ".enso", "wiki", "focuses");
+      if (existsSync(focusesDir)) {
+        const { readdirSync: rd } = await import("node:fs");
+        for (const f of rd(focusesDir)) {
+          if (f.endsWith(".md") && !f.includes("/")) {
+            try { userFocuses.push(f.replace(/\.md$/, "").replace(/-/g, " ")); } catch { /* ignore */ }
+          }
+        }
+      }
+    } catch { /* focuses are optional */ }
+    const questions = await designInterviewQuestions({
+      title, author, research,
+      userProfile, userFocuses,
+      language: contentLanguage,
+    });
+    interviewQuestions = questions;
 
-  logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Script complete: ${fullScript.length} chars for "${title}"` });
+    logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Interview: ${questions.length} questions for "${title}" (author voice grounded=${authorVoice.grounded})` });
+
+    // Dialogue
+    onProgress?.({ phase: "writing_section", detail: "Writing author dialogue...", percentComplete: 50 });
+    const targetMinutes = research.estimatedDepth === "rich" ? 25 : research.estimatedDepth === "moderate" ? 18 : 12;
+    fullScript = await writeInterviewDialogue({
+      title, author, research, questions,
+      authorVoice,
+      language: contentLanguage,
+      targetMinutes,
+    });
+    sectionScripts = [fullScript];
+
+    logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Interview script complete: ${fullScript.length} chars for "${title}"` });
+  } else {
+    // Discussion variant — existing two-host pipeline
+    onProgress?.({ phase: "generating_outline", detail: "Planning podcast structure...", percentComplete: 25 });
+    outline = await generatePodcastOutline(title, author, research, contentLanguage);
+
+    logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Outline: ${outline.sections.length} sections, ~${outline.estimatedMinutes} min for "${title}"` });
+
+    const scriptOut = await generateFullScript(
+      title, author, outline, research, contentLanguage,
+      (sectionIdx, total) => {
+        const pct = 30 + Math.round((sectionIdx / total) * 30);
+        onProgress?.({
+          phase: "writing_section",
+          detail: `Writing section ${sectionIdx + 1}/${total}: "${outline!.sections[sectionIdx]?.title}"`,
+          sectionIndex: sectionIdx,
+          totalSections: total,
+          percentComplete: pct,
+        });
+      },
+    );
+    fullScript = scriptOut.fullScript;
+    sectionScripts = scriptOut.sectionScripts;
+
+    logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Script complete: ${fullScript.length} chars for "${title}"` });
+  }
 
   // Phase 4: Audio
   const { getGeminiApiKey } = await import("./podcast.js");
@@ -1070,9 +1146,9 @@ export async function generateDeepContent(params: {
     },
   );
 
-  // Save audio
+  // Save audio (variant-scoped slug so discussion + interview don't overwrite each other)
   ensureDirs();
-  const slug = slugFromEntityId(entityId);
+  const slug = slugForVariant(entityId, variant);
   const audioPath = join(AUDIO_DIR, `${slug}.wav`);
   writeFileSync(audioPath, wavData);
 
@@ -1098,10 +1174,12 @@ export async function generateDeepContent(params: {
     processedAt: new Date().toISOString(),
     research,
     outline,
+    interviewQuestions,
     script: fullScript,
     audioUrl,
     audioSizeBytes: wavData.length,
     durationMinutes,
+    variant,
   };
 
   // Persist

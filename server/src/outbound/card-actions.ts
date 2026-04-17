@@ -29,7 +29,7 @@ import { logAction, logError, logFix } from "../action-log.js";
 import { setResearchProgressCallback, setDeepResearchLauncher } from "../researcher-tools.js";
 import { generateResearchFollowUps } from "../followup-generator.js";
 import { runClaudeCode } from "../claude-code.js";
-import { handleDeepResearchBuild, handleBuildAppViaClaude } from "../build-via-claude.js";
+import { handleDeepResearchBuild, handleBuildAppViaClaude, handleArgumentGraphBuild } from "../build-via-claude.js";
 // fs imports removed — no longer needed after deep research refactor
 import { recordAppInteraction, buildFailureContext } from "../interaction-tracker.js";
 import { sendHtmlEmail } from "../email.js";
@@ -1007,6 +1007,25 @@ export async function handlePluginCardAction(params: {
       if (detailData) {
         try {
           const { getProcessedContent } = await import("../deep-content.js");
+          // Interview variant — merge independently if cached
+          const cachedInterview = getProcessedContent(entityId, "interview");
+          if (cachedInterview) {
+            detailData.interviewAudioUrl = cachedInterview.audioUrl;
+            detailData.interviewScript = cachedInterview.script;
+            detailData.interviewDuration = cachedInterview.durationMinutes;
+            detailData.interviewQuestions = cachedInterview.interviewQuestions;
+            detailData.interviewStatus = "ready";
+          }
+
+          // Argument graph (Variant A) — merge cached structured graph
+          try {
+            const { getArgumentGraph } = await import("../argument-graph.js");
+            const cachedGraph = getArgumentGraph(entityId);
+            if (cachedGraph) {
+              detailData.argumentGraph = cachedGraph;
+              detailData.argumentGraphStatus = "ready";
+            }
+          } catch { /* argument-graph module unavailable, skip */ }
           const processed = getProcessedContent(entityId);
           if (processed) {
             detailData.processedBook = processed;
@@ -1015,6 +1034,115 @@ export async function handlePluginCardAction(params: {
             detailData.podcastDuration = processed.durationMinutes;
             detailData.podcastStatus = "ready";
             logAction({ ts: Date.now(), type: "action", category: "action:entity", message: `Merged processed content: ${processed.durationMinutes} min podcast for ${entityId}`, cardId });
+          } else {
+            // No cached result — is there a running job we can reattach to?
+            const { getJob, subscribe: subscribeJob, awaitJob } = await import("../deep-content-jobs.js");
+            const live = getJob(entityId);
+            if (live && live.status === "running") {
+              detailData.podcastStatus = live.phase;
+              detailData.podcastStatusDetail = live.detail;
+              detailData.podcastPercent = live.percent;
+              logAction({ ts: Date.now(), type: "action", category: "action:entity", message: `Reattached to running podcast job for ${entityId} (${live.percent}%)`, cardId });
+
+              // Subscribe this card to future progress ticks + completion.
+              const isStillFocused = () => {
+                const cur = ctx.currentData as Record<string, unknown> | undefined;
+                return cur?.focusEntity === entityId;
+              };
+              const unsubscribe = subscribeJob(entityId, (progress) => {
+                if (!isStillFocused()) return;
+                const dd = structuredClone(ctx.currentData) as Record<string, unknown>;
+                dd.podcastStatus = progress.phase;
+                dd.podcastStatusDetail = progress.detail;
+                dd.podcastPercent = progress.percentComplete;
+                client.send({
+                  id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+                  state: "delta", targetCardId: cardId,
+                  data: dd,
+                  generatedUI: ctx.currentGeneratedUI,
+                  cardMode: cardModeFromContext(ctx),
+                  timestamp: Date.now(),
+                });
+              });
+              const jobPromise = awaitJob(entityId);
+              if (jobPromise) {
+                jobPromise.then((result) => {
+                  unsubscribe();
+                  if (!isStillFocused()) return;
+                  const dd = ctx.currentData as Record<string, unknown>;
+                  dd.processedBook = result;
+                  dd.podcastAudioUrl = result.audioUrl;
+                  dd.podcastScript = result.script;
+                  dd.podcastDuration = result.durationMinutes;
+                  dd.podcastStatus = "ready";
+                  dd.podcastPercent = 100;
+                  ctx.currentData = dd;
+                  client.send({
+                    id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+                    state: "final", targetCardId: cardId,
+                    data: dd,
+                    generatedUI: ctx.currentGeneratedUI,
+                    cardMode: cardModeFromContext(ctx),
+                    timestamp: Date.now(),
+                  });
+                }).catch(() => { unsubscribe(); });
+              }
+            }
+          }
+
+          // Interview variant reattach — independent of discussion state
+          if (!cachedInterview) {
+            const { getJob, subscribe: subscribeJob, awaitJob } = await import("../deep-content-jobs.js");
+            const liveIv = getJob(entityId, "interview");
+            if (liveIv && liveIv.status === "running") {
+              detailData.interviewStatus = liveIv.phase;
+              detailData.interviewStatusDetail = liveIv.detail;
+              detailData.interviewPercent = liveIv.percent;
+              logAction({ ts: Date.now(), type: "action", category: "action:entity", message: `Reattached to running interview job for ${entityId} (${liveIv.percent}%)`, cardId });
+
+              const isStillFocusedIv = () => {
+                const cur = ctx.currentData as Record<string, unknown> | undefined;
+                return cur?.focusEntity === entityId;
+              };
+              const unsubscribeIv = subscribeJob(entityId, (progress) => {
+                if (!isStillFocusedIv()) return;
+                const dd = structuredClone(ctx.currentData) as Record<string, unknown>;
+                dd.interviewStatus = progress.phase;
+                dd.interviewStatusDetail = progress.detail;
+                dd.interviewPercent = progress.percentComplete;
+                client.send({
+                  id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+                  state: "delta", targetCardId: cardId,
+                  data: dd,
+                  generatedUI: ctx.currentGeneratedUI,
+                  cardMode: cardModeFromContext(ctx),
+                  timestamp: Date.now(),
+                });
+              }, "interview");
+              const jobPromiseIv = awaitJob(entityId, "interview");
+              if (jobPromiseIv) {
+                jobPromiseIv.then((result) => {
+                  unsubscribeIv();
+                  if (!isStillFocusedIv()) return;
+                  const dd = ctx.currentData as Record<string, unknown>;
+                  dd.interviewAudioUrl = result.audioUrl;
+                  dd.interviewScript = result.script;
+                  dd.interviewDuration = result.durationMinutes;
+                  dd.interviewQuestions = result.interviewQuestions;
+                  dd.interviewStatus = "ready";
+                  dd.interviewPercent = 100;
+                  ctx.currentData = dd;
+                  client.send({
+                    id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+                    state: "final", targetCardId: cardId,
+                    data: dd,
+                    generatedUI: ctx.currentGeneratedUI,
+                    cardMode: cardModeFromContext(ctx),
+                    timestamp: Date.now(),
+                  });
+                }).catch(() => { unsubscribeIv(); });
+              }
+            }
           }
         } catch { /* deep-content not available, skip */ }
       }
@@ -1531,6 +1659,345 @@ export async function handlePluginCardAction(params: {
     return;
   }
 
+  // ── Argument Graph (Variant A — structured LLM extraction, SVG in template) ──
+  if (action === "generate_argument_graph" || action === "regenerate_argument_graph") {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const entityId = String(p.entityId ?? "").trim();
+    if (!entityId) { sendOperation("error", "No entity ID"); return; }
+
+    logAction({ ts: Date.now(), type: "action", category: "action:argument-graph", message: `generate_argument_graph: ${entityId}`, cardId });
+
+    const { generateArgumentGraph, deleteArgumentGraph, getArgumentGraph } = await import("../argument-graph.js");
+
+    if (action === "regenerate_argument_graph") {
+      deleteArgumentGraph(entityId);
+    }
+
+    // Cache check
+    const cachedGraph = getArgumentGraph(entityId);
+    if (cachedGraph && action === "generate_argument_graph") {
+      const dd = ctx.currentData as Record<string, unknown>;
+      dd.argumentGraph = cachedGraph;
+      dd.argumentGraphStatus = "ready";
+      ctx.currentData = dd;
+      sendOperation("complete", "Argument graph loaded from cache");
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "final", targetCardId: cardId,
+        data: dd,
+        generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx),
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    sendOperation("processing", "Extracting argument structure...");
+    const dd0 = ctx.currentData as Record<string, unknown>;
+    dd0.argumentGraphStatus = "processing";
+    dd0.argumentGraphStatusDetail = "Extracting argument structure...";
+    ctx.currentData = dd0;
+    client.send({
+      id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+      state: "delta", targetCardId: cardId,
+      data: dd0,
+      generatedUI: ctx.currentGeneratedUI,
+      cardMode: cardModeFromContext(ctx),
+      timestamp: Date.now(),
+    });
+
+    const isStillFocused = () => {
+      const cur = ctx.currentData as Record<string, unknown> | undefined;
+      return cur?.focusEntity === entityId;
+    };
+
+    generateArgumentGraph({
+      entityId,
+      onProgress: (progress) => {
+        if (!isStillFocused()) return;
+        const dd = structuredClone(ctx.currentData) as Record<string, unknown>;
+        dd.argumentGraphStatus = progress.phase;
+        dd.argumentGraphStatusDetail = progress.detail;
+        dd.argumentGraphPercent = progress.percentComplete;
+        client.send({
+          id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+          state: "delta", targetCardId: cardId,
+          data: dd,
+          generatedUI: ctx.currentGeneratedUI,
+          cardMode: cardModeFromContext(ctx),
+          timestamp: Date.now(),
+        });
+      },
+    }).then((graph) => {
+      if (!isStillFocused()) return;
+      const dd = ctx.currentData as Record<string, unknown>;
+      dd.argumentGraph = graph;
+      dd.argumentGraphStatus = "ready";
+      dd.argumentGraphPercent = 100;
+      ctx.currentData = dd;
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "final", targetCardId: cardId,
+        data: dd,
+        generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx),
+        operation: { operationId, stage: "complete", label: `Graph ready (${graph.nodes.length} nodes)`, cancellable: false },
+        timestamp: Date.now(),
+      });
+      persistCard(client.id, capturedConvId, {
+        id: cardId, runId: "", type: "dynamic-ui", role: "assistant",
+        data: dd, generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx), timestamp: Date.now(),
+      });
+    }).catch((err) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      logError("action:argument-graph", `Failed for ${entityId}`, err, { cardId });
+      if (!isStillFocused()) return;
+      const dd = ctx.currentData as Record<string, unknown>;
+      dd.argumentGraphStatus = "error";
+      dd.argumentGraphError = msg;
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "final", targetCardId: cardId,
+        data: dd,
+        generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx),
+        operation: { operationId, stage: "error", label: "Argument graph failed", message: msg, cancellable: false },
+        timestamp: Date.now(),
+      });
+    });
+
+    return;
+  }
+
+  // ── Argument Graph (Variant B — bespoke UI via Claude Code) ──
+  if (action === "generate_argument_graph_bespoke" || action === "regenerate_argument_graph_bespoke") {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const entityId = String(p.entityId ?? "").trim();
+    if (!entityId) { sendOperation("error", "No entity ID"); return; }
+
+    logAction({ ts: Date.now(), type: "action", category: "action:argument-graph-bespoke", message: `generate bespoke graph: ${entityId}`, cardId });
+
+    // Need a structured graph first — generate it if not cached.
+    const { generateArgumentGraph, getArgumentGraph } = await import("../argument-graph.js");
+    let graph = getArgumentGraph(entityId);
+    if (!graph) {
+      sendOperation("processing", "Extracting argument structure first...");
+      try {
+        graph = await generateArgumentGraph({ entityId });
+        const dd0 = ctx.currentData as Record<string, unknown>;
+        dd0.argumentGraph = graph;
+        dd0.argumentGraphStatus = "ready";
+        ctx.currentData = dd0;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        sendOperation("error", `Structured graph prerequisite failed: ${msg}`);
+        return;
+      }
+    }
+
+    sendOperation("processing", "Launching Claude Code for bespoke visualization...");
+    const dd1 = ctx.currentData as Record<string, unknown>;
+    dd1.argumentGraphBespokeStatus = "building";
+    ctx.currentData = dd1;
+    client.send({
+      id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+      state: "delta", targetCardId: cardId,
+      data: dd1,
+      generatedUI: ctx.currentGeneratedUI,
+      cardMode: cardModeFromContext(ctx),
+      timestamp: Date.now(),
+    });
+
+    // Fire and forget — Claude Code session will stream into the card; we
+    // patch the card with the JSX result when it finishes.
+    handleArgumentGraphBuild({
+      entityId,
+      graphJson: JSON.stringify(graph, null, 2),
+      bookTitle: graph.title,
+      bookAuthor: graph.author,
+      cardId,
+      client,
+      account: ctx.account,
+    }).then((jsx) => {
+      const dd = ctx.currentData as Record<string, unknown>;
+      if (jsx) {
+        dd.argumentGraphBespokeUI = jsx;
+        dd.argumentGraphBespokeStatus = "ready";
+      } else {
+        dd.argumentGraphBespokeStatus = "error";
+        dd.argumentGraphBespokeError = "Claude Code build failed — see terminal output";
+      }
+      ctx.currentData = dd;
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "final", targetCardId: cardId,
+        data: dd,
+        generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx),
+        operation: { operationId, stage: jsx ? "complete" : "error", label: jsx ? "Bespoke graph ready" : "Bespoke graph failed", cancellable: false },
+        timestamp: Date.now(),
+      });
+      persistCard(client.id, capturedConvId, {
+        id: cardId, runId: "", type: "dynamic-ui", role: "assistant",
+        data: dd, generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx), timestamp: Date.now(),
+      });
+    });
+
+    return;
+  }
+
+  // ── Author Interview: imagined interview podcast with the author ──
+  if (action === "author_interview" || action === "regenerate_author_interview") {
+    const p = (payload ?? {}) as Record<string, unknown>;
+    const entityId = String(p.entityId ?? "").trim();
+    if (!entityId) { sendOperation("error", "No entity ID"); return; }
+
+    logAction({ ts: Date.now(), type: "action", category: "action:author-interview", message: `author_interview: ${entityId}`, cardId });
+
+    const { getProcessedContent, deleteProcessedContent, generateBookPodcast } = await import("../deep-content.js");
+
+    // Regenerate variant clears cache first then falls through to generation
+    if (action === "regenerate_author_interview") {
+      deleteProcessedContent(entityId, "interview");
+      const dd0 = ctx.currentData as Record<string, unknown>;
+      delete dd0.interviewAudioUrl;
+      delete dd0.interviewScript;
+      delete dd0.interviewDuration;
+      delete dd0.interviewQuestions;
+      dd0.interviewStatus = "processing";
+      dd0.interviewStatusDetail = "Regenerating interview — researching author...";
+      dd0.interviewPercent = 0;
+      ctx.currentData = dd0;
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "delta", targetCardId: cardId,
+        data: dd0,
+        generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx),
+        timestamp: Date.now(),
+      });
+    }
+
+    // Cache check
+    const cached = getProcessedContent(entityId, "interview");
+    if (cached) {
+      const detailData = ctx.currentData as Record<string, unknown>;
+      detailData.interviewAudioUrl = cached.audioUrl;
+      detailData.interviewScript = cached.script;
+      detailData.interviewDuration = cached.durationMinutes;
+      detailData.interviewQuestions = cached.interviewQuestions;
+      detailData.interviewStatus = "ready";
+      ctx.currentData = detailData;
+
+      sendOperation("complete", "Interview loaded from cache");
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "final", targetCardId: cardId,
+        data: detailData,
+        generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx),
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    sendOperation("processing", "Starting author interview pipeline...");
+
+    const { lookupEntity: lookupEntForInterview } = await import("../entity-model.js");
+    const { startJob, subscribe: subscribeJob, awaitJob } = await import("../deep-content-jobs.js");
+    const entity = lookupEntForInterview(entityId);
+    const jobTitle = String(p.title ?? entity?.title ?? entityId);
+
+    const isStillFocused = () => {
+      const cur = ctx.currentData as Record<string, unknown> | undefined;
+      return cur?.focusEntity === entityId;
+    };
+
+    startJob({
+      entityId,
+      variant: "interview",
+      title: jobTitle,
+      entityType: entity?.type,
+      sourceCardId: cardId,
+      run: (onProgress) => generateBookPodcast({ entityId, language: client.language, variant: "interview", onProgress }),
+    });
+
+    const unsubscribe = subscribeJob(entityId, (progress) => {
+      if (!isStillFocused()) return;
+      const detailData = structuredClone(ctx.currentData) as Record<string, unknown>;
+      detailData.interviewStatus = progress.phase;
+      detailData.interviewStatusDetail = progress.detail;
+      detailData.interviewPercent = progress.percentComplete;
+      client.send({
+        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+        state: "delta", targetCardId: cardId,
+        data: detailData,
+        generatedUI: ctx.currentGeneratedUI,
+        cardMode: cardModeFromContext(ctx),
+        timestamp: Date.now(),
+      });
+    }, "interview");
+
+    const jobPromise = awaitJob(entityId, "interview");
+    if (jobPromise) {
+      jobPromise.then((processed) => {
+        unsubscribe();
+        if (!isStillFocused()) {
+          logAction({ ts: Date.now(), type: "action", category: "action:author-interview", message: `Interview complete for ${entityId} (card no longer focused)` });
+          return;
+        }
+        const detailData = ctx.currentData as Record<string, unknown>;
+        detailData.interviewAudioUrl = processed.audioUrl;
+        detailData.interviewScript = processed.script;
+        detailData.interviewDuration = processed.durationMinutes;
+        detailData.interviewQuestions = processed.interviewQuestions;
+        detailData.interviewStatus = "ready";
+        detailData.interviewPercent = 100;
+        ctx.currentData = detailData;
+
+        client.send({
+          id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+          state: "final", targetCardId: cardId,
+          data: detailData,
+          generatedUI: ctx.currentGeneratedUI,
+          cardMode: cardModeFromContext(ctx),
+          operation: { operationId, stage: "complete", label: `Interview ready (${processed.durationMinutes} min)`, cancellable: false },
+          timestamp: Date.now(),
+        });
+
+        persistCard(client.id, capturedConvId, {
+          id: cardId, runId: "", type: "dynamic-ui", role: "assistant",
+          data: detailData, generatedUI: ctx.currentGeneratedUI,
+          cardMode: cardModeFromContext(ctx), timestamp: Date.now(),
+        });
+
+        logAction({ ts: Date.now(), type: "action", category: "action:author-interview", message: `Interview complete for ${entityId}: ${processed.durationMinutes} min` });
+      }).catch((err) => {
+        unsubscribe();
+        const msg = err instanceof Error ? err.message : String(err);
+        logError("action:author-interview", `Interview generation failed for ${entityId}`, err, { cardId });
+        if (!isStillFocused()) return;
+
+        const detailData = ctx.currentData as Record<string, unknown>;
+        detailData.interviewStatus = "error";
+        detailData.interviewError = msg;
+        client.send({
+          id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+          state: "final", targetCardId: cardId,
+          data: detailData,
+          generatedUI: ctx.currentGeneratedUI,
+          cardMode: cardModeFromContext(ctx),
+          operation: { operationId, stage: "error", label: "Interview failed", message: msg, cancellable: false },
+          timestamp: Date.now(),
+        });
+      });
+    }
+
+    return;
+  }
+
   // ── Regenerate Podcast: delete cache and re-generate ──
   if (action === "regenerate_podcast") {
     const p = (payload ?? {}) as Record<string, unknown>;
@@ -1617,74 +2084,104 @@ export async function handlePluginCardAction(params: {
       return;
     }
 
-    // Generate podcast in background (non-blocking for the WS handler)
+    // Generate podcast in background (non-blocking for the WS handler) via
+    // the global job registry so concurrent books don't trample each other.
     sendOperation("processing", "Starting book podcast pipeline...");
 
-    generateBookPodcast({
+    const { startJob, subscribe: subscribeJob, awaitJob } = await import("../deep-content-jobs.js");
+    const entity = lookupEnt(entityId);
+    const jobTitle = String(p.title ?? entity?.title ?? entityId);
+
+    // Only patch this card's UI if it's still focused on THIS entity. If the
+    // user navigated to another book in the same card, drop the update — the
+    // BackgroundTaskBar still reflects global job state.
+    const isStillFocused = () => {
+      const cur = ctx.currentData as Record<string, unknown> | undefined;
+      return cur?.focusEntity === entityId;
+    };
+
+    startJob({
       entityId,
-      language: client.language,
-      onProgress: (progress) => {
-        // Stream progress as delta messages
-        const detailData = structuredClone(ctx.currentData) as Record<string, unknown>;
-        detailData.podcastStatus = progress.phase;
-        detailData.podcastStatusDetail = progress.detail;
-        detailData.podcastPercent = progress.percentComplete;
+      title: jobTitle,
+      entityType: entity?.type,
+      sourceCardId: cardId,
+      run: (onProgress) => generateBookPodcast({ entityId, language: client.language, onProgress }),
+    });
 
-        client.send({
-          id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
-          state: "delta", targetCardId: cardId,
-          data: detailData,
-          generatedUI: ctx.currentGeneratedUI,
-          cardMode: cardModeFromContext(ctx),
-          timestamp: Date.now(),
-        });
-      },
-    }).then((processed) => {
-      // Update card with completed podcast
-      const detailData = ctx.currentData as Record<string, unknown>;
-      detailData.processedBook = processed;
-      detailData.podcastAudioUrl = processed.audioUrl;
-      detailData.podcastScript = processed.script;
-      detailData.podcastDuration = processed.durationMinutes;
-      detailData.podcastStatus = "ready";
-      detailData.podcastPercent = 100;
-      ctx.currentData = detailData;
+    const unsubscribe = subscribeJob(entityId, (progress) => {
+      if (!isStillFocused()) return;
+      const detailData = structuredClone(ctx.currentData) as Record<string, unknown>;
+      detailData.podcastStatus = progress.phase;
+      detailData.podcastStatusDetail = progress.detail;
+      detailData.podcastPercent = progress.percentComplete;
 
       client.send({
         id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
-        state: "final", targetCardId: cardId,
+        state: "delta", targetCardId: cardId,
         data: detailData,
         generatedUI: ctx.currentGeneratedUI,
         cardMode: cardModeFromContext(ctx),
-        operation: { operationId, stage: "complete", label: `Podcast ready (${processed.durationMinutes} min)`, cancellable: false },
-        timestamp: Date.now(),
-      });
-
-      persistCard(client.id, capturedConvId, {
-        id: cardId, runId: "", type: "dynamic-ui", role: "assistant",
-        data: detailData, generatedUI: ctx.currentGeneratedUI,
-        cardMode: cardModeFromContext(ctx), timestamp: Date.now(),
-      });
-
-      logAction({ ts: Date.now(), type: "action", category: "action:book-podcast", message: `Podcast complete for ${entityId}: ${processed.durationMinutes} min` });
-    }).catch((err) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      logError("action:book-podcast", `Podcast generation failed for ${entityId}`, err, { cardId });
-
-      const detailData = ctx.currentData as Record<string, unknown>;
-      detailData.podcastStatus = "error";
-      detailData.podcastError = msg;
-
-      client.send({
-        id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
-        state: "final", targetCardId: cardId,
-        data: detailData,
-        generatedUI: ctx.currentGeneratedUI,
-        cardMode: cardModeFromContext(ctx),
-        operation: { operationId, stage: "error", label: "Podcast failed", message: msg, cancellable: false },
         timestamp: Date.now(),
       });
     });
+
+    const jobPromise = awaitJob(entityId);
+    if (jobPromise) {
+      jobPromise.then((processed) => {
+        unsubscribe();
+        if (!isStillFocused()) {
+          // Card moved on — cache is already persisted by the pipeline, so
+          // re-opening this entity will pick up the processed content.
+          logAction({ ts: Date.now(), type: "action", category: "action:book-podcast", message: `Podcast complete for ${entityId} (card no longer focused)` });
+          return;
+        }
+        const detailData = ctx.currentData as Record<string, unknown>;
+        detailData.processedBook = processed;
+        detailData.podcastAudioUrl = processed.audioUrl;
+        detailData.podcastScript = processed.script;
+        detailData.podcastDuration = processed.durationMinutes;
+        detailData.podcastStatus = "ready";
+        detailData.podcastPercent = 100;
+        ctx.currentData = detailData;
+
+        client.send({
+          id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+          state: "final", targetCardId: cardId,
+          data: detailData,
+          generatedUI: ctx.currentGeneratedUI,
+          cardMode: cardModeFromContext(ctx),
+          operation: { operationId, stage: "complete", label: `Podcast ready (${processed.durationMinutes} min)`, cancellable: false },
+          timestamp: Date.now(),
+        });
+
+        persistCard(client.id, capturedConvId, {
+          id: cardId, runId: "", type: "dynamic-ui", role: "assistant",
+          data: detailData, generatedUI: ctx.currentGeneratedUI,
+          cardMode: cardModeFromContext(ctx), timestamp: Date.now(),
+        });
+
+        logAction({ ts: Date.now(), type: "action", category: "action:book-podcast", message: `Podcast complete for ${entityId}: ${processed.durationMinutes} min` });
+      }).catch((err) => {
+        unsubscribe();
+        const msg = err instanceof Error ? err.message : String(err);
+        logError("action:book-podcast", `Podcast generation failed for ${entityId}`, err, { cardId });
+        if (!isStillFocused()) return;
+
+        const detailData = ctx.currentData as Record<string, unknown>;
+        detailData.podcastStatus = "error";
+        detailData.podcastError = msg;
+
+        client.send({
+          id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+          state: "final", targetCardId: cardId,
+          data: detailData,
+          generatedUI: ctx.currentGeneratedUI,
+          cardMode: cardModeFromContext(ctx),
+          operation: { operationId, stage: "error", label: "Podcast failed", message: msg, cancellable: false },
+          timestamp: Date.now(),
+        });
+      });
+    }
 
     return;
   }

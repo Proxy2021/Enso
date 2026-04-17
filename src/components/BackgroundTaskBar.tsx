@@ -19,17 +19,37 @@ import { TOOL_ID_CLAUDE_CODE } from "../lib/constants";
 type BackgroundTask = {
   cardId: string;
   label: string;
-  type: "claude_code" | "orchestration" | "build" | "deep_research" | "shell";
+  type: "claude_code" | "orchestration" | "build" | "deep_research" | "shell" | "podcast";
   startedAt: number;
+  percent?: number;
+  /** For podcast tasks — lets the pill trigger re-open via apps.run. */
+  entityId?: string;
 };
 
 /** Derive active background tasks from card state. */
 function useBackgroundTasks(): BackgroundTask[] {
-  const { cardOrder, cards } = useChatStore(
-    useShallow((s) => ({ cardOrder: s.cardOrder, cards: s.cards }))
+  const { cardOrder, cards, deepJobs } = useChatStore(
+    useShallow((s) => ({ cardOrder: s.cardOrder, cards: s.cards, deepJobs: s.deepJobs }))
   );
 
   const tasks: BackgroundTask[] = [];
+
+  // Deep-content (podcast) jobs — global, not card-scoped.
+  // Keyed by `${entityId}::${variant}` so discussion + interview pills coexist.
+  for (const key of Object.keys(deepJobs)) {
+    const job = deepJobs[key];
+    if (!job || job.status !== "running") continue;
+    const icon = job.variant === "interview" ? "🎤" : "🎙️";
+    tasks.push({
+      cardId: job.sourceCardId || `deepjob:${key}`,
+      entityId: job.entityId,
+      label: `${icon} ${job.title}`,
+      type: "podcast",
+      startedAt: job.startedAt,
+      percent: job.percent,
+    });
+  }
+
   for (const id of cardOrder) {
     const card = cards[id];
     if (!card || card.status !== "streaming") continue;
@@ -97,6 +117,7 @@ const PILL_COLORS: Record<string, string> = {
   build: "border-amber-500/40 bg-amber-500/10",
   deep_research: "border-cyan-500/40 bg-cyan-500/10",
   shell: "border-green-500/40 bg-green-500/10",
+  podcast: "border-purple-500/40 bg-purple-500/10",
 };
 const DOT_COLORS: Record<string, string> = {
   claude_code: "bg-violet-400",
@@ -104,6 +125,7 @@ const DOT_COLORS: Record<string, string> = {
   build: "bg-amber-400",
   deep_research: "bg-cyan-400",
   shell: "bg-green-400",
+  podcast: "bg-purple-400",
 };
 
 export default function BackgroundTaskBar() {
@@ -125,17 +147,21 @@ export default function BackgroundTaskBar() {
       {tasks.map((task) => {
         void tick;
         const elapsed = Math.floor((now - (task.startedAt ?? now)) / 1000);
+        const handleClick = () => scrollToCard(task.cardId);
         return (
           <button
             key={task.cardId}
-            onClick={() => scrollToCard(task.cardId)}
+            onClick={handleClick}
             className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[11px] transition-all duration-150 hover:brightness-125 active:scale-[0.97] ${PILL_COLORS[task.type] || "border-gray-600/40 bg-gray-800/60"}`}
           >
             <span className="relative flex h-1.5 w-1.5">
               <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-60 ${DOT_COLORS[task.type] || "bg-gray-400"}`} />
               <span className={`relative inline-flex rounded-full h-1.5 w-1.5 ${DOT_COLORS[task.type] || "bg-gray-400"}`} />
             </span>
-            <span className="text-gray-300 font-medium truncate max-w-[120px]">{task.label}</span>
+            <span className="text-gray-300 font-medium truncate max-w-[140px]">{task.label}</span>
+            {typeof task.percent === "number" && task.percent > 0 && (
+              <span className="text-gray-400 tabular-nums">{Math.round(task.percent)}%</span>
+            )}
             <span className="text-gray-500 tabular-nums">{formatElapsed(elapsed)}</span>
           </button>
         );

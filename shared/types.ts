@@ -183,6 +183,8 @@ export interface ServerMessage {
   }>;
   orchestrationPlan?: OrchestrationPlan;
   orchestrationProgress?: OrchestrationProgress;
+  /** Active deep-content (podcast) jobs, keyed by entityId. Broadcast on any change. */
+  deepContentJobs?: DeepContentJob[];
   appSuggestion?: {
     cardId: string;
     category: string;
@@ -481,6 +483,57 @@ export interface OrchestrationProgress {
   taskId?: string;
   error?: string;
   dashboardCardId?: string;
+}
+
+/** Directed graph of a book's claims + dependencies — for the Argument Graph feature. */
+export interface ArgumentGraphNode {
+  id: string;
+  type: "thesis" | "claim" | "assumption" | "evidence" | "counter" | "conclusion";
+  label: string;         // short display text (≤80 chars)
+  description: string;   // full statement
+  chapter?: string;
+}
+
+export interface ArgumentGraphEdge {
+  from: string;
+  to: string;
+  relation: "supports" | "requires" | "exemplifies" | "contradicts" | "weakens" | "concludes";
+  note?: string;
+}
+
+export interface ArgumentGraph {
+  entityId: string;
+  title: string;
+  author: string;
+  generatedAt: string;
+  thesis: string;
+  cruxNodeId: string;
+  nodes: ArgumentGraphNode[];
+  edges: ArgumentGraphEdge[];
+}
+
+/** Live deep-content (podcast) job — one per entity+variant being processed. */
+export interface DeepContentJob {
+  entityId: string;
+  /** Which podcast style this job is generating. */
+  variant: "discussion" | "interview";
+  title: string;
+  entityType?: string;
+  startedAt: number;
+  phase:
+    | "researching"
+    | "generating_outline"
+    | "writing_section"
+    | "rendering_audio"
+    | "stitching"
+    | "complete"
+    | "error";
+  percent: number;
+  detail: string;
+  status: "running" | "complete" | "error";
+  error?: string;
+  /** Card that originally kicked off this job — for pill scroll-to. */
+  sourceCardId?: string;
 }
 
 // ── Card Data Types ──

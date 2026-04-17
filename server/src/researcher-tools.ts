@@ -1,3 +1,6 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import type { EnsoAgentTool } from "./local-types.js";
 import { getDocCollection, type DocMeta } from "./persistence.js";
 import { sendHtmlEmail } from "./email.js";
@@ -251,7 +254,17 @@ function errorResult(message: string): AgentToolResult {
 }
 
 function getBraveApiKey(): string | undefined {
-  return process.env.BRAVE_API_KEY;
+  if (process.env.BRAVE_API_KEY) return process.env.BRAVE_API_KEY;
+  // Fallback: read directly from api-keys.json in case process.env wasn't populated yet
+  try {
+    const keysPath = join(homedir(), ".enso", "api-keys.json");
+    const keys = JSON.parse(readFileSync(keysPath, "utf-8")) as Record<string, string>;
+    if (keys.brave) {
+      process.env.BRAVE_API_KEY = keys.brave; // cache for subsequent calls
+      return keys.brave;
+    }
+  } catch { /* file not found or parse error — fall through */ }
+  return undefined;
 }
 
 async function getGeminiApiKey(): Promise<string | undefined> {

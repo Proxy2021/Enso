@@ -16,6 +16,8 @@ function GeneratedUI({ data, onAction }) {
   var [searchInput, setSearchInput] = React.useState(d.query || "");
   var [sortBy, setSortBy] = React.useState(d.sortBy || "publicationDate");
   var [showTranscript, setShowTranscript] = React.useState(false);
+  var [showInterviewTranscript, setShowInterviewTranscript] = React.useState(false);
+  var [showInterviewQuestions, setShowInterviewQuestions] = React.useState(false);
   var [activeTab, setActiveTab] = React.useState(isDiscover ? "daily" : (d.tab || "all"));
   var [playingVideo, setPlayingVideo] = React.useState(null);
   var [addBookInput, setAddBookInput] = React.useState("");
@@ -61,6 +63,13 @@ function GeneratedUI({ data, onAction }) {
     var podcastDuration = d.podcastDuration;
     var podcastDetail = d.podcastStatusDetail;
     var podcastPercent = d.podcastPercent || 0;
+    var interviewStatus = d.interviewStatus;
+    var interviewAudioUrl = d.interviewAudioUrl;
+    var interviewScript = d.interviewScript;
+    var interviewDuration = d.interviewDuration;
+    var interviewDetail = d.interviewStatusDetail;
+    var interviewPercent = d.interviewPercent || 0;
+    var interviewQuestions = d.interviewQuestions;
 
     return (
       <div style={{ display: "flex", flexDirection: "column", gap: "12px" }}>
@@ -87,6 +96,7 @@ function GeneratedUI({ data, onAction }) {
                 <Badge variant="default">{entity.type}</Badge>
                 <Badge variant="secondary">{entity.source}</Badge>
                 {processed && <Badge variant="default" style={{ background: "#7c3aed" }}>🎙️ {podcastDuration ? podcastDuration + " min" : "Podcast Ready"}</Badge>}
+                {interviewAudioUrl && <Badge variant="default" style={{ background: "#db2777" }}>🎤 {interviewDuration ? interviewDuration + " min" : "Interview Ready"}</Badge>}
               </div>
               {/* Action buttons */}
               <div style={{ display: "flex", gap: "8px", marginTop: "10px", flexWrap: "wrap" }}>
@@ -99,6 +109,11 @@ function GeneratedUI({ data, onAction }) {
                   <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
                     onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
                   >🎙️ Generate Podcast</Button>
+                )}
+                {!interviewAudioUrl && !interviewStatus && (
+                  <Button size="sm" style={{ background: "#db2777", color: "white" }}
+                    onClick={function() { onAction("author_interview", { entityId: entity.entityId || d.focusEntity }); }}
+                  >🎤 Author Interview</Button>
                 )}
                 {podcastAudioUrl && (
                   <Button size="sm" style={{ background: "#7c3aed", color: "white" }}
@@ -260,6 +275,89 @@ function GeneratedUI({ data, onAction }) {
             <div style={{ fontSize: "12px", color: "#ef4444" }}>Podcast generation failed: {d.podcastError || "Unknown error"}</div>
             <Button variant="outline" size="sm" style={{ marginTop: "6px", fontSize: "10px" }}
               onClick={function() { onAction("deep_content", { entityId: entity.entityId || d.focusEntity }); }}
+            >🔄 Retry</Button>
+          </UICard>
+        )}
+
+        {/* Author Interview Player (when ready) */}
+        {interviewAudioUrl && (
+          <UICard style={{ padding: "12px", borderColor: "#db277744" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "8px" }}>
+              <span style={{ fontSize: "16px" }}>🎤</span>
+              <span style={{ fontSize: "13px", fontWeight: 600, color: "#f9a8d4" }}>Imagined Interview with the Author</span>
+              {interviewDuration && <Badge variant="secondary">{interviewDuration} min</Badge>}
+              <div style={{ marginLeft: "auto" }}>
+                <button onClick={function() {
+                  if (confirm("Regenerate this interview? The current one will be replaced.")) {
+                    onAction("regenerate_author_interview", { entityId: entity.entityId || d.focusEntity });
+                  }
+                }}
+                  style={{ background: "none", border: "1px solid #475569", borderRadius: "4px", color: "#94a3b8", fontSize: "11px", cursor: "pointer", padding: "2px 8px" }}
+                  title="Delete cached interview and regenerate"
+                >🔄 Regenerate</button>
+              </div>
+            </div>
+            <audio controls preload="metadata" style={{ width: "100%", height: "36px" }}>
+              <source src={interviewAudioUrl} type={interviewAudioUrl.indexOf(".mp3") >= 0 ? "audio/mpeg" : "audio/wav"} />
+            </audio>
+            {interviewQuestions && interviewQuestions.length > 0 && (
+              <div style={{ marginTop: "8px" }}>
+                <button onClick={function() { setShowInterviewQuestions(!showInterviewQuestions); }}
+                  style={{ background: "none", border: "none", color: "#94a3b8", fontSize: "11px", cursor: "pointer", padding: 0 }}>
+                  {showInterviewQuestions ? "Hide questions ▲" : "Show " + interviewQuestions.length + " questions ▼"}
+                </button>
+                {showInterviewQuestions && (
+                  <ol style={{ marginTop: "6px", paddingLeft: "20px", fontSize: "12px", lineHeight: 1.5, color: "#cbd5e1" }}>
+                    {interviewQuestions.map(function(q, i) {
+                      return <li key={i} style={{ marginBottom: "4px" }}>{q.question}</li>;
+                    })}
+                  </ol>
+                )}
+              </div>
+            )}
+            {interviewScript && (
+              <div style={{ marginTop: "8px" }}>
+                <button onClick={function() { setShowInterviewTranscript(!showInterviewTranscript); }}
+                  style={{ background: "none", border: "none", color: "#94a3b8", fontSize: "11px", cursor: "pointer", padding: 0 }}>
+                  {showInterviewTranscript ? "Hide transcript ▲" : "Show transcript ▼"}
+                </button>
+                {showInterviewTranscript && (
+                  <div style={{ marginTop: "6px", maxHeight: "300px", overflow: "auto", fontSize: "11px", lineHeight: 1.6 }}>
+                    {interviewScript.split("\n").map(function(line, i) {
+                      var hostA = line.match(/^Host A:\s*(.*)/);
+                      var hostB = line.match(/^Host B:\s*(.*)/);
+                      if (hostA) return <div key={i}><span style={{ color: "#22d3ee", fontWeight: 600 }}>Interviewer:</span> {hostA[1]}</div>;
+                      if (hostB) return <div key={i}><span style={{ color: "#fbbf24", fontWeight: 600 }}>Author:</span> {hostB[1]}</div>;
+                      return line.trim() ? <div key={i} style={{ color: "#64748b" }}>{line}</div> : null;
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </UICard>
+        )}
+
+        {/* Interview Generation Progress */}
+        {interviewStatus && interviewStatus !== "ready" && interviewStatus !== "error" && !interviewAudioUrl && (
+          <UICard style={{ padding: "12px", borderColor: "#db277744" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+              <div style={{ width: "14px", height: "14px", border: "2px solid #db2777", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 1s linear infinite" }} />
+              <span style={{ fontSize: "12px", color: "#f9a8d4" }}>{interviewDetail || "Generating author interview..."}</span>
+            </div>
+            {interviewPercent > 0 && (
+              <div style={{ marginTop: "8px", height: "4px", background: "#500724", borderRadius: "2px", overflow: "hidden" }}>
+                <div style={{ height: "100%", background: "#db2777", width: interviewPercent + "%", transition: "width 0.5s" }} />
+              </div>
+            )}
+          </UICard>
+        )}
+
+        {/* Interview Error */}
+        {interviewStatus === "error" && (
+          <UICard style={{ padding: "12px", borderColor: "#ef444444" }}>
+            <div style={{ fontSize: "12px", color: "#ef4444" }}>Interview generation failed: {d.interviewError || "Unknown error"}</div>
+            <Button variant="outline" size="sm" style={{ marginTop: "6px", fontSize: "10px" }}
+              onClick={function() { onAction("author_interview", { entityId: entity.entityId || d.focusEntity }); }}
             >🔄 Retry</Button>
           </UICard>
         )}

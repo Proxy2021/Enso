@@ -3973,6 +3973,20 @@ BEHAVIOR:
       timestamp: Date.now(),
     });
 
+    // Send current deep-content jobs snapshot so BackgroundTaskBar
+    // reflects any in-flight podcast generation on connect/reconnect.
+    import("./deep-content-jobs.js").then(({ listJobs }) => {
+      const snapshot = listJobs();
+      if (snapshot.length > 0) {
+        client.send({
+          id: randomUUID(), runId: randomUUID(), sessionKey: client.sessionKey, seq: 0,
+          state: "delta",
+          deepContentJobs: snapshot,
+          timestamp: Date.now(),
+        });
+      }
+    }).catch(() => {});
+
     // Send resolved bugs notification on reconnect
     try {
       const unackedFixes = getUnacknowledgedFixes();
@@ -4094,6 +4108,24 @@ BEHAVIOR:
       import("./deep-content.js").then(({ convertExistingPodcastsToMp3 }) =>
         convertExistingPodcastsToMp3().catch(() => {})
       ).catch(() => {});
+
+      // Broadcast deep-content job changes to all connected clients so the
+      // BackgroundTaskBar stays in sync across tabs/devices.
+      import("./deep-content-jobs.js").then(({ onJobsChange, listJobs }) => {
+        onJobsChange(() => {
+          const snapshot = listJobs();
+          for (const c of clients.values()) {
+            try {
+              c.send({
+                id: randomUUID(), runId: randomUUID(), sessionKey: c.sessionKey, seq: 0,
+                state: "delta",
+                deepContentJobs: snapshot,
+                timestamp: Date.now(),
+              });
+            } catch { /* client may have disconnected */ }
+          }
+        });
+      }).catch(() => {});
 
       // Start scheduled task scheduler
       import("./scheduled-tasks.js").then(async ({ initScheduler }) => {
