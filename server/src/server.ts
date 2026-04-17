@@ -820,7 +820,7 @@ export async function startEnsoServer(opts: {
         const detailData = await buildEntityDetailData(entityId);
         if (!detailData) { res.json({ error: "Entity not found" }); return; }
 
-        // Check for processed deep content
+        // Check for processed deep content (discussion + interview variants)
         try {
           const { getProcessedContent } = await import("./deep-content.js");
           const processed = getProcessedContent(entityId);
@@ -830,6 +830,24 @@ export async function startEnsoServer(opts: {
             detailData.podcastScript = processed.script;
             detailData.podcastDuration = processed.durationMinutes;
             detailData.podcastStatus = "ready";
+          }
+          const interview = getProcessedContent(entityId, "interview");
+          if (interview) {
+            detailData.interviewAudioUrl = interview.audioUrl;
+            detailData.interviewScript = interview.script;
+            detailData.interviewDuration = interview.durationMinutes;
+            detailData.interviewQuestions = interview.interviewQuestions;
+            detailData.interviewStatus = "ready";
+          }
+        } catch { /* ignore */ }
+
+        // Argument graph
+        try {
+          const { getArgumentGraph } = await import("./argument-graph.js");
+          const graph = getArgumentGraph(entityId);
+          if (graph) {
+            detailData.argumentGraph = graph;
+            detailData.argumentGraphStatus = "ready";
           }
         } catch { /* ignore */ }
 
@@ -942,6 +960,109 @@ export async function startEnsoServer(opts: {
           .catch((err) => {
             deepContentProgress.delete(entityId);
             logError("cortex-action", `Deep content failed for ${entityId}`, err);
+          });
+        return;
+      }
+
+      // ── Author Interview: imagined interview podcast ──
+      if (action === "author_interview" || action === "regenerate_author_interview") {
+        const entityId = String(payload?.entityId ?? "");
+        if (!entityId) { res.json({ error: "No entity ID" }); return; }
+        const progressKey = `${entityId}::interview`;
+
+        const { getProcessedContent, deleteProcessedContent, generateDeepContent: gen } = await import("./deep-content.js");
+        if (action === "regenerate_author_interview") {
+          try { deleteProcessedContent(entityId, "interview"); } catch { /* ignore */ }
+        }
+
+        // Cache check
+        const cached = action !== "regenerate_author_interview" ? getProcessedContent(entityId, "interview") : null;
+        if (cached) {
+          const { buildEntityDetailData: bD } = await import("./entity-model.js");
+          const detailData = await bD(entityId) || {};
+          detailData.interviewAudioUrl = cached.audioUrl;
+          detailData.interviewScript = cached.script;
+          detailData.interviewDuration = cached.durationMinutes;
+          detailData.interviewQuestions = cached.interviewQuestions;
+          detailData.interviewStatus = "ready";
+          detailData.focusEntity = true;
+          detailData.tool = "entity_detail";
+          res.json(detailData);
+          return;
+        }
+
+        // Check if already in progress
+        const existing = deepContentProgress.get(progressKey);
+        if (existing) {
+          res.json({ interviewStatus: "processing", entityId, message: `${existing.phase} ${existing.percentComplete ?? ""}% — ${existing.detail || "Working..."}`, phase: existing.phase, percentComplete: existing.percentComplete });
+          return;
+        }
+        deepContentProgress.set(progressKey, { phase: "starting", startedAt: Date.now() });
+        res.json({ interviewStatus: "processing", entityId, message: `Starting author interview generation — this takes ~5-6 minutes.` });
+
+        gen({
+          entityId,
+          variant: "interview",
+          language: req.body?.language,
+          onProgress: (p) => {
+            deepContentProgress.set(progressKey, { phase: p.phase, detail: p.detail, percentComplete: p.percentComplete, startedAt: deepContentProgress.get(progressKey)?.startedAt || Date.now() });
+          },
+        })
+          .then((processed) => {
+            deepContentProgress.delete(progressKey);
+            logAction({ ts: Date.now(), type: "action", category: "cortex-action", message: `Author interview complete for ${entityId}: ${processed.durationMinutes} min` });
+          })
+          .catch((err) => {
+            deepContentProgress.delete(progressKey);
+            logError("cortex-action", `Author interview failed for ${entityId}`, err);
+          });
+        return;
+      }
+
+      // ── Argument Graph: structured SVG extraction ──
+      if (action === "generate_argument_graph" || action === "regenerate_argument_graph") {
+        const entityId = String(payload?.entityId ?? "");
+        if (!entityId) { res.json({ error: "No entity ID" }); return; }
+        const progressKey = `${entityId}::argument-graph`;
+
+        const { getArgumentGraph, deleteArgumentGraph, generateArgumentGraph } = await import("./argument-graph.js");
+        if (action === "regenerate_argument_graph") {
+          try { deleteArgumentGraph(entityId); } catch { /* ignore */ }
+        }
+
+        const cached = action !== "regenerate_argument_graph" ? getArgumentGraph(entityId) : null;
+        if (cached) {
+          const { buildEntityDetailData: bD } = await import("./entity-model.js");
+          const detailData = await bD(entityId) || {};
+          detailData.argumentGraph = cached;
+          detailData.argumentGraphStatus = "ready";
+          detailData.focusEntity = true;
+          detailData.tool = "entity_detail";
+          res.json(detailData);
+          return;
+        }
+
+        const existing = deepContentProgress.get(progressKey);
+        if (existing) {
+          res.json({ argumentGraphStatus: "processing", entityId, message: `${existing.phase} ${existing.percentComplete ?? ""}% — ${existing.detail || "Working..."}`, phase: existing.phase, percentComplete: existing.percentComplete });
+          return;
+        }
+        deepContentProgress.set(progressKey, { phase: "starting", startedAt: Date.now() });
+        res.json({ argumentGraphStatus: "processing", entityId, message: `Extracting argument structure — ~60 seconds.` });
+
+        generateArgumentGraph({
+          entityId,
+          onProgress: (p) => {
+            deepContentProgress.set(progressKey, { phase: p.phase, detail: p.detail, percentComplete: p.percentComplete, startedAt: deepContentProgress.get(progressKey)?.startedAt || Date.now() });
+          },
+        })
+          .then((graph) => {
+            deepContentProgress.delete(progressKey);
+            logAction({ ts: Date.now(), type: "action", category: "cortex-action", message: `Argument graph ready for ${entityId}: ${graph.nodes.length} nodes, ${graph.edges.length} edges` });
+          })
+          .catch((err) => {
+            deepContentProgress.delete(progressKey);
+            logError("cortex-action", `Argument graph failed for ${entityId}`, err);
           });
         return;
       }
