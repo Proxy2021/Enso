@@ -337,6 +337,31 @@ export async function runClaudeCode(params: {
   // as a "nested session" (e.g. when the gateway was started from Claude Code)
   delete process.env.CLAUDECODE;
 
+  // Build an explicit env for the subprocess. The `delete process.env.CLAUDECODE`
+  // above is not reliably propagated to spawned children in some Node versions —
+  // the SDK copies process.env into the child spawn, and the delete's effect may
+  // not persist across the spawn boundary. Passing an explicit env object with
+  // the nested-session guards stripped is the deterministic fix.
+  // Strip all CLAUDE_* env vars that could confuse the subprocess — nested
+  // session guard (CLAUDECODE), host-IPC bridges (PROVIDER_MANAGED_BY_HOST,
+  // INTERNAL_FC_OVERRIDES), desktop-entrypoint markers (ENTRYPOINT, EXECPATH),
+  // etc. Preserve only the OAuth token for auth. Anything we need we add back
+  // explicitly in the query options env.
+  const spawnEnv: Record<string, string | undefined> = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (k.startsWith("CLAUDE")) continue; // strip ALL CLAUDE_* — add back below
+    spawnEnv[k] = v;
+  }
+  // Preserve auth vars (OAuth token + API key if present)
+  if (process.env.CLAUDE_CODE_OAUTH_TOKEN) spawnEnv.CLAUDE_CODE_OAUTH_TOKEN = process.env.CLAUDE_CODE_OAUTH_TOKEN;
+  if (process.env.ANTHROPIC_API_KEY) spawnEnv.ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+  // Strip empty-string env vars — an empty ANTHROPIC_API_KEY makes the CLI
+  // try API-key auth with an empty key instead of falling back to the OAuth
+  // token, causing an immediate auth failure + exit code 1.
+  for (const k of Object.keys(spawnEnv)) {
+    if (spawnEnv[k] === "") delete spawnEnv[k];
+  }
+
   // Set stream-close timeout BEFORE creating the Query (constructor reads
   // it synchronously).  The SDK default is very short (5s) and Agent/Task
   // tools easily exceed that, causing premature stream termination.
@@ -395,7 +420,7 @@ export async function runClaudeCode(params: {
         },
         ...(effort ? { effort } : {}),
         env: {
-          ...process.env,
+          ...spawnEnv,
           CLAUDE_AUTOCOMPACT_PCT_OVERRIDE: "80",
           ...(isOllama ? {
             ANTHROPIC_BASE_URL: OLLAMA_BASE_URL,

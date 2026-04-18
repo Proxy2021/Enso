@@ -51,7 +51,7 @@ export const DEFAULT_MAX_OUTPUT_TOKENS = 16384;
 
 export const WS_PING_INTERVAL_MS = 30_000;
 export const WS_DISCONNECT_CLEANUP_MS = 600_000;
-export const CLAUDE_HEARTBEAT_TIMEOUT_MS = 600_000;
+export const CLAUDE_HEARTBEAT_TIMEOUT_MS = 1_800_000; // 30 min — long-running Bash (compiling, scheduled-task scripts, ffmpeg) can silence the stream for 10+ minutes
 export const LLM_DEFAULT_TIMEOUT_MS = 60_000;
 export const LLM_FAST_TIMEOUT_MS = 30_000;
 export const LLM_RESEARCH_TIMEOUT_MS = 45_000;
