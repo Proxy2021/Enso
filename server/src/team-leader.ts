@@ -2183,16 +2183,26 @@ async function launchClaudeCodeSession(action: TeamLeaderAction, opts?: { artifa
     const { runClaudeCode } = await import("./claude-code.js");
     const { getAllClients } = await import("./server.js");
 
-    // Use a real connected client so the terminal card is visible to the user.
-    // Override conversationId to a dedicated "tl-tasks" conversation so it doesn't
-    // pollute whatever chat the user is currently in.
+    // If this task is about a focus area with its own conversation, route the
+    // terminal card there so the user sees TL working in context. Otherwise
+    // fall back to the isolated "tl-tasks" conversation.
+    let targetConversationId = "tl-tasks";
+    if (opts?.focusId) {
+      try {
+        const { loadFocusState } = await import("./focus-areas.js");
+        const fs = loadFocusState();
+        const fa = fs?.areas.find(a => a.id === opts.focusId);
+        if (fa?.conversationId) targetConversationId = fa.conversationId;
+      } catch { /* non-critical — fall back to tl-tasks */ }
+    }
+
     const realClients = getAllClients();
     let client: unknown;
     if (realClients.length > 0) {
       // Clone the first real client but override conversationId
       const rc = realClients[0];
       client = Object.create(rc);
-      (client as any).conversationId = "tl-tasks";
+      (client as any).conversationId = targetConversationId;
     } else {
       // No connected clients — fall back to headless noop
       const noop = () => {};
@@ -2202,7 +2212,7 @@ async function launchClaudeCodeSession(action: TeamLeaderAction, opts?: { artifa
         ws: { send: noop, readyState: 1, close: noop, on: noop, off: noop, ping: noop },
         send: noop,
         _disconnectedBuffer: [],
-        conversationId: "tl-tasks",
+        conversationId: targetConversationId,
       };
     }
 
@@ -2277,7 +2287,7 @@ Be thorough but focused. When done, summarize what you changed.`;
         const { loadCardHistory } = await import("./memory-bridge.js");
         const clients = getAllClients();
         const clientId = clients[0]?.id || "team-leader-builder";
-        const history = loadCardHistory(clientId, "tl-tasks", 20);
+        const history = loadCardHistory(clientId, targetConversationId, 20);
         const card = history?.find((c: { id?: string }) => c.id === cardId);
         if (card?.text) {
           // Extract last non-empty, non-marker lines as summary
@@ -2302,6 +2312,21 @@ Be thorough but focused. When done, summarize what you changed.`;
           const { resolveReact } = await import("./reacts.js");
           resolveReact(opts.reactId, `Completed: ${resultSummary.slice(0, 300)}`);
         } catch { /* */ }
+      }
+
+      // If this task was about a focus area, check whether the user's intent
+      // is now concrete enough to propose a sprint. TL emits a proposal card
+      // into the focus conversation; user clicks Launch Sprint to execute.
+      if (opts?.focusId && opts?.fullUserRequest) {
+        try {
+          const { maybeProposeSprintAfterTask } = await import("./focus-sprint-proposal.js");
+          await maybeProposeSprintAfterTask({
+            focusId: opts.focusId,
+            userRequest: opts.fullUserRequest,
+            tlResponse: resultSummary,
+            conversationId: targetConversationId,
+          });
+        } catch (err) { logError("team-leader", "Sprint proposal check failed", err); }
       }
 
       // Check if code was changed and restart may be needed

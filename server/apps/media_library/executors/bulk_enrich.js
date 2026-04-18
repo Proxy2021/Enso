@@ -39,6 +39,32 @@ var kindleCache = loadJSON(kindleCachePath);
 var apiKeys = loadJSON(keysPath) || {};
 
 var tmdbKey = apiKeys.tmdb || process.env.TMDB_API_KEY || "";
+var igdbClientId = apiKeys.igdbClientId || apiKeys.igdb_client_id || process.env.IGDB_CLIENT_ID || "";
+var igdbClientSecret = apiKeys.igdbClientSecret || apiKeys.igdb_client_secret || process.env.IGDB_CLIENT_SECRET || "";
+
+// ── IGDB token cache (per execution) ──
+var igdbAccessToken = null;
+
+async function getIgdbToken() {
+  if (igdbAccessToken) return igdbAccessToken;
+  if (!igdbClientId || !igdbClientSecret) return null;
+  try {
+    var tokenResp = await ctx.fetch(
+      "https://id.twitch.tv/oauth2/token?client_id=" + encodeURIComponent(igdbClientId) +
+      "&client_secret=" + encodeURIComponent(igdbClientSecret) + "&grant_type=client_credentials",
+      { method: "POST" }
+    );
+    if (!tokenResp.ok) return null;
+    var tokenData = tokenResp.data;
+    if (tokenData && tokenData.access_token) {
+      igdbAccessToken = tokenData.access_token;
+      return igdbAccessToken;
+    }
+  } catch (e) {
+    ctx.log("IGDB token error: " + e.message);
+  }
+  return null;
+}
 
 // ── Build lookup maps: title (lowercase) → cache item ──
 var kindleByTitle = {};
@@ -142,7 +168,7 @@ if (action === "status") {
       else apiNeeded++;
     }
 
-    // Estimate time: movies 600ms (2 calls × 300ms), games 1000ms, books 200ms
+    // Estimate time: movies 600ms (2 calls × 300ms), games 1000ms (Steam) or 500ms (IGDB), books 200ms
     var rateMs = (mtype === "game") ? 1000 : (mtype === "book") ? 200 : 600;
     var estMin = Math.round((apiNeeded * rateMs / 60000) * 10) / 10;
 
@@ -174,7 +200,11 @@ if (action === "status") {
     apiStatus: {
       tmdb: { configured: !!tmdbKey },
       steam: { configured: true, note: "No key required" },
-      googleBooks: { configured: true, note: "Free API" }
+      googleBooks: { configured: true, note: "Free API" },
+      igdb: {
+        configured: !!(igdbClientId && igdbClientSecret),
+        note: igdbClientId ? "Twitch OAuth — covers console/non-Steam games" : "Set igdbClientId + igdbClientSecret in api-keys.json"
+      }
     },
     caches: {
       kindle: {
@@ -223,7 +253,13 @@ if (action === "preview") {
         }
       }
     } else {
-      enrichSource = pe.type === "book" ? "google_books" : pe.type === "game" ? "steam_api" : "tmdb";
+      if (pe.type === "book") enrichSource = "google_books";
+      else if (pe.type === "game") {
+        var steamItem = steamByName[pe.title.toLowerCase()];
+        enrichSource = (steamItem && steamItem.appId) ? "steam_api" : (igdbClientId ? "igdb_api" : "steam_api");
+      } else {
+        enrichSource = "tmdb";
+      }
     }
 
     previewItems.push({
@@ -378,9 +414,9 @@ if (action === "enrich") {
         var searchUrl = "https://api.themoviedb.org/3/search/" + searchType + "?api_key=" + tmdbKey + "&query=" + encodeURIComponent(ent2.title);
 
         var searchResp = await ctx.fetch(searchUrl);
-        var searchData = JSON.parse(searchResp);
+        var searchData = searchResp.data;
 
-        if (searchData.results && searchData.results.length > 0) {
+        if (searchData && searchData.results && searchData.results.length > 0) {
           var match = searchData.results[0];
           meta2.tmdbId = match.id; addedFields2.push("tmdbId");
           meta2.overview = match.overview || ""; addedFields2.push("overview");
@@ -396,17 +432,19 @@ if (action === "enrich") {
           try {
             var detailUrl = "https://api.themoviedb.org/3/" + searchType + "/" + match.id + "?api_key=" + tmdbKey + "&append_to_response=credits";
             var detailResp = await ctx.fetch(detailUrl);
-            var detail = JSON.parse(detailResp);
+            var detail = detailResp.data;
 
-            meta2.genres = (detail.genres || []).map(function (g) { return g.name; }); addedFields2.push("genres");
-            meta2.runtime = detail.runtime || null;
-            meta2.imdbId = detail.imdb_id || null;
-            meta2.tagline = detail.tagline || null;
-            meta2.numberOfSeasons = detail.number_of_seasons || null;
+            if (detail) {
+              meta2.genres = (detail.genres || []).map(function (g) { return g.name; }); addedFields2.push("genres");
+              meta2.runtime = detail.runtime || null;
+              meta2.imdbId = detail.imdb_id || null;
+              meta2.tagline = detail.tagline || null;
+              meta2.numberOfSeasons = detail.number_of_seasons || null;
 
-            if (detail.credits) {
-              meta2.cast = (detail.credits.cast || []).slice(0, 8).map(function (c) { return c.name; }); addedFields2.push("cast");
-              meta2.directors = (detail.credits.crew || []).filter(function (c) { return c.job === "Director"; }).map(function (c) { return c.name; }); addedFields2.push("directors");
+              if (detail.credits) {
+                meta2.cast = (detail.credits.cast || []).slice(0, 8).map(function (c) { return c.name; }); addedFields2.push("cast");
+                meta2.directors = (detail.credits.crew || []).filter(function (c) { return c.job === "Director"; }).map(function (c) { return c.name; }); addedFields2.push("directors");
+              }
             }
           } catch (detailErr) {
             ctx.log("TMDB detail fetch failed for " + ent2.title + ": " + detailErr.message);
@@ -437,14 +475,16 @@ if (action === "enrich") {
         // Rate limit: 300ms between TMDB requests
         await new Promise(function (r) { setTimeout(r, 300); });
 
-      // ── Steam Store: Games ──
+      // ── Games: Steam Store (if appId known) or IGDB (fallback) ──
       } else if (ent2.type === "game") {
         var steamItem = steamByName[ent2.title.toLowerCase()];
+
         if (steamItem && steamItem.appId) {
+          // ── Steam Store API ──
           var steamUrl = "https://store.steampowered.com/api/appdetails?appids=" + steamItem.appId;
           var steamResp = await ctx.fetch(steamUrl);
-          var steamData = JSON.parse(steamResp);
-          var steamDetail = steamData[steamItem.appId];
+          var steamRaw = steamResp.data;
+          var steamDetail = steamRaw ? steamRaw[String(steamItem.appId)] : null;
 
           if (steamDetail && steamDetail.success && steamDetail.data) {
             var sd = steamDetail.data;
@@ -455,6 +495,8 @@ if (action === "enrich") {
             meta2.developers = sd.developers || []; addedFields2.push("developers");
             meta2.publishers = sd.publishers || [];
             meta2.releaseDate = sd.release_date ? sd.release_date.date : null;
+            meta2.platforms = ["PC (Steam)"];
+            meta2.steamAppId = steamItem.appId;
             meta2.enrichedAt = Date.now();
             meta2.enrichedBy = "steam_api";
             enrichMethod = "steam_api";
@@ -474,10 +516,71 @@ if (action === "enrich") {
               entityIndex[ent2.entityId].imageUrl = sd.header_image;
             }
           }
-        }
 
-        // Rate limit: 1000ms between Steam requests
-        await new Promise(function (r) { setTimeout(r, 1000); });
+          // Rate limit: 1000ms between Steam requests
+          await new Promise(function (r) { setTimeout(r, 1000); });
+
+        } else if (igdbClientId && igdbClientSecret) {
+          // ── IGDB API (for console/non-Steam games) ──
+          var igdbToken = await getIgdbToken();
+          if (igdbToken) {
+            var igdbBody = 'search "' + ent2.title.replace(/"/g, '\\"') + '"; fields name,summary,cover.url,genres.name,themes.name,rating,rating_count,first_release_date,involved_companies.company.name,involved_companies.developer,platforms.name; limit 1;';
+
+            var igdbResp = await ctx.fetch("https://api.igdb.com/v4/games", {
+              method: "POST",
+              headers: {
+                "Client-ID": igdbClientId,
+                "Authorization": "Bearer " + igdbToken,
+                "Content-Type": "text/plain"
+              },
+              body: igdbBody
+            });
+
+            if (igdbResp.ok && Array.isArray(igdbResp.data) && igdbResp.data.length > 0) {
+              var ig = igdbResp.data[0];
+              meta2.description = ig.summary || ""; addedFields2.push("description");
+              meta2.igdbId = ig.id; addedFields2.push("igdbId");
+
+              if (ig.genres) {
+                meta2.genres = ig.genres.map(function (g) { return g.name; }); addedFields2.push("genres");
+              }
+              if (ig.themes) {
+                meta2.themes = ig.themes.map(function (t) { return t.name; }); addedFields2.push("themes");
+              }
+              if (ig.platforms) {
+                meta2.platforms = ig.platforms.map(function (p) { return p.name; }); addedFields2.push("platforms");
+              }
+              if (ig.rating) {
+                meta2.igdbRating = Math.round(ig.rating * 10) / 10; addedFields2.push("igdbRating");
+              }
+              if (ig.rating_count) meta2.igdbRatingCount = ig.rating_count;
+              if (ig.first_release_date) {
+                meta2.releaseDate = new Date(ig.first_release_date * 1000).toISOString().slice(0, 10); addedFields2.push("releaseDate");
+              }
+
+              // Developer from involved_companies
+              if (ig.involved_companies) {
+                var devs = ig.involved_companies.filter(function (c) { return c.developer; }).map(function (c) { return c.company ? c.company.name : ""; }).filter(Boolean);
+                if (devs.length) { meta2.developers = devs; addedFields2.push("developers"); }
+              }
+
+              // Cover image
+              if (ig.cover && ig.cover.url) {
+                var coverUrl = ig.cover.url.replace("//", "https://").replace("t_thumb", "t_cover_big");
+                entityIndex[ent2.entityId].imageUrl = coverUrl;
+                meta2.coverUrl = coverUrl;
+              }
+
+              meta2.enrichedAt = Date.now();
+              meta2.enrichedBy = "igdb_api";
+              enrichMethod = "igdb_api";
+              success = true;
+            }
+
+            // IGDB rate limit: 4 req/sec — 250ms safe interval
+            await new Promise(function (r) { setTimeout(r, 250); });
+          }
+        }
 
       // ── Google Books: Books ──
       } else if (ent2.type === "book") {
@@ -492,9 +595,9 @@ if (action === "enrich") {
         gbUrl += "&maxResults=1";
 
         var gbResp = await ctx.fetch(gbUrl);
-        var gbData = JSON.parse(gbResp);
+        var gbData = gbResp.data;
 
-        if (gbData.items && gbData.items.length > 0) {
+        if (gbData && gbData.items && gbData.items.length > 0) {
           var vol = gbData.items[0].volumeInfo || {};
           if (vol.description) { meta2.description = vol.description; addedFields2.push("description"); }
           if (vol.pageCount) { meta2.pageCount = vol.pageCount; addedFields2.push("pageCount"); }

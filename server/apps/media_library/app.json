@@ -129,7 +129,7 @@
       },
       {
         "suffix": "rate",
-        "description": "Rate a media entity on a 1-10 scale with optional notes. Use when the user says: 'rate this book', 'give it an 8', 'rate my movie'.",
+        "description": "Rate a media entity on the 10-point half-star scale (1–10, where each point = 0.5★). Returns a starsDisplay like '★★★★½'. Accepts both integer points (1–10) and star notation (e.g. 4.5 stars = 9/10). Use rating=0 to clear. Use when the user says: 'rate this book', 'give it an 8', 'rate my movie', '4.5 stars', 'excellent — 9 out of 10'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,
@@ -721,8 +721,65 @@
         "isPrimary": false
       },
       {
+        "suffix": "nl_search",
+        "description": "Natural language hybrid search using SQLite FTS5 (keyword/BM25) + semantic tag similarity with RRF fusion. Understands concepts, genres, and themes — not just exact keywords. Auto-rebuilds the search index on first use. Actions: search (default), rebuild (sync index), status (index stats). Use when the user says: 'find dystopian books', 'show me space movies', 'search for strategy games', 'find something like Dune', 'natural language search', 'semantic search my library'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "Natural language search query (e.g. 'dystopian sci-fi', 'strategy games with deep narrative', 'mind-bending thrillers')"
+            },
+            "action": {
+              "type": "string",
+              "description": "Action: search (default), rebuild (sync FTS5 index), status (index stats)"
+            },
+            "mediaType": {
+              "type": "string",
+              "description": "Filter by media type: books, movies, tv, documentaries, games, music, articles"
+            },
+            "limit": {
+              "type": "number",
+              "description": "Max results (default: 20, max: 100)"
+            },
+            "expand": {
+              "type": "boolean",
+              "description": "Enable semantic query expansion (default: true)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "query": "dystopian science fiction" },
+        "sampleData": {
+          "tool": "enso_media_library_nl_search",
+          "action": "search",
+          "query": "dystopian science fiction",
+          "expandedTerms": ["dystopian", "science", "fiction", "totalitarian", "surveillance", "post-apocalyptic"],
+          "mediaType": "all",
+          "total": 12,
+          "searchMethod": "hybrid-fts5+semantic-rrf",
+          "results": [
+            {
+              "entityId": "kindle:book:1984",
+              "type": "book",
+              "title": "1984",
+              "semanticTags": ["dystopian", "surveillance", "totalitarianism", "political-fiction"],
+              "userRating": 10,
+              "ratingDisplay": { "points": 10, "stars": 5.0, "display": "★★★★★" },
+              "hybridScore": 0.0312,
+              "ftsScore": 4.2,
+              "semanticSimilarity": 89,
+              "matchReasons": ["keyword", "strong-semantic"]
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "results"],
+        "isPrimary": false
+      },
+      {
         "suffix": "bulk_enrich",
-        "description": "Bulk metadata enrichment orchestrator. Propagates existing cache enrichment to entity index and calls external APIs (TMDB, Steam Store, Google Books) for unenriched entities. Actions: status (show enrichment coverage per type), preview (show entities to be enriched), enrich (execute batch enrichment). Use when the user says: 'enrich my library', 'bulk enrich', 'enrich metadata', 'fill missing metadata', 'enrich movies', 'enrich books'.",
+        "description": "Bulk metadata enrichment orchestrator. Propagates existing cache enrichment to entity index and calls external APIs for unenriched entities: TMDB (movies/TV/documentaries), Google Books (books), Steam Store (Steam games), IGDB via Twitch OAuth (console/non-Steam games). Actions: status (show enrichment coverage per type), preview (show entities to be enriched), enrich (execute batch enrichment). Use when the user says: 'enrich my library', 'bulk enrich', 'enrich metadata', 'fill missing metadata', 'enrich movies', 'enrich books', 'enrich games with IGDB'.",
         "parameters": {
           "type": "object",
           "additionalProperties": false,

@@ -16,8 +16,18 @@ const SessionDashboardCard = lazy(() => import("./SessionDashboardCard"));
 const TodoListCard = lazy(() => import("./TodoListCard"));
 const DailyDigestCard = lazy(() => import("./DailyDigestCard"));
 const TeamLeaderCard = lazy(() => import("./TeamLeaderCard"));
+const SprintProposalCard = lazy(() => import("./SprintProposalCard"));
 
 // Register built-in card types (order matters — first match wins in resolve)
+
+cardRegistry.register({
+  type: "sprint-proposal",
+  renderer: SprintProposalCard,
+  match: (msg) => {
+    const d = msg.data as Record<string, unknown> | undefined;
+    return d?.kind === "sprint-proposal";
+  },
+});
 
 cardRegistry.register({
   type: "daily-digest",
