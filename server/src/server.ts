@@ -1355,6 +1355,60 @@ export async function startEnsoServer(opts: {
     }
   });
 
+  // ── Native Tool Invocation (for Claude Code / scheduled tasks) ──
+  // /api/apps/run only serves dynamic app tools (photo_albums, media_library, etc.).
+  // /api/tools/run serves any tool in the local registry — including native tools
+  // like enso_email_send that are registered via registerLocalTool(). Scheduled
+  // prompt-type tasks running inside Claude Code don't have direct access to
+  // Enso's tool registry, so they need an HTTP surface to invoke these tools.
+  app.post("/api/tools/run", express.json({ limit: "8mb" }), async (req, res) => {
+    try {
+      const toolId = (req.query.tool as string) || (req.body?.tool as string);
+      if (!toolId) { res.status(400).json({ error: "Missing tool parameter" }); return; }
+
+      const { getLocalTool } = await import("./tool-registry-local.js");
+      const tool = getLocalTool(toolId);
+      if (!tool || !tool.execute) {
+        // Fall back to dynamic app tools
+        const { getExecutorBody, isDynamicTool } = await import("./native-tools/registry.js");
+        if (isDynamicTool(toolId)) {
+          const body = getExecutorBody(toolId);
+          if (body) {
+            const { executeToolBody } = await import("./app-persistence.js");
+            const result = await executeToolBody(body, req.body?.params || req.body || {});
+            if (result?.content?.[0]?.text) {
+              try { res.json(JSON.parse(result.content[0].text)); return; } catch { /* fall through */ }
+            }
+            res.json(result || {});
+            return;
+          }
+        }
+        res.status(404).json({ error: `Tool not found: ${toolId}`, tool: toolId });
+        return;
+      }
+
+      // Accept params from either the request body directly or a "params" wrapper.
+      // Strip the "tool" field from body so it doesn't leak into the tool's params.
+      const params = req.body?.params ?? (() => {
+        const { tool: _t, ...rest } = req.body || {};
+        return rest;
+      })();
+
+      // Tool execute signature is (callId: string, params: Record<string, unknown>)
+      const callId = `api-tools-run-${Date.now()}`;
+      const result = await tool.execute(callId, params);
+      // Tools return AgentToolResult { content: [{ type: "text", text: "..." }] }
+      if (result?.content?.[0]?.text) {
+        try { res.json(JSON.parse(result.content[0].text)); return; } catch { /* fall through */ }
+        res.json({ text: result.content[0].text });
+        return;
+      }
+      res.json(result || {});
+    } catch (err) {
+      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+    }
+  });
+
   // ── Podcast Streaming API (for email sharing) ──
   app.get("/api/podcast/stream/:slug", (req, res) => {
     const slug = decodeURIComponent(req.params.slug).replace(/[^\p{L}\p{N}_-]/gu, "");
