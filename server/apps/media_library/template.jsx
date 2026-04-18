@@ -56,6 +56,7 @@ export default function GeneratedUI({ data, onAction }) {
   var isTasteProfile = tool === "enso_media_library_taste_profile";
   var isFranchise = tool === "enso_media_library_franchise";
   var isBulkEnrich = tool === "enso_media_library_bulk_enrich";
+  var isNlSearch = tool === "enso_media_library_nl_search";
 
   // ── Error handling ──
   if (data && data.error) {
@@ -2183,7 +2184,8 @@ export default function GeneratedUI({ data, onAction }) {
         React.createElement("div", { style: { display: "flex", gap: "8px", flexWrap: "wrap", marginBottom: "12px" } },
           React.createElement(Badge, { variant: apis.tmdb && apis.tmdb.configured ? "success" : "danger" }, "TMDB " + (apis.tmdb && apis.tmdb.configured ? "\u2713" : "\u2717")),
           React.createElement(Badge, { variant: "success" }, "Steam \u2713"),
-          React.createElement(Badge, { variant: "success" }, "Google Books \u2713")
+          React.createElement(Badge, { variant: "success" }, "Google Books \u2713"),
+          React.createElement(Badge, { variant: apis.igdb && apis.igdb.configured ? "success" : "warning" }, "IGDB " + (apis.igdb && apis.igdb.configured ? "\u2713" : "! no key"))
         ),
 
         // Cache info
@@ -2210,8 +2212,8 @@ export default function GeneratedUI({ data, onAction }) {
     // ── PREVIEW VIEW ──
     if (enrichAction === "preview") {
       var pItems = data.items || [];
-      var sourceLabels = { cache_propagation: "Cache", google_books: "Google Books", tmdb: "TMDB", steam_api: "Steam" };
-      var sourceColors = { cache_propagation: "info", google_books: "success", tmdb: "purple", steam_api: "warning" };
+      var sourceLabels = { cache_propagation: "Cache", google_books: "Google Books", tmdb: "TMDB", steam_api: "Steam", igdb_api: "IGDB" };
+      var sourceColors = { cache_propagation: "info", google_books: "success", tmdb: "purple", steam_api: "warning", igdb_api: "rose" };
 
       return React.createElement("div", null,
         React.createElement("div", { style: { fontSize: "18px", fontWeight: 700, color: "#f3f4f6", marginBottom: "4px" } }, "Enrichment Preview"),
@@ -2353,11 +2355,194 @@ export default function GeneratedUI({ data, onAction }) {
       React.createElement("div", { style: { padding: "16px", textAlign: "center" } },
         React.createElement(LucideIcons.Database, { size: 32, color: "#3b82f6" }),
         React.createElement("div", { style: { fontSize: "16px", fontWeight: 600, color: "#f3f4f6", marginTop: "8px" } }, "Bulk Enrichment"),
-        React.createElement("div", { style: { fontSize: "13px", color: "#9ca3af", marginTop: "4px" } }, "Enrich your media library with metadata from TMDB, Steam, and Google Books"),
+        React.createElement("div", { style: { fontSize: "13px", color: "#9ca3af", marginTop: "4px" } }, "Enrich your media library with metadata from TMDB, Google Books, IGDB, and Steam"),
         React.createElement("div", { style: { display: "flex", gap: "8px", justifyContent: "center", marginTop: "12px" } },
           React.createElement(Button, { variant: "primary", onClick: function () { onAction("bulk_enrich", { action: "status" }); } }, "Check Status"),
           React.createElement(Button, { variant: "outline", onClick: function () { onAction("bulk_enrich", { action: "enrich", limit: 500 }); } }, "Enrich Now")
         )
+      )
+    );
+  }
+
+  // ══════════════════════════════════════════════
+  // NL SEARCH VIEW
+  // ══════════════════════════════════════════════
+  if (isNlSearch) {
+    var nlAction = data.action || "search";
+
+    // ── STATUS VIEW ──
+    if (nlAction === "status") {
+      var nlCount = data.indexedEntities || 0;
+      var nlLive = data.liveEntities || 0;
+      var nlStale = data.stale || false;
+      var nlTypeCounts = data.typeCounts || {};
+      return React.createElement("div", null,
+        React.createElement("div", { style: { fontSize: "18px", fontWeight: 700, color: "#f3f4f6", marginBottom: "12px", display: "flex", alignItems: "center", gap: "8px" } },
+          React.createElement(LucideIcons.Search, { size: 20 }),
+          "Search Index Status"
+        ),
+        React.createElement(UICard, { accent: nlStale ? "amber" : "emerald", style: { marginBottom: "12px" } },
+          React.createElement("div", { style: { padding: "16px" } },
+            React.createElement("div", { style: { display: "flex", justifyContent: "space-between", marginBottom: "4px" } },
+              React.createElement("span", { style: { fontWeight: 600, color: "#f3f4f6" } }, "FTS5 + Semantic Index"),
+              React.createElement(Badge, { variant: nlStale ? "warning" : "success" }, nlStale ? "Stale" : "Current")
+            ),
+            React.createElement("div", { style: { fontSize: "13px", color: "#9ca3af" } }, nlCount + " indexed / " + nlLive + " live entities"),
+            nlStale ? React.createElement("div", { style: { fontSize: "12px", color: "#f59e0b", marginTop: "4px" } }, data.staleness) : null
+          )
+        ),
+        Object.keys(nlTypeCounts).length > 0
+          ? React.createElement(UICard, { style: { marginBottom: "12px" } },
+              React.createElement("div", { style: { padding: "12px" } },
+                React.createElement("div", { style: { fontWeight: 600, color: "#f3f4f6", marginBottom: "8px", fontSize: "13px" } }, "By Type"),
+                Object.keys(nlTypeCounts).map(function(tKey) {
+                  return React.createElement("div", { key: tKey, style: { display: "flex", justifyContent: "space-between", padding: "3px 0" } },
+                    React.createElement("span", { style: { color: "#d1d5db", fontSize: "13px" } }, tKey),
+                    React.createElement("span", { style: { color: "#9ca3af", fontSize: "13px" } }, nlTypeCounts[tKey])
+                  );
+                })
+              )
+            )
+          : null,
+        React.createElement("div", { style: { display: "flex", gap: "8px" } },
+          React.createElement(Button, { variant: "primary", onClick: function() { onAction("nl_search", { action: "rebuild" }); } }, "Rebuild Index"),
+          React.createElement(Button, { variant: "outline", onClick: function() { onAction("nl_search", { action: "status" }); } }, "Refresh")
+        )
+      );
+    }
+
+    // ── REBUILD VIEW ──
+    if (nlAction === "rebuild") {
+      return React.createElement(UICard, { accent: "emerald" },
+        React.createElement("div", { style: { padding: "16px", textAlign: "center" } },
+          React.createElement(LucideIcons.CheckCircle, { size: 32, color: "#10b981" }),
+          React.createElement("div", { style: { fontSize: "16px", fontWeight: 600, color: "#f3f4f6", marginTop: "8px" } }, "Index Rebuilt"),
+          React.createElement("div", { style: { fontSize: "13px", color: "#9ca3af", marginTop: "4px" } }, (data.indexed || 0) + " entities indexed at " + (data.indexedAt ? new Date(data.indexedAt).toLocaleString() : "now")),
+          React.createElement("div", { style: { display: "flex", gap: "8px", justifyContent: "center", marginTop: "12px" } },
+            React.createElement(Button, { variant: "primary", onClick: function() { onAction("nl_search", { query: "" }); } }, "Search Now"),
+            React.createElement(Button, { variant: "outline", onClick: function() { onAction("nl_search", { action: "status" }); } }, "View Status")
+          )
+        )
+      );
+    }
+
+    // ── SEARCH RESULTS VIEW ──
+    var nlResults = data.results || [];
+    var nlQuery = data.query || "";
+    var nlTotal = data.total || 0;
+    var nlExpandedTerms = data.expandedTerms || [];
+    var nlSearchMethod = data.searchMethod || "hybrid";
+
+    var renderRatingStars = function(rd) {
+      if (!rd) return null;
+      return React.createElement("span", { style: { fontSize: "12px", color: "#f59e0b", marginLeft: "4px" } },
+        rd.display || (rd.stars + "★"),
+        React.createElement("span", { style: { color: "#6b7280", marginLeft: "2px" } }, rd.points + "/10")
+      );
+    };
+
+    var renderMatchBadges = function(reasons) {
+      if (!reasons || !reasons.length) return null;
+      return React.createElement("div", { style: { display: "flex", gap: "3px", marginTop: "2px" } },
+        reasons.indexOf("strong-semantic") !== -1
+          ? React.createElement("span", { style: { fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: "#3b0764", color: "#c4b5fd" } }, "semantic ★")
+          : reasons.indexOf("semantic") !== -1
+            ? React.createElement("span", { style: { fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: "#1e3a5f", color: "#93c5fd" } }, "semantic")
+            : null,
+        reasons.indexOf("keyword") !== -1
+          ? React.createElement("span", { style: { fontSize: "10px", padding: "1px 5px", borderRadius: "3px", background: "#1f2937", color: "#9ca3af" } }, "keyword")
+          : null
+      );
+    };
+
+    if (!nlQuery) {
+      // No query — show search prompt
+      return React.createElement(UICard, { accent: "blue" },
+        React.createElement("div", { style: { padding: "24px", textAlign: "center" } },
+          React.createElement(LucideIcons.Search, { size: 36, color: "#3b82f6" }),
+          React.createElement("div", { style: { fontSize: "16px", fontWeight: 600, color: "#f3f4f6", marginTop: "12px" } }, "Natural Language Search"),
+          React.createElement("div", { style: { fontSize: "13px", color: "#9ca3af", marginTop: "6px", maxWidth: "280px", margin: "8px auto 0" } },
+            "Search using concepts, themes, and genres — not just exact titles. Try: 'dystopian sci-fi', 'strategy games with deep narrative', 'books about evolution'."
+          ),
+          React.createElement("div", { style: { display: "flex", gap: "8px", justifyContent: "center", marginTop: "16px", flexWrap: "wrap" } },
+            React.createElement(Button, { variant: "outline", onClick: function() { onAction("nl_search", { query: "dystopian science fiction" }); } }, "Dystopian Sci-Fi"),
+            React.createElement(Button, { variant: "outline", onClick: function() { onAction("nl_search", { query: "strategy games" }); } }, "Strategy Games"),
+            React.createElement(Button, { variant: "outline", onClick: function() { onAction("nl_search", { query: "books about evolution" }); } }, "Evolution Books")
+          ),
+          React.createElement("div", { style: { marginTop: "16px", display: "flex", gap: "8px", justifyContent: "center" } },
+            React.createElement(Button, { variant: "primary", onClick: function() { onAction("nl_search", { action: "rebuild" }); } }, "Rebuild Index"),
+            React.createElement(Button, { variant: "outline", onClick: function() { onAction("nl_search", { action: "status" }); } }, "Index Status")
+          )
+        )
+      );
+    }
+
+    return React.createElement("div", null,
+      // Header
+      React.createElement("div", { style: { marginBottom: "12px" } },
+        React.createElement("div", { style: { fontSize: "18px", fontWeight: 700, color: "#f3f4f6", display: "flex", alignItems: "center", gap: "8px" } },
+          React.createElement(LucideIcons.Search, { size: 20 }),
+          "\"" + nlQuery + "\""
+        ),
+        React.createElement("div", { style: { fontSize: "13px", color: "#9ca3af", marginTop: "4px" } },
+          nlTotal + " results · " + nlSearchMethod
+        ),
+        nlExpandedTerms.length > 0
+          ? React.createElement("div", { style: { fontSize: "12px", color: "#6b7280", marginTop: "2px" } },
+              "Expanded: " + nlExpandedTerms.slice(0, 8).join(", ")
+            )
+          : null
+      ),
+
+      // Results
+      nlTotal === 0
+        ? React.createElement(UICard, null,
+            React.createElement("div", { style: { padding: "24px", textAlign: "center", color: "#9ca3af" } },
+              "No matches found. Try broader terms or rebuild the index.",
+              React.createElement("div", { style: { marginTop: "12px" } },
+                React.createElement(Button, { variant: "outline", onClick: function() { onAction("nl_search", { action: "rebuild" }); } }, "Rebuild Index")
+              )
+            )
+          )
+        : nlResults.map(function(item, idx) {
+            var semTags = item.semanticTags || [];
+            return React.createElement(UICard, { key: item.entityId || idx, accent: typeColors[item.type] || "blue", style: { marginBottom: "8px" } },
+              React.createElement("div", { style: { display: "flex", gap: "12px", padding: "12px" } },
+                item.imageUrl
+                  ? React.createElement("img", { src: item.imageUrl, style: { width: "44px", height: "60px", objectFit: "cover", borderRadius: "5px", flexShrink: 0 }, alt: "" })
+                  : React.createElement("div", { style: { width: "44px", height: "60px", borderRadius: "5px", background: "#1f2937", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 } },
+                      React.createElement(LucideIcons[typeIcons[item.type] || "FileText"], { size: 18, color: "#6b7280" })
+                    ),
+                React.createElement("div", { style: { flex: 1, minWidth: 0 } },
+                  React.createElement("div", { style: { display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" } },
+                    React.createElement("span", { style: { fontWeight: 600, fontSize: "14px", color: "#f3f4f6", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" } }, item.title),
+                    item.isFavorite ? React.createElement("span", { style: { color: "#ef4444", fontSize: "11px" } }, "\u2764") : null
+                  ),
+                  React.createElement("div", { style: { display: "flex", gap: "5px", alignItems: "center", flexWrap: "wrap", marginBottom: "4px" } },
+                    React.createElement(TypeBadge, { type: item.type }),
+                    item.consumptionStatus ? React.createElement(Badge, { variant: statusVariants[item.consumptionStatus] || "default" }, statusLabels[item.consumptionStatus]) : null,
+                    item.ratingDisplay ? renderRatingStars(item.ratingDisplay) : null
+                  ),
+                  semTags.length > 0
+                    ? React.createElement("div", { style: { display: "flex", gap: "3px", flexWrap: "wrap", marginBottom: "3px" } },
+                        semTags.slice(0, 5).map(function(tag, ti) {
+                          return React.createElement("span", { key: ti, style: { fontSize: "10px", padding: "1px 6px", borderRadius: "3px", background: "#0f2027", color: "#67e8f9", border: "1px solid #164e63" } }, tag);
+                        })
+                      )
+                    : null,
+                  renderMatchBadges(item.matchReasons),
+                  React.createElement("div", { style: { fontSize: "11px", color: "#4b5563", marginTop: "3px" } },
+                    "score: " + (item.hybridScore || 0) + " · sem: " + (item.semanticSimilarity || 0) + "%"
+                  )
+                )
+              )
+            );
+          }),
+
+      // Actions
+      React.createElement("div", { style: { display: "flex", gap: "8px", marginTop: "12px" } },
+        React.createElement(Button, { variant: "outline", onClick: function() { onAction("nl_search", { action: "rebuild" }); } }, "Rebuild Index"),
+        React.createElement(Button, { variant: "outline", onClick: function() { onAction("nl_search", { action: "status" }); } }, "Index Status")
       )
     );
   }

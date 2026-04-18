@@ -642,7 +642,7 @@ Return JSON: {
 }
 
 /** TL handles a react event — reviews and decides action */
-async function handleReactForTL(reactId: string): Promise<void> {
+async function handleReactForTL(reactId: string, retryCount = 0): Promise<void> {
   try {
     const { loadReacts, resolveReact } = await import("./reacts.js");
     const reacts = loadReacts();
@@ -781,7 +781,72 @@ Return JSON only, no markdown: {"decision":"act","reason":"short reason","action
 
     resolveReact(reactId, `TL: ${parsed.decision} — ${parsed.reason}`);
   } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
     logError("agent-event", "TL failed to process react", err);
+
+    const isRetryable = errMsg.includes("429") || errMsg.includes("timeout")
+      || errMsg.includes("500") || errMsg.includes("502") || errMsg.includes("503")
+      || errMsg.includes("fetch failed") || errMsg.includes("ECONNRESET");
+
+    if (isRetryable && retryCount < 2) {
+      // ── Delayed re-queue: try again in 60 seconds ──
+      const nextRetry = retryCount + 1;
+      logAction({ ts: Date.now(), type: "action", category: "agent-event",
+        message: `TL react retry ${nextRetry}/2 scheduled in 60s for react ${reactId}` });
+      setTimeout(() => {
+        handleReactForTL(reactId, nextRetry).catch(e =>
+          logError("agent-event", `TL react retry ${nextRetry} failed`, e));
+      }, 60_000);
+      return;
+    }
+
+    // ── Final failure: apply fallback strategy ──
+    const { loadReacts, resolveReact } = await import("./reacts.js");
+    const reacts = loadReacts();
+    const react = reacts.find((r: { id: string }) => r.id === reactId);
+    if (!react || react.processed) return;
+
+    const proactiveTypes = new Set(["card", "focus", "entity", "sprint", "deliverable", "direct"]);
+    const isProactive = proactiveTypes.has(react.context?.type);
+
+    if (isProactive) {
+      // ── Proactive fallback: user gave direct instruction → execute without LLM triage ──
+      logAction({ ts: Date.now(), type: "action", category: "agent-event",
+        message: `TL react fallback: executing proactive react "${react.text.slice(0, 60)}" without LLM triage` });
+
+      const action: TeamLeaderAction = {
+        id: randomUUID(),
+        priority: "high",
+        type: "platform-feature",
+        title: react.text.slice(0, 80),
+        reasoning: react.text,
+        delegation: "self",
+        estimatedEffort: "15min",
+        autoExecute: true,
+        status: "executing",
+      };
+      launchBuilderTask(action, {
+        reactId,
+        focusId: react.context?.focusId,
+        fullUserRequest: react.text,
+      }).catch(e =>
+        logError("team-leader", `Fallback react execution failed: ${action.title}`, e));
+
+      resolveReact(reactId, `TL: act (fallback) — LLM unavailable, executing direct user instruction`);
+    } else {
+      // ── Non-proactive: acknowledge and notify user ──
+      const { createArtifact } = await import("./agent-artifacts.js");
+      createArtifact({
+        type: "insight",
+        agentId: "tl",
+        agentName: "Team Leader",
+        focusId: react.context?.focusId,
+        title: `Delayed: ${react.text.slice(0, 50)}`,
+        body: `Your feedback was received but couldn't be processed immediately due to a temporary service issue. It will be addressed in the next routine.`,
+        status: "done",
+      });
+      resolveReact(reactId, `TL: acknowledge (fallback) — LLM temporarily unavailable`);
+    }
   }
 }
 
@@ -2183,17 +2248,19 @@ async function launchClaudeCodeSession(action: TeamLeaderAction, opts?: { artifa
     const { runClaudeCode } = await import("./claude-code.js");
     const { getAllClients } = await import("./server.js");
 
-    // If this task is about a focus area with its own conversation, route the
-    // terminal card there so the user sees TL working in context. Otherwise
-    // fall back to the isolated "tl-tasks" conversation.
+    // If this task is about a focus area, route the terminal card into the
+    // focus's conversation so the user sees TL working in context.
+    // If the focus has no conversation yet, create one inline and link it so
+    // future TL work lands in the same thread.
     let targetConversationId = "tl-tasks";
     if (opts?.focusId) {
       try {
-        const { loadFocusState } = await import("./focus-areas.js");
-        const fs = loadFocusState();
-        const fa = fs?.areas.find(a => a.id === opts.focusId);
-        if (fa?.conversationId) targetConversationId = fa.conversationId;
-      } catch { /* non-critical — fall back to tl-tasks */ }
+        const { ensureFocusConversation } = await import("./focus-areas.js");
+        const convId = await ensureFocusConversation(opts.focusId);
+        if (convId) targetConversationId = convId;
+      } catch (err) {
+        logError("team-leader", "Failed to ensure focus conversation", err);
+      }
     }
 
     const realClients = getAllClients();

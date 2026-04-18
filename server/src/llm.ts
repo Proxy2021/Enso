@@ -292,7 +292,10 @@ async function callGeminiWithRetry(
       const isRetryable = msg.includes("timeout") || msg.includes("429") || msg.includes("500") || msg.includes("502") || msg.includes("503") || msg.includes("504") || msg.includes("AbortError") || msg.includes("fetch failed") || msg.includes("ECONNRESET") || msg.includes("ETIMEDOUT") || msg.includes("UND_ERR");
       if (!isRetryable || attempt === maxAttempts) break;
 
-      const delayMs = Math.min(500 * Math.pow(2, attempt - 1), 4000);
+      const is429 = msg.includes("429");
+      const delayMs = is429
+        ? Math.min(5000 * Math.pow(2, attempt - 1), 30000)   // 5s, 10s, 20s for rate limits
+        : Math.min(500 * Math.pow(2, attempt - 1), 4000);     // 500ms, 1s, 2s for other errors
       logAction({ ts: Date.now(), type: "action", category: "llm", message: `Retrying LLM call (${attempt}/${maxAttempts}) in ${delayMs}ms — model=${model}` });
       await new Promise((r) => setTimeout(r, delayMs));
     }

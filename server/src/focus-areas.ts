@@ -1024,6 +1024,68 @@ Be specific — reference actual project names, book titles, and concrete data p
   }
 }
 
+/**
+ * Ensure the focus area has a chat conversation. If it already has one,
+ * return that id. Otherwise create a new conversation on the first connected
+ * client, persist it on the focus area, and sync the entry into every other
+ * connected client's sidebar so the thread appears everywhere.
+ *
+ * This is used before routing TL task output into the focus chat — without
+ * this, TL tasks for focuses that have never been "discussed" would silently
+ * land in the invisible "tl-tasks" fallback.
+ */
+export async function ensureFocusConversation(focusId: string): Promise<string | null> {
+  const state = loadFocusState();
+  if (!state) return null;
+  const area = state.areas.find(a => a.id === focusId);
+  if (!area) return null;
+
+  if (area.conversationId) return area.conversationId;
+
+  // Create a new conversation on the first connected client
+  const { getAllClients } = await import("./server.js");
+  const clients = getAllClients();
+  if (clients.length === 0) return null;
+
+  const { createConversation } = await import("./memory-bridge.js");
+  const primaryClient = clients[0];
+  const conv = createConversation(primaryClient.id, area.title, {
+    type: "focus", sourceId: area.id, label: "Focus",
+  });
+
+  // Save conversation id on the focus area
+  area.conversationId = conv.id;
+  area.updatedAt = new Date().toISOString();
+  saveFocusState(state);
+
+  // Sync the new conversation entry to every other connected client's sidebar
+  // so the thread appears everywhere, not just on the originating client.
+  for (const c of clients) {
+    if (c.id === primaryClient.id) continue;
+    try {
+      const { readFileSync, writeFileSync, existsSync, mkdirSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      const cardsRoot = join(homedir(), ".enso", "cards", c.id);
+      if (!existsSync(cardsRoot)) mkdirSync(cardsRoot, { recursive: true });
+      const indexPath = join(cardsRoot, "conversations.json");
+      let list: Array<{ id: string; title: string; createdAt: number; updatedAt: number; context?: unknown }> = [];
+      try { list = JSON.parse(readFileSync(indexPath, "utf-8")); } catch { list = []; }
+      if (!list.some(e => e.id === conv.id)) {
+        list.push({
+          id: conv.id, title: conv.title, createdAt: conv.createdAt, updatedAt: conv.updatedAt,
+          context: { type: "focus", sourceId: area.id, label: "Focus" },
+        });
+        writeFileSync(indexPath, JSON.stringify(list, null, 2), "utf-8");
+      }
+    } catch { /* best-effort cross-client sync */ }
+  }
+
+  logAction({ ts: Date.now(), type: "action", category: "focus-areas",
+    message: `Created conversation for focus "${area.title}" (${conv.id})` });
+
+  return conv.id;
+}
+
 // ── Focus Evolution (using unified orchestration) ──
 
 /**

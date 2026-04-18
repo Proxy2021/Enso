@@ -151,6 +151,10 @@ Return JSON only, no markdown.`;
 
   const cardId = randomUUID();
   const runId = randomUUID();
+  const text = `**Ready to launch a sprint on "${area.title}"?**\n\n${parsed.scope}`;
+  const timestamp = Date.now();
+
+  const { persistCard } = await import("./memory-bridge.js");
 
   for (const client of clients) {
     const msg: ServerMessage = {
@@ -161,13 +165,29 @@ Return JSON only, no markdown.`;
       state: "final",
       conversationId,
       cardType: "sprint-proposal",
-      text: `**Ready to launch a sprint on "${area.title}"?**\n\n${parsed.scope}`,
+      text,
       data: proposalData,
+      timestamp,
     };
     try {
       client.send(msg);
     } catch (err) {
       logError("sprint-proposal", "Failed to deliver proposal card", err);
+    }
+
+    // Persist to each client's journal so the card survives page reloads.
+    try {
+      persistCard(client.id, conversationId, {
+        id: cardId,
+        runId,
+        type: "sprint-proposal",
+        role: "assistant",
+        text,
+        data: proposalData as unknown,
+        timestamp,
+      });
+    } catch (err) {
+      logError("sprint-proposal", "Failed to persist proposal card", err);
     }
   }
 

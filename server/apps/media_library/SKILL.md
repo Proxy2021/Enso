@@ -33,11 +33,11 @@ Parameters:
 
 ### enso_media_library_rate
 
-Rate a media entity on a 1-10 scale with optional notes. Use when the user says: 'rate this book', 'give it an 8', 'rate my movie'.
+Rate a media entity on the 10-point half-star scale (1–10 integer, where 2 points = 1 star). Accepts both integer points (1–10) and star notation (e.g. 4.5 stars = 9/10). Returns a `starsDisplay` like "★★★★½". Use rating=0 to clear. Use when the user says: 'rate this book', 'give it an 8', '4.5 stars', '9 out of 10'.
 
 Parameters:
 - `entityId` (string): The entity ID to rate
-- `rating` (number): Rating from 1-10 (0 to clear)
+- `rating` (number): Rating 1–10 (0 to clear); or star notation 0.5–5.0
 - `notes` (string): Optional notes about the rating
 
 ### enso_media_library_status
@@ -93,3 +93,93 @@ AI-powered cross-media discovery suggestions based on your ratings, favorites, a
 Parameters:
 - `mediaType` (string): Limit suggestions to a media type (optional)
 - `limit` (number): Max suggestions per category (default: 5)
+
+### enso_media_library_nl_search
+
+Natural language hybrid search using SQLite FTS5 (keyword/BM25) + semantic tag similarity with RRF fusion. Understands concepts, genres, and themes — not just exact keywords. Auto-rebuilds the search index on first use. Use when the user says: 'find dystopian books', 'show me space movies', 'search for strategy games', 'find something like Dune', 'semantic search my library'.
+
+Parameters:
+- `query` (string): Natural language search query (e.g. 'dystopian sci-fi', 'mind-bending thrillers')
+- `action` (string): Action: search (default), rebuild (sync FTS5 index), status (index stats)
+- `mediaType` (string): Filter by media type: books, movies, tv, documentaries, games, music
+- `limit` (number): Max results (default: 20, max: 100)
+- `expand` (boolean): Enable semantic query expansion (default: true)
+
+### enso_media_library_bulk_enrich
+
+Bulk metadata enrichment orchestrator. Propagates cache enrichment to entity index and calls external APIs: TMDB (movies/TV/documentaries), Google Books (books), Steam Store (Steam games), IGDB via Twitch OAuth (console/non-Steam games). Use when the user says: 'enrich my library', 'bulk enrich', 'fill missing metadata', 'enrich movies with TMDB', 'enrich games with IGDB'.
+
+Parameters:
+- `action` (string): Action: status (show coverage), preview (dry run), enrich (execute)
+- `mediaType` (string): Filter: all, books, movies, tv, games (default: all)
+- `limit` (number): Max entities to API-enrich per run (default: 50)
+
+### enso_media_library_batch_seed
+
+Batch auto-seed engagement data (ratings, favorites, consumption status) from existing metadata in wiki pages. Converts Amazon stars, TMDB scores, and Metacritic ratings to the 1-10 user rating scale. Use when the user says: 'seed my ratings', 'auto-populate ratings', 'bootstrap engagement data'.
+
+Parameters:
+- `action` (string): Action: preview (dry run), seed (apply), status (show coverage)
+- `skipExisting` (boolean): Skip entities that already have a user rating (default: true)
+
+### enso_media_library_dashboard
+
+Library health dashboard showing engagement coverage, discovery readiness, and an Engagement Health Score (0-100). Shows per-type breakdowns, gap alerts, and quick actions. Use when the user says: 'show library health', 'dashboard', 'library overview', 'engagement stats'.
+
+### enso_media_library_stats
+
+Cross-media statistics and insights. Shows totals by type, rating distributions, completion rates, top-rated items. Use when the user says: 'show my library stats', 'how many books have I read', 'media statistics'.
+
+Parameters:
+- `mediaType` (string): Limit stats to a specific media type (optional)
+
+### enso_media_library_timeline
+
+View media consumption timeline — started, completed, rated, favorited events over time grouped by month. Use when the user says: 'show my timeline', 'media consumption history', 'what did I read this month'.
+
+Parameters:
+- `period` (string): Time period: week, month, quarter, year, all (default: all)
+- `mediaType` (string): Filter by media type
+
+### enso_media_library_taste_profile
+
+Analyze consumption patterns and generate a persistent taste profile: genre affinities, media preferences, cross-media connections, and a natural-language taste DNA summary. Use when the user says: 'show my taste profile', 'analyze my taste', 'what do I like'.
+
+Parameters:
+- `refresh` (boolean): Force regeneration (default: false)
+
+### enso_media_library_smart_collections
+
+Auto-generate thematic smart collections from semantic tag clusters. Actions: generate (propose collections), apply (save a proposal), refresh (update existing), list. Use when the user says: 'generate smart collections', 'auto-organize my library', 'find themes in my media'.
+
+Parameters:
+- `action` (string): Action: generate, apply, refresh, list
+- `proposalId` (string): Proposal ID to apply
+
+### enso_media_library_franchise
+
+Detect and manage franchise/series groupings across books, movies, TV, and games. Actions: detect, list, view, merge. Use when the user says: 'find franchises', 'group related media', 'show series', 'what franchise is this part of'.
+
+Parameters:
+- `action` (string): Action: detect, list, view, merge
+- `franchiseId` (string): Franchise ID (for view/merge)
+- `entityId` (string): Entity ID to look up or merge
+
+## Rating Scale
+
+The media library uses a **10-point half-star scale** (1–10 integer) that displays as familiar 0.5–5.0 stars:
+
+| Points | Stars | Label |
+|--------|-------|-------|
+| 10 | ★★★★★ | Masterpiece |
+| 9 | ★★★★½ | Excellent |
+| 8 | ★★★★ | Very Good |
+| 7 | ★★★½ | Good |
+| 6 | ★★★ | Above Average |
+| 5 | ★★½ | Average |
+| 4 | ★★ | Below Average |
+| 3 | ★½ | Poor |
+| 2 | ★ | Very Poor |
+| 1 | ½ | Terrible |
+
+Both integer (8) and star notation (4.0 stars = 8) are accepted. Use rating=0 to clear.
