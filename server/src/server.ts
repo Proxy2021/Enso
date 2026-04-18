@@ -2875,6 +2875,17 @@ BEHAVIOR:
     }
   });
 
+  // Full-briefing landing page — linked from "View full briefing online →" in
+  // briefing emails. Re-renders the exact email HTML + a reply form.
+  app.get("/briefing/:notificationId", async (req, res) => {
+    try {
+      const { buildBriefingPage } = await import("./reacts.js");
+      res.type("html").send(buildBriefingPage(req.params.notificationId));
+    } catch (err: any) {
+      res.status(500).send("Error loading briefing page");
+    }
+  });
+
   // ── Team Leader API ──
 
   app.get("/api/team-leader/config", async (_req, res) => {

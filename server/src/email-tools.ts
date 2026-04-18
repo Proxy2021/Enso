@@ -176,5 +176,83 @@ export function createEmailTools(): EnsoAgentTool[] {
         }
       },
     } as EnsoAgentTool,
+
+    // ── enso_briefing_send — the canonical way to deliver notification emails ──
+    // Wraps enso_email_send with the full Enso notification pattern:
+    //   • registers the notification (tracked UUID)
+    //   • appends Approve / Defer / Reply action buttons
+    //   • appends "View full briefing online →" link to /briefing/<id>
+    //   • persists the HTML so the landing page can re-render it
+    // Use this for any recurring or scheduled notification email (daily briefings,
+    // sprint results, FactorStrategies signal, book recommendations, etc.).
+    {
+      name: "enso_briefing_send",
+      label: "Send Briefing Email",
+      description:
+        "Send a briefing-style email with Enso's full notification pattern: registered notificationId, react action buttons (Approve/Defer/Reply), and a landing-page link at /briefing/<id> where the user can view the full briefing online and reply. Use this instead of enso_email_send for any recurring notification, scheduled-task briefing, or async update that the user may want to react to. Requires SMTP_EMAIL and SMTP_PASSWORD.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          to: { type: "string", description: "Recipient email address(es), comma-separated for multiple" },
+          subject: { type: "string", description: "Email subject line — should be distinctive per-day (e.g. 'FactorStrategies Daily — 2026-04-18 Saturday')" },
+          body: { type: "string", description: "HTML body of the briefing. Action buttons + 'View online' link are appended automatically — do NOT include them yourself." },
+          notificationType: {
+            type: "string",
+            description: "Category of this notification — used for react routing and analytics",
+            enum: ["briefing", "pulse", "sprint-complete", "alert", "checkin", "discovery", "factor-strategies", "book-recommendation", "youtube-daily", "focus-progress"],
+          },
+          summary: { type: "string", description: "Short one-line summary of what the briefing contains (shown on the landing page header and in react context)" },
+          focusId: { type: "string", description: "Optional focus area ID if this briefing is about a specific focus" },
+          cc: { type: "string", description: "CC recipient(s), comma-separated" },
+          bcc: { type: "string", description: "BCC recipient(s), comma-separated" },
+        },
+        required: ["to", "subject", "body", "notificationType", "summary"],
+      },
+      isPrimary: false,
+      execute: async (_callId: string, params: Record<string, unknown>) => {
+        const to = String(params.to ?? "").trim();
+        const subject = String(params.subject ?? "").trim();
+        const body = String(params.body ?? "");
+        const notificationType = String(params.notificationType ?? "briefing") as
+          | "briefing" | "pulse" | "sprint-complete" | "alert" | "checkin" | "discovery"
+          | "factor-strategies" | "book-recommendation" | "youtube-daily" | "focus-progress";
+        const summary = String(params.summary ?? "").slice(0, 200);
+        const focusId = params.focusId ? String(params.focusId) : undefined;
+
+        if (!to) return { content: [{ type: "text", text: "[ERROR] No recipient specified (to)" }] };
+        if (!subject) return { content: [{ type: "text", text: "[ERROR] No subject specified" }] };
+        if (!body) return { content: [{ type: "text", text: "[ERROR] No body specified" }] };
+        if (!summary) return { content: [{ type: "text", text: "[ERROR] summary is required — used for react context + landing page header" }] };
+
+        try {
+          const { sendBriefingEmail } = await import("./email.js");
+          const result = await sendBriefingEmail({
+            to,
+            subject,
+            html: body,
+            notification: { type: notificationType, summary, focusId },
+          });
+
+          if (!result.success) {
+            return { content: [{ type: "text", text: `[ERROR] ${result.message}` }] };
+          }
+
+          return { content: [{ type: "text", text: JSON.stringify({
+            tool: "enso_briefing_send",
+            success: true,
+            to,
+            subject,
+            notificationId: result.notificationId,
+            briefingUrl: result.briefingUrl,
+            message: `Briefing sent to ${to} — viewable at ${result.briefingUrl}`,
+          }, null, 2) }] };
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          logError("email", `Failed to send briefing to ${to}`, err);
+          return { content: [{ type: "text", text: `[ERROR] Failed to send briefing: ${message}` }] };
+        }
+      },
+    } as EnsoAgentTool,
   ];
 }

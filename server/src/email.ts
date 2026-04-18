@@ -21,6 +21,10 @@ export interface SendHtmlEmailParams {
 export interface SendEmailResult {
   success: boolean;
   message: string;
+  /** notificationId if the email was sent via sendBriefingEmail() */
+  notificationId?: string;
+  /** Landing page URL for the briefing (if notification was registered) */
+  briefingUrl?: string;
 }
 
 // ── Transporter (lazy, reused) ──
@@ -89,4 +93,70 @@ export async function sendHtmlEmail(params: SendHtmlEmailParams): Promise<SendEm
   }
 
   return { success: false, message: "Email send failed after retries" };
+}
+
+// ── Unified Briefing Send (with react buttons + landing page) ──
+
+import type { NotificationContext } from "./reacts.js";
+
+export interface SendBriefingEmailParams {
+  to: string;
+  subject: string;
+  /** Body HTML — react buttons + "View online →" link are appended automatically */
+  html: string;
+  textFallback?: string;
+  /** Notification context — what this email is about (for react tracking) */
+  notification: Pick<NotificationContext, "type" | "summary" | "focusId" | "actionId">;
+}
+
+/**
+ * Send a briefing-style email with the full Enso notification pattern:
+ *   1. Registers the notification (gets a tracked notificationId)
+ *   2. Appends react action buttons (Approve / Defer / Reply)
+ *   3. Appends a "View full briefing online →" link to /briefing/<id>
+ *   4. Sends via Gmail SMTP
+ *   5. Stashes the full HTML in the notification context so the landing page
+ *      can re-render the briefing for the user.
+ *
+ * This is the canonical way to deliver any notification email in Enso — use
+ * it for daily briefings, sprint results, task summaries, etc.
+ */
+export async function sendBriefingEmail(params: SendBriefingEmailParams): Promise<SendEmailResult> {
+  // Lazy-import to avoid circular deps (reacts.ts also imports from email via other paths).
+  const { registerNotification, emailReactActions, storeBriefingHtml } = await import("./reacts.js");
+  const { getEnsoUrl } = await import("./shareable-pages.js");
+
+  const baseUrl = getEnsoUrl();
+
+  const notificationId = registerNotification(
+    { ...params.notification },
+    { isEmail: true },
+  );
+
+  const reactHtml = emailReactActions(notificationId, baseUrl);
+  const viewOnlineHtml = `<div style="margin-top:12px;text-align:center;">
+    <a href="${baseUrl}/briefing/${notificationId}"
+       style="display:inline-block;background:#4c1d95;color:#c4b5fd;padding:10px 24px;border-radius:8px;text-decoration:none;font-size:13px;font-weight:500;">
+      View full briefing online →
+    </a>
+  </div>`;
+
+  const htmlWithActions = params.html + viewOnlineHtml + reactHtml;
+
+  // Persist the full HTML on the notification context so /briefing/<id> can
+  // re-render the exact email the user received.
+  storeBriefingHtml(notificationId, htmlWithActions, params.subject);
+
+  const result = await sendHtmlEmail({
+    to: params.to,
+    subject: params.subject,
+    html: htmlWithActions,
+    textFallback: params.textFallback,
+  });
+
+  return {
+    ...result,
+    notificationId,
+    briefingUrl: `${baseUrl}/briefing/${notificationId}`,
+  };
 }

@@ -439,6 +439,12 @@ export function getNotifyEmail(): string {
   return process.env.ENSO_NOTIFY_EMAIL || process.env.SMTP_EMAIL || "";
 }
 
+/** Canonical external URL for this Enso instance (used in email links, react pages, etc.). */
+export function getEnsoUrl(): string {
+  const name = process.env.ENSO_MACHINE_NAME || hostname();
+  return process.env.ENSO_TUNNEL_URL || `https://${name}.enso.net`;
+}
+
 // ── Share Helper ─────────────────────────────────────────────────────────────
 
 /**

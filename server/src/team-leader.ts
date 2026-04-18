@@ -1288,17 +1288,8 @@ Rules:
     wechatMessage: string;
   };
 
-  // Register notification context for react tracking
-  let notificationId = "";
-  try {
-    const { registerNotification } = await import("./reacts.js");
-    notificationId = registerNotification(
-      { type: "briefing", summary: parsed.headline },
-      { isEmail: true },
-    );
-  } catch { /* reacts system not critical */ }
-
-  // Build HTML email
+  // Build HTML email (notificationId is assigned at send time by sendBriefingEmail —
+  // we no longer pre-register here since the unified briefing sender handles that)
   const sectionHtml = parsed.sections.map(s => {
     const itemsHtml = s.items.map(item =>
       `<div style="padding:8px 0;border-bottom:1px solid #1f2937;font-size:14px;color:#d1d5db;">${item}</div>`
@@ -1357,18 +1348,20 @@ export async function deliverBriefing(briefing: DailyBriefing): Promise<string[]
     }
   }
 
-  // Email
+  // Email — via the unified briefing sender so the recipient gets react
+  // action buttons + a /briefing/<id> landing page link.
   if (config.channels.email) {
     try {
       const { getNotifyEmail } = await import("./shareable-pages.js");
       const email = getNotifyEmail();
       if (email) {
-        const { sendHtmlEmail } = await import("./email.js");
-        const result = await sendHtmlEmail({
+        const { sendBriefingEmail } = await import("./email.js");
+        const result = await sendBriefingEmail({
           to: email,
           subject: `📋 Enso Daily — ${briefing.headline}`,
           html: briefing.htmlEmail,
           textFallback: briefing.textSummary,
+          notification: { type: "briefing", summary: briefing.headline },
         });
         if (result.success) delivered.push("email");
       }

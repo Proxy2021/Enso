@@ -22,7 +22,7 @@ import { logAction, logError } from "./action-log.js";
 
 export interface NotificationContext {
   /** What type of notification this was */
-  type: "briefing" | "pulse" | "sprint-complete" | "alert" | "checkin" | "discovery" | "card" | "focus" | "entity" | "sprint" | "deliverable" | "direct";
+  type: "briefing" | "pulse" | "sprint-complete" | "alert" | "checkin" | "discovery" | "card" | "focus" | "entity" | "sprint" | "deliverable" | "direct" | "factor-strategies" | "book-recommendation" | "youtube-daily" | "focus-progress";
   /** Unique ID for the notification instance */
   notificationId: string;
   /** Which focus area this relates to (if any) */
@@ -33,6 +33,10 @@ export interface NotificationContext {
   summary: string;
   /** When the notification was sent */
   sentAt: string;
+  /** Full briefing HTML for landing page re-rendering. Optional. */
+  briefingHtml?: string;
+  /** Short subject line of the email (e.g. "FactorStrategies Daily — 2026-04-18 Saturday") */
+  subject?: string;
 }
 
 export interface React {
@@ -151,6 +155,20 @@ export function registerNotification(context: Omit<NotificationContext, "notific
 export function getNotificationContext(notificationId: string): NotificationContext | null {
   const reg = loadContextRegistry();
   return reg.contexts[notificationId] ?? null;
+}
+
+/**
+ * Attach the full briefing HTML (and optional updated subject) to an already-
+ * registered notification. Called after send so the /briefing/<id> landing
+ * page can re-render the exact email the user received.
+ */
+export function storeBriefingHtml(notificationId: string, briefingHtml: string, subject?: string): void {
+  const reg = loadContextRegistry();
+  const ctx = reg.contexts[notificationId];
+  if (!ctx) return;
+  ctx.briefingHtml = briefingHtml;
+  if (subject) ctx.subject = subject;
+  saveContextRegistry(reg);
 }
 
 /**
@@ -312,6 +330,77 @@ export function emailReactActions(notificationId: string, baseUrl: string): stri
  */
 export function wechatReactPrompt(): string {
   return "\n\n Reply to this message with any thoughts or instructions.";
+}
+
+/**
+ * Build the HTML for the /briefing/<notificationId> landing page.
+ * Re-renders the full briefing email inline + a react section at the bottom.
+ * This is the "full version" link target from briefing email footers.
+ */
+export function buildBriefingPage(notificationId: string): string {
+  const context = getNotificationContext(notificationId);
+  if (!context) {
+    return `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Enso — Briefing</title>
+<style>body{background:#0f172a;color:#f1f5f9;font-family:-apple-system,sans-serif;padding:40px 20px;margin:0;text-align:center}</style>
+</head><body><h1 style="font-size:20px">Briefing not found</h1>
+<p style="color:#9ca3af">This notification may have expired (briefings are kept for 7 days).</p>
+</body></html>`;
+  }
+
+  const briefingHtml = context.briefingHtml || `<p style="color:#9ca3af">Briefing body not preserved for this notification.</p>`;
+  const subject = context.subject || `Enso Briefing (${context.type})`;
+  const sentAt = new Date(context.sentAt).toLocaleString();
+
+  return `<!DOCTYPE html>
+<html><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${subject.replace(/[<>"]/g, "")}</title>
+<style>
+  body { background:#0a0a1a; color:#f1f5f9; font-family:-apple-system,Segoe UI,sans-serif; margin:0; padding:0; }
+  .wrap { max-width:720px; margin:0 auto; padding:24px 16px 80px; }
+  .meta { color:#6b7280; font-size:12px; text-transform:uppercase; letter-spacing:1px; margin:0 0 8px; }
+  .subject { font-size:22px; margin:0 0 20px; }
+  .briefing { background:#141428; border-radius:12px; padding:8px; }
+  .react-form { margin-top:32px; background:#1e293b; border-radius:12px; padding:24px; }
+  .react-form h3 { font-size:16px; margin:0 0 12px; }
+  textarea { width:100%; min-height:100px; background:#0f172a; border:1px solid #334155; border-radius:8px; color:#f1f5f9; padding:12px; font-size:14px; resize:vertical; box-sizing:border-box; margin:0 0 12px; font-family:inherit; }
+  textarea:focus { outline:none; border-color:#7c3aed; }
+  button { background:#7c3aed; color:#fff; border:none; padding:10px 24px; border-radius:8px; font-size:14px; cursor:pointer; }
+  button:hover { background:#6d28d9; }
+  .ok { color:#10b981; padding:20px 0; text-align:center; }
+</style>
+</head><body>
+<div class="wrap">
+  <p class="meta">Re: ${context.type} · sent ${sentAt}</p>
+  <h1 class="subject">${subject}</h1>
+  <div class="briefing">${briefingHtml}</div>
+  <div class="react-form" id="react">
+    <h3>Send a reply to Team Leader</h3>
+    <p style="color:#9ca3af;font-size:13px;margin:0 0 12px">Your reply gets queued and processed on the next TL check-in.</p>
+    <form id="form">
+      <textarea name="text" placeholder="Thoughts, follow-up instructions, or context..." autofocus></textarea>
+      <button type="submit">Send</button>
+    </form>
+  </div>
+</div>
+<script>
+document.getElementById('form').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const text = this.querySelector('textarea').value.trim();
+  if (!text) return;
+  try {
+    const res = await fetch('/api/reacts/web', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notificationId: '${notificationId}', text }),
+    });
+    if (res.ok) {
+      document.getElementById('react').innerHTML = '<div class="ok"><h3 style="color:#10b981;margin:0 0 4px">Received</h3><p style="color:#9ca3af;margin:0">Your reply was queued for the Team Leader.</p></div>';
+    } else { alert('Failed to send. Please try again.'); }
+  } catch(err) { alert('Failed to send. Please try again.'); }
+});
+</script>
+</body></html>`;
 }
 
 /**

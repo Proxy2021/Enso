@@ -404,13 +404,19 @@ export async function deliverSprintResults(
     </div>
   </div>`;
 
-  // Email
+  // Email — use unified briefing sender so react buttons + landing page are included
   try {
     const { getNotifyEmail } = await import("./shareable-pages.js");
     const email = getNotifyEmail();
     if (email) {
-      const { sendHtmlEmail } = await import("./email.js");
-      await sendHtmlEmail({ to: email, subject: `✅ Sprint complete: ${focusTitle}`, html, textFallback: text });
+      const { sendBriefingEmail } = await import("./email.js");
+      await sendBriefingEmail({
+        to: email,
+        subject: `✅ Sprint complete: ${focusTitle}`,
+        html,
+        textFallback: text,
+        notification: { type: "sprint-complete", summary: `Sprint complete: ${focusTitle}`, focusId },
+      });
       logAction({ ts: Date.now(), type: "action", category: "focus-agent", message: `Sprint results emailed for "${focusTitle}"` });
     }
   } catch (err) { logError("focus-agent", "Email sprint delivery failed", err); }
