@@ -30,7 +30,7 @@ export type EntityId = string;
 /** All recognized entity types */
 export type EntityType =
   | "book" | "game" | "movie" | "tv-series" | "documentary"
-  | "album" | "photo"
+  | "album" | "photo" | "photo-album"
   | "song" | "playlist" | "artist"
   | "channel" | "video"
   | "project"
@@ -126,6 +126,13 @@ export const ENTITY_TYPES: Record<string, EntityTypeDef> = {
     canContain: ["photo"],
     detailFields: ["photoCount", "dateRange", "cameras", "extensions"],
     appFamily: "photo_library",
+  },
+  "photo-album": {
+    sources: ["research", "manual", "cortex"],
+    cortexPrefix: "entities/album-",
+    canContain: ["photo"],
+    detailFields: ["photographer", "kind", "yearPublished", "publisher", "plateCount", "style", "themes", "description"],
+    appFamily: "photo_albums",
   },
   "photo": {
     sources: ["photos"],
@@ -425,6 +432,7 @@ const CACHE_FILES: Record<string, string> = {
   steam: "steam-games.json",
   movies_tv: "movies-tv.json",
   photos: "photo-library.json",
+  photo_albums: "photo-albums.json",
   qq_music: "qq-music.json",
   youtube: "youtube-data.json",
   twitter: "twitter-following.json",
@@ -542,6 +550,46 @@ function extractPhotoEntities(cached: unknown): EntityIndexEntry[] {
   });
 }
 
+/**
+ * Extract EntityRefs from the curated Photo Albums cache.
+ * The cache is written by the photo_albums app (seed_external / curate_personal).
+ * Each album is a first-class entity with its own Cortex page.
+ */
+function extractPhotoAlbumEntities(cached: unknown): EntityIndexEntry[] {
+  const data = cached as { albums?: Array<Record<string, unknown>> };
+  if (!data?.albums) return [];
+  const out: EntityIndexEntry[] = [];
+  for (const a of data.albums) {
+    const title = (a.title as string) || "";
+    if (!title) continue;
+    const slug = (a.slug as string) || slugify(title);
+    const source: EntitySource = (a.source as EntitySource) || "manual";
+    const entityId = (a.entityId as string) || buildEntityId(source, "photo-album", slug);
+    const kind = (a.kind as string) || "external";
+    const photographer = a.photographer as string | undefined;
+    const themes = (a.themes as string[]) || [];
+    const style = a.style as string | undefined;
+    out.push({
+      entityId,
+      type: "photo-album",
+      source,
+      title,
+      slug,
+      imageUrl: a.coverUrl as string | undefined,
+      cortexPath: `entities/album-${slug}.md`,
+      tags: [
+        "photo-album",
+        `album-${kind}`,
+        ...(photographer ? [photographer.toLowerCase()] : []),
+        ...(style ? [style.toLowerCase()] : []),
+        ...themes.map(t => t.toLowerCase()),
+      ],
+      updatedAt: (a.updatedAt as string) || (a.addedAt as string) || new Date().toISOString(),
+    });
+  }
+  return out;
+}
+
 /** Extract EntityRefs from YouTube cache */
 function extractYoutubeEntities(cached: unknown): EntityIndexEntry[] {
   const data = cached as { subscriptions?: Array<{ title: string; channelId?: string; thumbnailUrl?: string }> };
@@ -612,6 +660,7 @@ const EXTRACTORS: Record<string, (cached: unknown) => EntityIndexEntry[]> = {
   steam: extractSteamEntities,
   movies_tv: extractMoviesTvEntities,
   photos: extractPhotoEntities,
+  photo_albums: extractPhotoAlbumEntities,
   youtube: extractYoutubeEntities,
   qq_music: extractQqMusicEntities,
   files: extractProjectEntities,
@@ -697,8 +746,11 @@ export async function buildEntityIndex(): Promise<number> {
         }
       }
 
-      // Also pick up Cortex pages that have EntityId metadata
-      const entityIdMatches = indexContent.matchAll(/^## (.+\.md)\n[\s\S]*?EntityId:\s*(.+)$/gm);
+      // Also pick up Cortex pages that have EntityId metadata.
+      // Important: the EntityId must be within the same "## page.md" section — do not
+      // let the regex cross into the next section (that caused cortexPath mis-wiring,
+      // e.g. a photographer page getting paired with an album's EntityId).
+      const entityIdMatches = indexContent.matchAll(/^## ([^\n]+\.md)\s*\n(?:(?!^## )[^\n]*\n)*?EntityId:\s*([^\n]+)$/gm);
       for (const m of entityIdMatches) {
         const path = m[1];
         const eid = m[2].trim();
@@ -797,12 +849,27 @@ export async function buildEntityIndex(): Promise<number> {
 
 /** Cache-level item finder by source and slug */
 function findInCache(source: string, type: string, slug: string): Record<string, unknown> | null {
+  // Match strategy used across sources
+  const matchBySlug = (title: string) => slugify(title) === slug;
+
+  // Curated photo albums are keyed by type, not source (source may be "research"
+  // or "manual"). Check this BEFORE bailing on readCache(source) which would
+  // return null for the "research" source that has no cache file of its own.
+  if (type === "photo-album") {
+    const curated = readCache("photo_albums") as { albums?: Array<Record<string, unknown>> } | null;
+    if (curated?.albums) {
+      const hit = curated.albums.find(a => {
+        if (typeof a.slug === "string" && a.slug === slug) return true;
+        if (typeof a.title === "string" && matchBySlug(a.title)) return true;
+        return false;
+      });
+      if (hit) return hit;
+    }
+  }
+
   const cached = readCache(source);
   if (!cached || typeof cached !== "object") return null;
   const data = cached as Record<string, unknown>;
-
-  // Each source has a different array key and match strategy
-  const matchBySlug = (title: string) => slugify(title) === slug;
 
   if (source === "kindle" && Array.isArray(data.books)) {
     return (data.books as Array<Record<string, unknown>>).find(b => typeof b.title === "string" && matchBySlug(b.title)) ?? null;

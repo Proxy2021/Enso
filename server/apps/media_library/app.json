@@ -829,6 +829,261 @@
         },
         "requiredDataKeys": ["tool", "action"],
         "isPrimary": false
+      },
+      {
+        "suffix": "gap_analysis",
+        "description": "Library completeness, engagement & intelligence dashboard. Identifies coverage gaps, engagement gaps, enrichment gaps, taste profile gaps, PLUS intelligence metrics: entity resolution score (duplicate detection), cross-reference density (graph connectivity), semantic richness (tag quality), and engagement velocity (rating pace + projections). Use when the user says: 'analyze my library gaps', 'what am I missing', 'library completeness', 'gap analysis', 'what should I improve', 'library health', 'library intelligence', 'show intelligence metrics'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: overview (full dashboard + intelligence, default), engagement (engagement gaps only), coverage (coverage gaps only), recommendations (AI suggestions), intelligence (entity resolution, cross-refs, semantic richness, engagement velocity ONLY)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_media_library_gap_analysis",
+          "action": "overview",
+          "totalEntities": 1889,
+          "completenessScore": 48,
+          "completenessColor": "amber",
+          "scoreBreakdown": [
+            { "label": "Coverage", "maxPoints": 15, "score": 12, "detail": "5 media types" },
+            { "label": "Engagement", "maxPoints": 20, "score": 4, "detail": "45 / 1889 engaged" },
+            { "label": "Enrichment", "maxPoints": 15, "score": 7, "detail": "48% tagged" },
+            { "label": "Taste Profile", "maxPoints": 15, "score": 4, "detail": "12 / 50 ratings goal" },
+            { "label": "Cross-References", "maxPoints": 15, "score": 6, "detail": "750 / 1889 connected" },
+            { "label": "Semantic Richness", "maxPoints": 20, "score": 15, "detail": "3.2 avg tags, 18.5% diversity" }
+          ],
+          "coverage": {
+            "items": [
+              { "type": "book", "label": "Books", "count": 510, "share": 27, "rated": 5, "ratedPercent": 1, "severity": "green" }
+            ],
+            "missingTypes": [],
+            "underrepresented": [],
+            "noRatingsTypes": [{ "type": "documentary", "label": "Documentaries", "count": 53 }]
+          },
+          "engagement": {
+            "untouchedCount": 1800,
+            "untouchedPercent": 95.3,
+            "untouchedByType": { "book": 490, "movie": 280 },
+            "stalledCount": 3,
+            "stalledItems": [{ "entityId": "kindle:book:example", "title": "Example Book", "type": "book", "daysSinceUpdate": 45 }],
+            "unratedEngagedCount": 15
+          },
+          "enrichment": {
+            "noTagsCount": 400,
+            "noTagsPercent": 21.2,
+            "noImagesCount": 200,
+            "enrichmentByType": [
+              { "type": "book", "label": "Books", "total": 510, "tagged": 380, "taggedPercent": 74.5, "withImage": 400, "imagePercent": 78.4 }
+            ]
+          },
+          "taste": {
+            "underExplored": [{ "tag": "martial-arts", "avgRating": 9, "ratedCount": 3, "totalCount": 5 }],
+            "highRatingLowCount": [],
+            "crossMediaOpportunities": [{ "tag": "sci-fi", "strongIn": "movie", "avgRating": 8.5, "explorableTypes": ["book", "game"] }]
+          },
+          "intelligence": {
+            "entityResolution": { "resolvableEntities": 1850, "uniqueEntities": 1810, "resolutionRate": 97.8, "duplicateGroupCount": 25, "duplicateEntityCount": 65, "topDuplicates": [{ "title": "Inception", "type": "movie", "count": 2, "sources": ["manual", "movies_tv"] }] },
+            "crossRefDensity": { "avgCrossRefsPerEntity": 1.8, "islandCount": 1139, "islandPercent": 60.3, "hubCount": 42, "graphConnectivity": 35.2, "topHubs": [{ "title": "Christopher Nolan", "type": "movie", "crossRefCount": 12 }] },
+            "semanticRichness": { "avgTagsPerEntity": 3.2, "uniqueTagCount": 420, "tagDiversity": 18.5, "tagDesertCount": 180, "tagDesertPercent": 9.5 },
+            "engagementVelocity": { "totalRated": 12, "ratingsPerWeek": 1.5, "recentRatingsPerWeek": 2.0, "velocityTrend": "accelerating", "projectedWeeksTo20Pct": 242, "projectionNote": "At current pace: 242 weeks to 20% engagement | Accelerate with Guided Curation" }
+          },
+          "recommendations": [
+            { "id": "untouched_items", "icon": "Eye", "severity": "amber", "category": "engagement", "title": "1800 completely untouched items", "description": "Start by rating your top picks.", "actionLabel": "Auto-Seed Ratings", "actionTool": "batch_seed" },
+            { "id": "duplicate_candidates", "icon": "Copy", "severity": "amber", "category": "intelligence", "title": "25 potential duplicates detected", "description": "65 entities may be duplicates — use Entity Resolve tool.", "actionLabel": "Scan Duplicates", "actionTool": "entity_resolve" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "action", "completenessScore"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "person_hub",
+        "description": "Cross-media person hub — discover authors, directors, actors, developers across your entire library. View their complete works, ratings, and connections. Actions: list (top persons by work count), detail (all works by a person grouped by role), search (fuzzy-match person names). Use when the user says: 'who directed the most movies', 'show me Christopher Nolan', 'find authors', 'person hub', 'show creators', 'who appears in the most media'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: list (top persons sorted by works), detail (all works by a person), search (fuzzy match person names)"
+            },
+            "name": {
+              "type": "string",
+              "description": "Person name for detail action"
+            },
+            "query": {
+              "type": "string",
+              "description": "Search query for search action"
+            },
+            "limit": {
+              "type": "number",
+              "description": "Max results (default: 50)"
+            },
+            "sortBy": {
+              "type": "string",
+              "description": "Sort by: works_count (default), name, rating_avg"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": { "action": "list", "limit": 10 },
+        "sampleData": {
+          "tool": "enso_media_library_person_hub",
+          "action": "list",
+          "totalPersons": 1505,
+          "showing": 10,
+          "sortBy": "works_count",
+          "roleCounts": { "author": 355, "director": 128, "actor": 1003, "developer": 24, "publisher": 15 },
+          "persons": [
+            {
+              "name": "Christopher Nolan",
+              "totalWorks": 10,
+              "roles": ["director"],
+              "mediaTypes": ["movie"],
+              "mediaTypeCounts": { "movie": 10 },
+              "avgRating": 8.5,
+              "ratedCount": 4,
+              "favoriteCount": 2,
+              "topRatedWork": { "title": "Inception", "type": "movie", "rating": 9 }
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "action"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "guided_curation",
+        "description": "Guided curation workflow — Tinder-style rate-or-skip sessions to rapidly boost library engagement from 2% to 20%+. Presents smart batches of unrated items with AI-suggested ratings from metadata (Amazon stars, TMDB scores, Metacritic). Actions: start (begin session with smart batch), rate (quick-rate or skip an item), progress (session stats & projections). Use when the user says: 'curate my library', 'rate some books', 'guided curation', 'help me rate', 'quick rate session', 'tinder for my library'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: start (begin curation session), rate (rate or skip an item), progress (show stats)"
+            },
+            "mediaType": {
+              "type": "string",
+              "description": "Filter by media type for start action: books, movies, tv, documentaries, games, music, articles"
+            },
+            "batchSize": {
+              "type": "number",
+              "description": "Number of items per batch for start action (default: 10, min: 5, max: 20)"
+            },
+            "entityId": {
+              "type": "string",
+              "description": "Entity ID to rate (for rate action)"
+            },
+            "rating": {
+              "type": "number",
+              "description": "Rating 1-10 (for rate action). Half-star notation also accepted (e.g., 4.5 = 9/10)"
+            },
+            "skip": {
+              "type": "boolean",
+              "description": "Set true to skip this item permanently (for rate action)"
+            },
+            "notes": {
+              "type": "string",
+              "description": "Optional notes for the rating (for rate action)"
+            }
+          },
+          "required": ["action"]
+        },
+        "sampleParams": { "action": "start", "batchSize": 5 },
+        "sampleData": {
+          "tool": "enso_media_library_guided_curation",
+          "action": "start",
+          "batchSize": 5,
+          "totalPool": 1800,
+          "withSuggestions": 3,
+          "mediaTypeFilter": "all",
+          "libraryStats": {
+            "totalMedia": 1889,
+            "totalRated": 40,
+            "ratedPercent": 2.1,
+            "totalSkipped": 0,
+            "ratedByType": { "book": 10, "movie": 20, "game": 5, "tv-series": 5 },
+            "totalByType": { "book": 510, "movie": 299, "tv-series": 161, "game": 17 }
+          },
+          "items": [
+            {
+              "entityId": "kindle:book:the-book-of-five-rings",
+              "type": "book",
+              "source": "kindle",
+              "title": "The Book of Five Rings",
+              "imageUrl": "https://m.media-amazon.com/images/I/41kanz9HFfL._SY400_.jpg",
+              "tags": ["martial arts", "philosophy"],
+              "semanticTags": ["martial-arts-philosophy", "strategy"],
+              "consumptionStatus": "completed",
+              "isFavorite": false,
+              "crossRefCount": 3,
+              "suggestedRating": 9,
+              "suggestedDisplay": { "points": 9, "stars": 4.5, "display": "★★★★½", "label": "Excellent" },
+              "suggestionSource": "Amazon: 4.5★ → suggested 9/10"
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "action", "items"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "entity_resolve",
+        "description": "Detect and merge duplicate entities across sources (kindle, weread, movies_tv, steam, manual, etc.). Uses multi-signal matching: exact title, fuzzy title (Levenshtein ≤ 2), contained-in for short titles, plus confidence boosting from shared authors, years, and overlapping tags. Actions: scan (find duplicates), merge (merge two entities), stats (dedup statistics). Use when the user says: 'find duplicates', 'deduplicate library', 'merge duplicates', 'resolve entities', 'clean up duplicates', 'entity resolution'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: scan (detect duplicates), merge (merge two entities), stats (show dedup statistics)"
+            },
+            "mediaType": {
+              "type": "string",
+              "description": "Filter scan by media type: books, movies, tv, documentaries, games, music (for scan action)"
+            },
+            "minConfidence": {
+              "type": "string",
+              "description": "Minimum confidence level for scan results: high, medium, low (default: medium)"
+            },
+            "keepEntityId": {
+              "type": "string",
+              "description": "Entity ID to keep (for merge action — the richer entity)"
+            },
+            "removeEntityId": {
+              "type": "string",
+              "description": "Entity ID to remove/merge away (for merge action)"
+            }
+          },
+          "required": ["action"]
+        },
+        "sampleParams": { "action": "scan" },
+        "sampleData": {
+          "tool": "enso_media_library_entity_resolve",
+          "action": "scan",
+          "mediaType": "all",
+          "minConfidence": "medium",
+          "totalEntities": 1889,
+          "duplicateGroupsFound": 5,
+          "byConfidence": { "high": 3, "medium": 2, "low": 0 },
+          "groups": [
+            {
+              "confidence": "high",
+              "signals": ["exact-title-match", "same-year"],
+              "entities": [
+                { "entityId": "kindle:book:dune", "type": "book", "source": "kindle", "title": "Dune", "imageUrl": null, "fieldCount": 12 },
+                { "entityId": "manual:book:dune", "type": "book", "source": "manual", "title": "Dune", "imageUrl": null, "fieldCount": 5 }
+              ]
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "action"],
+        "isPrimary": false
       }
     ]
   }

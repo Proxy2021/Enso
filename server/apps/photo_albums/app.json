@@ -1,0 +1,163 @@
+{
+  "version": 1,
+  "createdAt": 1775520000000,
+  "spec": {
+    "toolFamily": "photo_albums",
+    "toolPrefix": "enso_photo_albums_",
+    "description": "Artist Albums: collect iconic bodies of work from the world's best artists — photographers, painters, sculptors, printmakers, any medium. Browse, search, daily discovery, research-seeded external albums with rich image pools from Wikimedia Commons + MET + Smithsonian + Europeana, and curated personal collections — a first-class Cortex citizen alongside books and movies.",
+    "signatureId": "photo_albums_view",
+    "tools": [
+      {
+        "suffix": "browse",
+        "label": "Browse Photo Albums",
+        "description": "Browse curated photo albums (external photographers + personal themed collections). Supports tabs (all/external/personal), filtering by photographer/style/theme, search, sort, and pagination.",
+        "isPrimary": true,
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "tab": { "type": "string", "enum": ["all", "external", "personal"], "description": "Kind filter (default: all)" },
+            "photographer": { "type": "string", "description": "Filter by photographer name" },
+            "style": { "type": "string", "description": "Filter by style (street, documentary, portrait, etc.)" },
+            "theme": { "type": "string", "description": "Filter by theme tag" },
+            "query": { "type": "string", "description": "Search by title, photographer, or description" },
+            "sortBy": { "type": "string", "enum": ["addedAt", "yearPublished", "title", "photographer", "plateCount"], "description": "Sort order (default: addedAt)" },
+            "page": { "type": "number", "description": "Page number (1-based, default: 1)" },
+            "pageSize": { "type": "number", "description": "Albums per page (default: 24)" }
+          },
+          "additionalProperties": false
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_photo_albums_browse",
+          "totalAlbums": 0,
+          "externalCount": 0,
+          "personalCount": 0,
+          "filteredCount": 0,
+          "albums": [],
+          "photographers": [],
+          "styles": [],
+          "themes": [],
+          "tab": "all"
+        }
+      },
+      {
+        "suffix": "search",
+        "label": "Search Photo Albums",
+        "description": "Search curated photo albums by title, photographer, description, or theme.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "query": { "type": "string", "description": "Search query" }
+          },
+          "required": ["query"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "seed_external",
+        "label": "Seed External Album",
+        "description": "Research and add an artist's body of work to your library. Works for any medium — photography, painting, sculpture, printmaking, drawing, digital. Takes an artist name and optional album/series title; uses Wikipedia + Open Library + Wikimedia Commons + MET + Smithsonian + Europeana + web search + LLM synthesis to gather bio, signature works with real museum images, style, and cover. Writes to cache + Cortex page.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "photographer": { "type": "string", "description": "Artist name (e.g., 'Henri Cartier-Bresson', 'Vincent van Gogh', 'Yayoi Kusama', '森山大道'). Field name is 'photographer' for legacy reasons but any artist works." },
+            "albumTitle": { "type": "string", "description": "Album, series, or body of work title (e.g., 'The Decisive Moment', 'Sunflowers'). Optional — if omitted, LLM picks the artist's most iconic work." },
+            "style": { "type": "string", "description": "Optional style/movement hint (street, documentary, portrait, landscape, fine-art, impressionism, surrealism, cubism, abstract-expressionism, minimalism, pop-art, etc.)" },
+            "refreshEntityId": { "type": "string", "description": "Re-seed an existing album in place. Pass the album's entityId (e.g., 'research:photo-album:farewell-photography-shashin-yo-sayonara') to refresh its data without creating a duplicate." }
+          },
+          "additionalProperties": false
+        },
+        "sampleParams": { "photographer": "Vincent van Gogh" }
+      },
+      {
+        "suffix": "curate_personal",
+        "label": "Curate Personal Album",
+        "description": "Create a themed album from your own photos. Takes a title, optional theme, and an array of photo entity IDs or file paths. Writes a personal album to cache + Cortex page.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "title": { "type": "string", "description": "Album title (e.g., 'Hong Kong Street 2025')" },
+            "theme": { "type": "string", "description": "Optional theme (street, portrait, travel, family, nature, abstract, etc.)" },
+            "description": { "type": "string", "description": "Optional description" },
+            "photoEntityIds": { "type": "array", "items": { "type": "string" }, "description": "Array of photos:photo:* entity IDs (from your photo library)" },
+            "photoPaths": { "type": "array", "items": { "type": "string" }, "description": "Array of photo file paths (alternative to entity IDs)" },
+            "coverPath": { "type": "string", "description": "Optional path to cover image" }
+          },
+          "required": ["title"],
+          "additionalProperties": false
+        }
+      },
+      {
+        "suffix": "rate",
+        "label": "Rate / Save Album",
+        "description": "Record user interaction with an album (save, rate, dismiss, favorite). Builds the taste profile that feeds daily discovery.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "action": { "type": "string", "enum": ["save", "rate", "dismiss", "favorite", "view"], "description": "Interaction type" },
+            "entityId": { "type": "string", "description": "Album entity ID" },
+            "rating": { "type": "number", "description": "1-5 rating (only for action=rate)" }
+          },
+          "additionalProperties": false
+        },
+        "sampleParams": { "action": "view" }
+      },
+      {
+        "suffix": "discover",
+        "label": "Daily Album Discovery",
+        "description": "Today's photo-album discovery picks — day-of-week themes (Documentary / Street / Portrait / Fashion / Landscape / Fine Art / Photojournalism). Pulls photographer candidates from Wikipedia + Open Library + web search, curated by LLM against your taste profile. Cached per day.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "date": { "type": "string", "description": "Date in YYYY-MM-DD (default: today)" },
+            "refresh": { "type": "boolean", "description": "Force refresh even if cached (default: false)" },
+            "theme": { "type": "string", "description": "Override theme (street, documentary, portrait, fashion, landscape, fine-art, photojournalism)" }
+          },
+          "additionalProperties": false
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_photo_albums_discover",
+          "date": "2026-04-18",
+          "theme": { "name": "Street Photography", "icon": "🚶", "dayLabel": "Saturday" },
+          "albumOfTheDay": null,
+          "themePicks": [],
+          "masterPhotographers": [],
+          "emergingVoices": []
+        }
+      },
+      {
+        "suffix": "expand",
+        "label": "Expand Album (Deep Research)",
+        "description": "Exhaustively pull additional works for an existing album from ALL available sources — Wikimedia Commons (categories + search), MET, Smithsonian, Europeana, Art Institute of Chicago. Dedupes by image URL, scores by metadata quality, appends to the album's plates, capped at 100 works total.",
+        "parameters": {
+          "type": "object",
+          "properties": {
+            "entityId": { "type": "string", "description": "Album entity ID (e.g., 'research:photo-album:farewell-photography-shashin-yo-sayonara')" },
+            "cap": { "type": "number", "description": "Maximum total plates in the album after expansion (default: 100, max: 100)" }
+          },
+          "required": ["entityId"],
+          "additionalProperties": false
+        },
+        "sampleParams": { "entityId": "research:photo-album:vincent-van-gogh" },
+        "sampleData": {
+          "tool": "enso_photo_albums_expand",
+          "success": true,
+          "addedCount": 78,
+          "totalPlates": 90,
+          "bySource": { "wikimedia-commons": 49, "met": 15, "europeana": 15, "art-institute-chicago": 11 }
+        }
+      },
+      {
+        "suffix": "update",
+        "label": "Update Cortex from Cache",
+        "description": "Rebuild the entity index and Cortex pages from the photo-albums cache. Run after manual cache edits or entity-index drift.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      }
+    ]
+  }
+}

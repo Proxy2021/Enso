@@ -669,6 +669,96 @@ export const DATA_SOURCES: DataSourceDescriptor[] = [
     },
   },
 
+  // ── Curated Photo Albums (external photographers + personal themed collections) ──
+  {
+    id: "photoAlbums",
+    cacheFile: "photo-albums.json",
+    scannerToolName: "enso_photo_albums_update",
+    scannerParams: {},
+    ingestPriority: 57,
+    formatForProfile: (cached: A) => {
+      if (!cached?.albums?.length) return null;
+      const ext = cached.albums.filter((a: A) => a.kind === "external");
+      const pers = cached.albums.filter((a: A) => a.kind === "personal");
+      const parts: string[] = [];
+      if (ext.length) parts.push(`Artist albums (${ext.length}): ${ext.slice(0, 10).map((a: A) => `${a.title}${a.photographer ? ` by ${a.photographer}` : ""}${a.medium ? ` [${a.medium}]` : ""}`).join(", ")}`);
+      if (pers.length) parts.push(`Personal themed albums (${pers.length}): ${pers.slice(0, 10).map((a: A) => a.title).join(", ")}`);
+      return `## Artist Albums\n${parts.join("\n")}`;
+    },
+    formatForCortex: (cached: A) => {
+      if (!cached?.albums?.length) return null;
+      const lines = [`# Artist Albums (${cached.albums.length} albums)\n`];
+      const byKind = new Map<string, A[]>();
+      for (const a of cached.albums) {
+        const k = a.kind || "external";
+        const list = byKind.get(k) ?? [];
+        list.push(a);
+        byKind.set(k, list);
+      }
+      for (const [kind, albums] of byKind) {
+        lines.push(`\n## ${kind === "external" ? "Artist Albums" : "Personal Themed Albums"} (${albums.length})`);
+        for (const a of albums) {
+          let line = `- **${a.title}**`;
+          if (a.photographer) line += ` by ${a.photographer}`;
+          if (a.yearPublished) line += ` (${a.yearPublished})`;
+          if (a.medium) line += ` [${a.medium}]`;
+          if (a.style) line += ` — ${a.style}`;
+          if (a.description) line += `: ${String(a.description).slice(0, 120)}`;
+          lines.push(line);
+        }
+      }
+      return { text: lines.join("\n"), topic: "Artist Albums", label: "Artist album library" };
+    },
+    getDirectIngestPages: (cached: A) => {
+      if (!cached?.albums?.length) return [];
+      const pages: DirectIngestPage[] = [];
+      for (const a of cached.albums) {
+        if (!a.title) continue;
+        const slug = (a.slug as string) || String(a.title).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "").slice(0, 80);
+        if (!slug) continue;
+        const kind = a.kind || "external";
+        const src = a.source || (kind === "external" ? "research" : "manual");
+        const lines = [`# ${a.title}\n`];
+        if (a.photographer) lines.push(`By **${a.photographer}**.${a.yearPublished ? ` Published ${a.yearPublished}` : ""}${a.publisher ? ` by ${a.publisher}` : ""}.\n`);
+        if (a.description) lines.push(`${a.description}\n`);
+        if (a.coverUrl) lines.push(`![cover](${a.coverUrl})\n`);
+        lines.push("## Details");
+        lines.push(`- **Kind**: ${kind === "external" ? "Photographer album" : "Personal themed collection"}`);
+        if (a.photographer) lines.push(`- **Photographer**: [[${String(a.photographer).toLowerCase().replace(/[^a-z0-9]+/g, "-")}]]`);
+        if (a.yearPublished) lines.push(`- **Year**: ${a.yearPublished}`);
+        if (a.publisher) lines.push(`- **Publisher**: ${a.publisher}`);
+        if (a.style) lines.push(`- **Style**: ${a.style}`);
+        if (a.plateCount) lines.push(`- **Plates**: ${a.plateCount}`);
+        if (a.sourceUrl) lines.push(`- **Source**: [${a.sourceUrl}](${a.sourceUrl})`);
+        if (Array.isArray(a.themes) && a.themes.length) {
+          lines.push("\n## Themes");
+          for (const t of a.themes) lines.push(`- [[${String(t).toLowerCase().replace(/[^a-z0-9]+/g, "-")}]]`);
+        }
+        if (Array.isArray(a.plates) && a.plates.length) {
+          lines.push(`\n## Plates (${a.plates.length})`);
+          for (const p of a.plates.slice(0, 50)) {
+            let plateLine = `- ${p.title || "(untitled)"}`;
+            if (p.year) plateLine += ` (${p.year})`;
+            if (p.caption) plateLine += ` — ${String(p.caption).slice(0, 120)}`;
+            lines.push(plateLine);
+          }
+        }
+        if (a.notes) {
+          lines.push(`\n## Notes\n${a.notes}`);
+        }
+        pages.push({
+          path: `entities/album-${slug}.md`,
+          entityId: `${src}:photo-album:${slug}`,
+          title: a.title,
+          content: lines.join("\n"),
+          summary: a.description ? String(a.description).slice(0, 200) : `${a.title}${a.photographer ? ` by ${a.photographer}` : ""}`,
+          tags: ["photo-album", `album-${kind}`, ...(a.photographer ? [String(a.photographer).toLowerCase()] : []), ...(Array.isArray(a.themes) ? a.themes.map((t: string) => t.toLowerCase()) : [])],
+        });
+      }
+      return pages;
+    },
+  },
+
   // ── Twitter/X Following ──
   {
     id: "twitterFollowing",

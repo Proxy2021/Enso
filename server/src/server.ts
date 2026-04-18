@@ -769,11 +769,12 @@ export async function startEnsoServer(opts: {
       const cortexApps: Record<string, { label: string; icon: string; order: number }> = {
         books: { label: "Books", icon: "📚", order: 1 },
         movies_tv: { label: "Movies", icon: "🎬", order: 2 },
-        steam: { label: "Games", icon: "🎮", order: 3 },
-        youtube_manager: { label: "YouTube", icon: "📺", order: 4 },
-        articles: { label: "Articles", icon: "📰", order: 5 },
-        travel: { label: "Travel", icon: "🌍", order: 6 },
-        cortex: { label: "Knowledge", icon: "🧠", order: 7 },
+        photo_albums: { label: "Albums", icon: "📸", order: 3 },
+        steam: { label: "Games", icon: "🎮", order: 4 },
+        youtube_manager: { label: "YouTube", icon: "📺", order: 5 },
+        articles: { label: "Articles", icon: "📰", order: 6 },
+        travel: { label: "Travel", icon: "🌍", order: 7 },
+        cortex: { label: "Knowledge", icon: "🧠", order: 8 },
       };
 
       const result = allApps

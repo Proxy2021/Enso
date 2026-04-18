@@ -83,6 +83,17 @@ export const APP_CATALOG: AppEntry[] = [
     signatureId: "video_studio_view",
     description: "AI video generation studio: create cinematic videos from text prompts, animate still images, craft optimized prompts, browse video gallery",
   },
+  // ── Artist Albums (photography, painting, sculpture, any medium) ──
+  {
+    appId: "photo_albums",
+    primaryTool: "enso_photo_albums_browse",
+    actions: [
+      "browse", "search", "seed_external", "curate_personal", "rate", "discover", "update", "expand",
+    ],
+    signatureId: "photo_albums_view",
+    description: "Artist Albums: collect iconic bodies of work from the world's best artists across any medium — photographers, painters, sculptors, printmakers — and build themed albums from your own photos. Rich image pools from Wikimedia Commons + MET + Smithsonian + Europeana. A first-class Cortex citizen alongside books and movies.",
+  },
+
   // ── YouTube ──
   {
     appId: "youtube",
