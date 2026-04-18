@@ -351,6 +351,11 @@ export function buildBriefingPage(notificationId: string): string {
   const subject = context.subject || `Enso Briefing (${context.type})`;
   const sentAt = new Date(context.sentAt).toLocaleString();
 
+  // Type-specific action panel (shown between briefing + react form).
+  // FactorStrategies notifications get a "Portfolio Check-in" button that runs
+  // portfolio_manager.py checkin KK_Live and streams the result back.
+  const customActionsHtml = buildCustomActionsHtml(context, notificationId);
+
   return `<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
@@ -361,12 +366,20 @@ export function buildBriefingPage(notificationId: string): string {
   .meta { color:#6b7280; font-size:12px; text-transform:uppercase; letter-spacing:1px; margin:0 0 8px; }
   .subject { font-size:22px; margin:0 0 20px; }
   .briefing { background:#141428; border-radius:12px; padding:8px; }
+  .custom-actions { margin-top:24px; background:linear-gradient(135deg,#1e1b4b,#312e81); border-radius:12px; padding:20px 24px; }
+  .custom-actions h3 { font-size:15px; margin:0 0 4px; color:#c4b5fd; }
+  .custom-actions p { color:#a5b4fc; font-size:13px; margin:0 0 14px; }
+  .action-btn { background:#10b981; color:#fff; border:none; padding:11px 22px; border-radius:8px; font-size:14px; font-weight:600; cursor:pointer; }
+  .action-btn:hover { background:#059669; }
+  .action-btn:disabled { background:#4b5563; cursor:not-allowed; }
+  .action-output { margin-top:14px; background:#0f172a; border:1px solid #1f2937; border-radius:8px; padding:14px; max-height:420px; overflow:auto; font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:12px; color:#e2e8f0; white-space:pre-wrap; word-break:break-word; line-height:1.45; }
+  .action-output.err { border-color:#7f1d1d; color:#fca5a5; }
   .react-form { margin-top:32px; background:#1e293b; border-radius:12px; padding:24px; }
   .react-form h3 { font-size:16px; margin:0 0 12px; }
   textarea { width:100%; min-height:100px; background:#0f172a; border:1px solid #334155; border-radius:8px; color:#f1f5f9; padding:12px; font-size:14px; resize:vertical; box-sizing:border-box; margin:0 0 12px; font-family:inherit; }
   textarea:focus { outline:none; border-color:#7c3aed; }
-  button { background:#7c3aed; color:#fff; border:none; padding:10px 24px; border-radius:8px; font-size:14px; cursor:pointer; }
-  button:hover { background:#6d28d9; }
+  .reply-btn { background:#7c3aed; color:#fff; border:none; padding:10px 24px; border-radius:8px; font-size:14px; cursor:pointer; }
+  .reply-btn:hover { background:#6d28d9; }
   .ok { color:#10b981; padding:20px 0; text-align:center; }
 </style>
 </head><body>
@@ -374,12 +387,13 @@ export function buildBriefingPage(notificationId: string): string {
   <p class="meta">Re: ${context.type} · sent ${sentAt}</p>
   <h1 class="subject">${subject}</h1>
   <div class="briefing">${briefingHtml}</div>
+  ${customActionsHtml}
   <div class="react-form" id="react">
     <h3>Send a reply to Team Leader</h3>
     <p style="color:#9ca3af;font-size:13px;margin:0 0 12px">Your reply gets queued and processed on the next TL check-in.</p>
     <form id="form">
-      <textarea name="text" placeholder="Thoughts, follow-up instructions, or context..." autofocus></textarea>
-      <button type="submit">Send</button>
+      <textarea name="text" placeholder="Thoughts, follow-up instructions, or context..."></textarea>
+      <button type="submit" class="reply-btn">Send</button>
     </form>
   </div>
 </div>
@@ -401,6 +415,57 @@ document.getElementById('form').addEventListener('submit', async function(e) {
 });
 </script>
 </body></html>`;
+}
+
+/**
+ * Render notification-type-specific action panels on the briefing landing page.
+ * Extend this as new briefing types need their own backend-invoking buttons.
+ */
+function buildCustomActionsHtml(context: NotificationContext, notificationId: string): string {
+  if (context.type === "factor-strategies") {
+    return `<div class="custom-actions">
+  <h3>💰 Portfolio Check-in</h3>
+  <p>Run <code style="background:#0f172a;padding:2px 6px;border-radius:4px;font-size:12px;">portfolio_manager.py checkin KK_Live</code> against the live Futu account. Rebalances to today's consensus holdings and submits orders.</p>
+  <button class="action-btn" id="pm-checkin-btn" data-nid="${notificationId}">Run Portfolio Check-in →</button>
+  <div class="action-output" id="pm-checkin-output" style="display:none"></div>
+</div>
+<script>
+(function() {
+  const btn = document.getElementById('pm-checkin-btn');
+  const out = document.getElementById('pm-checkin-output');
+  if (!btn) return;
+  btn.addEventListener('click', async () => {
+    const nid = btn.dataset.nid;
+    btn.disabled = true;
+    btn.textContent = 'Running… (may take 20-60s)';
+    out.style.display = 'block';
+    out.classList.remove('err');
+    out.textContent = '⏳ Spawning portfolio_manager.py checkin KK_Live...\\n';
+    try {
+      const res = await fetch('/api/factor-strategies/portfolio-checkin?nid=' + encodeURIComponent(nid), { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        btn.textContent = '✓ Check-in complete';
+        btn.style.background = '#059669';
+        out.textContent = data.output || '(no output)';
+      } else {
+        btn.textContent = '✗ Check-in failed — retry';
+        btn.disabled = false;
+        btn.style.background = '#dc2626';
+        out.classList.add('err');
+        out.textContent = '[ERROR] ' + (data.error || 'unknown') + '\\n\\n' + (data.output || '');
+      }
+    } catch (err) {
+      btn.textContent = '✗ Request failed — retry';
+      btn.disabled = false;
+      out.classList.add('err');
+      out.textContent = '[NETWORK ERROR] ' + err.message;
+    }
+  });
+})();
+</script>`;
+  }
+  return "";
 }
 
 /**

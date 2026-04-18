@@ -2886,6 +2886,71 @@ BEHAVIOR:
     }
   });
 
+  // Portfolio Check-in button on FactorStrategies briefing landing pages.
+  // Runs: python portfolio_manager.py checkin KK_Live --trade-password <pw>
+  // Gated by matching notificationId + type=factor-strategies so the URL
+  // can't be hit without a fresh briefing context.
+  app.post("/api/factor-strategies/portfolio-checkin", async (req, res) => {
+    try {
+      const nid = (req.query.nid as string) || "";
+      if (!nid) { res.status(400).json({ success: false, error: "Missing nid" }); return; }
+
+      const { getNotificationContext } = await import("./reacts.js");
+      const ctx = getNotificationContext(nid);
+      if (!ctx) { res.status(404).json({ success: false, error: "Notification not found or expired" }); return; }
+      if (ctx.type !== "factor-strategies") {
+        res.status(403).json({ success: false, error: `Invalid notification type: ${ctx.type}` });
+        return;
+      }
+
+      const tradePassword = process.env.FACTORSTRATEGIES_TRADE_PASSWORD;
+      if (!tradePassword) {
+        res.status(500).json({ success: false, error: "FACTORSTRATEGIES_TRADE_PASSWORD is not configured — set it in Settings > Service Keys" });
+        return;
+      }
+      const pythonPath = "D:/Github/FactorStrategies/.venv/Scripts/python.exe";
+      const scriptPath = "D:/Github/FactorStrategies/portfolio_manager.py";
+      const cwd = "D:/Github/FactorStrategies";
+
+      const { spawn } = await import("node:child_process");
+
+      logAction({ ts: Date.now(), type: "action", category: "factor-strategies", message: `Portfolio check-in triggered from briefing ${nid}` });
+
+      const child = spawn(pythonPath, [scriptPath, "checkin", "KK_Live", "--trade-password", tradePassword], {
+        cwd,
+        windowsHide: true,
+      });
+
+      let stdout = "";
+      let stderr = "";
+      child.stdout.on("data", (d) => { stdout += d.toString(); });
+      child.stderr.on("data", (d) => { stderr += d.toString(); });
+
+      // Hard cap at 3 minutes — portfolio_manager.checkin should finish well under this
+      const timeoutHandle = setTimeout(() => { try { child.kill(); } catch {} }, 180_000);
+
+      child.on("close", (code) => {
+        clearTimeout(timeoutHandle);
+        const combined = stdout + (stderr ? `\n\n[stderr]\n${stderr}` : "");
+        if (code === 0) {
+          logAction({ ts: Date.now(), type: "action", category: "factor-strategies", message: `Portfolio check-in completed (${combined.length} bytes)` });
+          res.json({ success: true, exitCode: 0, output: combined });
+        } else {
+          logError("factor-strategies", `Portfolio check-in failed with exit code ${code}`, undefined, { stderr: stderr.slice(0, 500) });
+          res.json({ success: false, exitCode: code, error: `Exited with code ${code}`, output: combined });
+        }
+      });
+
+      child.on("error", (err) => {
+        clearTimeout(timeoutHandle);
+        logError("factor-strategies", `Portfolio check-in spawn error`, err);
+        res.status(500).json({ success: false, error: err.message, output: stdout });
+      });
+    } catch (err: any) {
+      res.status(500).json({ success: false, error: err?.message || "unknown" });
+    }
+  });
+
   // ── Team Leader API ──
 
   app.get("/api/team-leader/config", async (_req, res) => {
@@ -3452,6 +3517,12 @@ BEHAVIOR:
     const defs = getServiceKeyDefinitions();
     const keys = defs.map((sk) => {
       const value = process.env[sk.envVar] ?? "";
+      // Sensitive keys: only report whether configured, never echo any bytes
+      // (even masked). Short passwords/codes would leak most of their entropy
+      // through even aggressive masking.
+      if (sk.sensitive) {
+        return { ...sk, configured: !!value, maskedValue: "" };
+      }
       return {
         ...sk,
         configured: !!value,

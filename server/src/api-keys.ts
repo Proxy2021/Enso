@@ -23,6 +23,13 @@ export interface ServiceKeyDef {
   label: string;
   description: string;
   setupUrl: string;
+  /**
+   * Flag keys that should never be echoed back through the API (not even
+   * masked). The /api/service-keys endpoint will return `configured: boolean`
+   * but omit `maskedValue` for these. Use for short high-risk secrets
+   * (passwords, trade codes, OTPs) where any character leakage is unsafe.
+   */
+  sensitive?: boolean;
 }
 
 const SERVICE_KEYS: ServiceKeyDef[] = [
@@ -33,7 +40,7 @@ const SERVICE_KEYS: ServiceKeyDef[] = [
   { id: "replicate", envVar: "REPLICATE_API_TOKEN", label: "Replicate", description: "AI image upscaling", setupUrl: "https://replicate.com/account/api-tokens" },
   { id: "removebg", envVar: "REMOVE_BG_API_KEY", label: "Remove.bg", description: "Background removal", setupUrl: "https://www.remove.bg/api" },
   { id: "smtpEmail", envVar: "SMTP_EMAIL", label: "Gmail Address", description: "Gmail address for sending emails (e.g. you@gmail.com)", setupUrl: "https://myaccount.google.com/apppasswords" },
-  { id: "smtpPassword", envVar: "SMTP_PASSWORD", label: "Gmail App Password", description: "Gmail App Password (16-char code from Google > Security > App Passwords)", setupUrl: "https://myaccount.google.com/apppasswords" },
+  { id: "smtpPassword", envVar: "SMTP_PASSWORD", label: "Gmail App Password", description: "Gmail App Password (16-char code from Google > Security > App Passwords)", setupUrl: "https://myaccount.google.com/apppasswords", sensitive: true },
   { id: "youtubeClientId", envVar: "YOUTUBE_CLIENT_ID", label: "YouTube Client ID", description: "Google Cloud OAuth2 Client ID for YouTube API", setupUrl: "https://console.cloud.google.com/apis/credentials" },
   { id: "youtubeClientSecret", envVar: "YOUTUBE_CLIENT_SECRET", label: "YouTube Client Secret", description: "Google Cloud OAuth2 Client Secret", setupUrl: "https://console.cloud.google.com/apis/credentials" },
   { id: "youtubeRefreshToken", envVar: "YOUTUBE_REFRESH_TOKEN", label: "YouTube Refresh Token", description: "Auto-generated after OAuth authorization (do not edit manually)", setupUrl: "" },
@@ -41,6 +48,7 @@ const SERVICE_KEYS: ServiceKeyDef[] = [
   { id: "wechatAppId", envVar: "WECHAT_APP_ID", label: "WeChat App ID", description: "微信公众号 App ID (from mp.weixin.qq.com sandbox or 基本配置)", setupUrl: "https://mp.weixin.qq.com/debug/cgi-bin/sandbox?t=sandbox/login" },
   { id: "wechatAppSecret", envVar: "WECHAT_APP_SECRET", label: "WeChat App Secret", description: "微信公众号 App Secret", setupUrl: "https://mp.weixin.qq.com/debug/cgi-bin/sandbox?t=sandbox/login" },
   { id: "wechatToken", envVar: "WECHAT_VERIFY_TOKEN", label: "WeChat Verify Token", description: "自定义 Token for webhook verification (any string you choose)", setupUrl: "https://mp.weixin.qq.com/debug/cgi-bin/sandbox?t=sandbox/login" },
+  { id: "factorStrategiesTradePassword", envVar: "FACTORSTRATEGIES_TRADE_PASSWORD", label: "FactorStrategies Trade Password", description: "Futu trade unlock code used by portfolio_manager.py checkin KK_Live — invoked from the FactorStrategies briefing landing page's Portfolio Check-in button", setupUrl: "", sensitive: true },
 ];
 
 export function getServiceKeyDefinitions(): ServiceKeyDef[] {
