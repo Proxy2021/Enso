@@ -4187,8 +4187,10 @@ BEHAVIOR:
   });
 
   // ── SPA fallback (must be after all API routes) ──
+  // Use "*" — the Express 4 catch-all syntax. The braced "/{*path}" form is
+  // Express 5 / path-to-regexp v6+ and registers as a literal under v4.
   if (existsSync(distDir) && existsSync(join(distDir, "index.html"))) {
-    app.get("/{*path}", (_req, res) => {
+    app.get("*", (_req, res) => {
       res.sendFile(join(distDir, "index.html"));
     });
   }
