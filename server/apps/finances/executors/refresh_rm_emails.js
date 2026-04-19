@@ -103,7 +103,7 @@ for (var bi = 0; bi < banks.length; bi++) {
     continue;
   }
 
-  // Fetch matching emails (with bodies)
+  // Fetch matching emails (with bodies + PDF attachments)
   var fetchResult;
   try {
     fetchResult = await ctx.callTool("enso_email_search_full", {
@@ -111,7 +111,8 @@ for (var bi = 0; bi < banks.length; bi++) {
       subjectContains: bank.subjectMatch,
       folder: "INBOX",
       limit: emailsPerBank,
-      maxBodyChars: 60000
+      maxBodyChars: 60000,
+      saveAttachments: true
     });
   } catch (e) {
     bankResults.push({ bankId: bank.id, error: "Email search threw: " + (e && e.message ? e.message : String(e)) });
@@ -152,12 +153,92 @@ for (var bi = 0; bi < banks.length; bi++) {
 
     if (!extracted) {
       var bodyText = htmlToText(msg.htmlBody || msg.textBody || "");
-      if (bodyText.length < 80) {
-        bankExtracts.push({ subject: msg.subject, date: receivedISO, error: "Body too short to parse" });
+
+      // Compress runs of whitespace — PDF/CSV table layouts are very sparse otherwise.
+      function compressWs(s) { return String(s || "").replace(/[ \t]{2,}/g, "  ").replace(/\n{3,}/g, "\n\n").replace(/^[ \t]+/gm, ""); }
+
+      // Pull out lines most likely to contain financial figures so they land in
+      // the LLM input even if the rest of the doc gets truncated.
+      // Match: any "label-like" word + any "amount-like" token on the same line.
+      // Loose matching (no trailing \b) so plurals like "Assets" still match.
+      function hoistKeyLines(text, max) {
+        var lines = String(text || "").split(/\r?\n/);
+        var keyPattern = /\b(total|opening|closing|portfolio|asset|liabilit|equity|net|cash|holding|balance|value|change|performance|return|gain|loss|nav|YTD|MTD|HKD|USD|EUR|CNY|GBP|JPY|SGD|RMB)/i;
+        // A line "qualifies" if it has a label keyword AND a number with thousands separators or decimals.
+        var numberPattern = /[\d,]{4,}\.?\d*|\(\d[\d,.]*\)|-?\d+\.\d{2}\s*%|-?\d+\.\d+%/;
+        var keyLines = [];
+        for (var i = 0; i < lines.length; i++) {
+          var l = lines[i];
+          if (l.length < 5 || l.length > 280) continue;
+          if (keyPattern.test(l) && numberPattern.test(l)) {
+            keyLines.push(l.trim());
+            if (keyLines.length >= 80) break;
+          }
+        }
+        var out = keyLines.join("\n");
+        if (out.length > max) out = out.slice(0, max);
+        return out;
+      }
+
+      // Pull text from PDF + CSV attachments. RM emails are usually cover notes
+      // pointing at attached statement reports.
+      var attachChunks = [];
+      var allAttachments = Array.isArray(msg.attachments) ? msg.attachments : [];
+      for (var pa = 0; pa < allAttachments.length; pa++) {
+        var att = allAttachments[pa];
+        if (!att || !att.savedPath) continue;
+        var ext = String(att.ext || att.filename || "").toLowerCase();
+        var isPdf = /\.pdf$/.test(ext);
+        var isCsv = /\.csv$/.test(ext);
+
+        if (isPdf) {
+          try {
+            var pdfRes = await ctx.callTool("enso_pdf_extract_text", {
+              path: att.savedPath,
+              password: bank.pdfPassword || undefined,
+              maxChars: 80000  // pull more text since we'll excerpt below
+            });
+            var pdfData = (pdfRes && pdfRes.success && pdfRes.data) ? pdfRes.data : pdfRes;
+            if (pdfData && pdfData.success && pdfData.text) {
+              var fullText = compressWs(pdfData.text);
+              var hoisted = hoistKeyLines(fullText, 6000);
+              // Always include hoisted key lines + first ~12K of full text (enough for context)
+              var pdfChunk = "--- PDF: " + att.filename + " (" + pdfData.charCount + " chars, " + pdfData.pageCount + " pages) ---\n";
+              if (hoisted) pdfChunk += "[KEY FIGURES — extracted lines containing labels + numbers]\n" + hoisted + "\n\n[FULL TEXT]\n";
+              pdfChunk += fullText.slice(0, 12000);
+              attachChunks.push(pdfChunk);
+            } else if (pdfData && pdfData.requiresPassword) {
+              attachChunks.push("[ATTACHMENT " + att.filename + " — PASSWORD REQUIRED — set pdfPassword in configure_bank for " + bank.id + "]");
+            } else if (pdfData && pdfData.error) {
+              attachChunks.push("[ATTACHMENT " + att.filename + " — extract failed: " + (pdfData.message || "unknown") + "]");
+            }
+          } catch (e) {
+            attachChunks.push("[ATTACHMENT " + att.filename + " — exception: " + (e && e.message ? e.message : String(e)) + "]");
+          }
+        } else if (isCsv) {
+          try {
+            var csvRaw = fs.readFileSync(att.savedPath, "utf-8");
+            if (csvRaw.length > 25000) csvRaw = csvRaw.slice(0, 25000) + "\n[…truncated…]";
+            attachChunks.push("--- CSV: " + att.filename + " ---\n" + compressWs(csvRaw));
+          } catch (e) {
+            attachChunks.push("[CSV " + att.filename + " — read failed: " + (e && e.message ? e.message : String(e)) + "]");
+          }
+        }
+        // .xls/.xlsx not supported — would need a spreadsheet library
+      }
+
+      var combinedText = bodyText;
+      if (attachChunks.length > 0) {
+        combinedText = bodyText + "\n\n=== ATTACHED REPORTS ===\n" + attachChunks.join("\n\n");
+      }
+
+      if (combinedText.length < 80) {
+        bankExtracts.push({ subject: msg.subject, date: receivedISO, error: "No usable content (body + attachments empty)" });
         continue;
       }
-      // Cap at ~12k chars to stay within fast-tier model context
-      if (bodyText.length > 12000) bodyText = bodyText.slice(0, 12000);
+      // Cap at ~32k chars total
+      if (combinedText.length > 32000) combinedText = combinedText.slice(0, 32000);
+      var bodyText = combinedText; // shadow for the prompt below
 
       var prompt = "You are extracting structured investment-performance data from a private-bank/brokerage RM email. " +
         "READ THE BODY CAREFULLY — many RMs phrase numbers in prose (e.g. 'your portfolio is now valued at HKD 8.2M, up 1.3% from last month'). Pull every concrete figure you can find. Use null only when the number is truly absent — never invent figures.\n\n" +

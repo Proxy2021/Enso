@@ -63,8 +63,15 @@ var entry = {
   subjectMatch: (p.subjectMatch || "").toString().trim(),
   accountType: (p.accountType || "brokerage").toString(),
   baseCurrency: (p.baseCurrency || "USD").toString(),
+  // Optional: per-bank password for encrypted PDF statements (e.g. Citi PB).
+  // Stored locally in ~/.enso/data/finances/banks.json — never committed.
+  pdfPassword: p.pdfPassword ? String(p.pdfPassword) : (p.pdfPassword === "" ? "" : undefined),
   updatedAt: new Date().toISOString()
 };
+// Preserve existing pdfPassword if not explicitly cleared
+if (entry.pdfPassword === undefined && existing >= 0 && config.banks[existing].pdfPassword) {
+  entry.pdfPassword = config.banks[existing].pdfPassword;
+}
 
 if (!entry.senderEmail || !entry.subjectMatch) {
   return { content: [{ type: "text", text: JSON.stringify({

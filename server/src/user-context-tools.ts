@@ -1127,9 +1127,12 @@ export function createUserContextTools(): EnsoAgentTool[] {
       name: "enso_email_search_full",
       label: "Search Email (with bodies)",
       description:
-        "Fetch matching emails from the inbox WITH their HTML body. Filter by sender email substring + subject substring. " +
-        "Returns up to `limit` most-recent matches as { from, senderEmail, subject, date, htmlBody, textBody }. " +
-        "Bodies are truncated to ~80KB each. Used by structured-extraction pipelines (e.g. financial statement parsing). " +
+        "Fetch matching emails from the inbox WITH their HTML body and (optionally) PDF/image attachment paths. " +
+        "Filter by sender email substring + subject substring. " +
+        "Returns up to `limit` most-recent matches as { from, senderEmail, subject, date, htmlBody, textBody, attachments }. " +
+        "Bodies truncated to ~80KB each. When saveAttachments is true, attachments are saved under the given attachmentsDir " +
+        "(default ~/.enso/data/email-attachments) and returned with their local file paths. " +
+        "Used by structured-extraction pipelines (e.g. financial statement parsing). " +
         "Outlook COM only (Windows). Requires user consent on first run.",
       parameters: {
         type: "object",
@@ -1140,6 +1143,8 @@ export function createUserContextTools(): EnsoAgentTool[] {
           folder: { type: "string", description: "Email folder (default INBOX)." },
           limit: { type: "number", description: "Max matching emails to return (default 10, max 50)." },
           maxBodyChars: { type: "number", description: "Truncate htmlBody/textBody to this many chars (default 80000)." },
+          saveAttachments: { type: "boolean", description: "If true, save PDF/doc attachments to disk and return their paths in `attachments`." },
+          attachmentsDir: { type: "string", description: "Where to save attachments (default ~/.enso/data/email-attachments)." },
         },
       },
       async execute(_callId, params) {
@@ -1155,6 +1160,11 @@ export function createUserContextTools(): EnsoAgentTool[] {
         const folder = String(params.folder ?? "INBOX").trim();
         const limit = Math.max(1, Math.min(50, Number(params.limit ?? 10)));
         const maxBodyChars = Math.max(2000, Math.min(200000, Number(params.maxBodyChars ?? 80000)));
+        const saveAttachments = params.saveAttachments === true;
+        const attachmentsDir = String(params.attachmentsDir ?? join(homedir(), ".enso", "data", "email-attachments")).trim();
+        if (saveAttachments) {
+          try { if (!existsSync(attachmentsDir)) mkdirSync(attachmentsDir, { recursive: true }); } catch { /* ignore */ }
+        }
 
         if (!senderContains && !subjectContains) {
           return jsonResult({ tool: "enso_email_search_full", error: true, message: "Provide at least one of senderContains or subjectContains." });
@@ -1173,6 +1183,7 @@ export function createUserContextTools(): EnsoAgentTool[] {
           const psPath = join(tmpdir(), `enso-email-search-${Date.now()}.ps1`);
           // PowerShell script — iterate inbox, filter by sender/subject, fetch bodies for matches.
           // Bodies escaped via single-line JSON to survive PowerShell stdout.
+          const attachDirEsc = attachmentsDir.replace(/\\/g, "\\\\").replace(/'/g, "''");
           const psScript = `
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = 'Stop'
@@ -1186,6 +1197,8 @@ try {
   $subjectFilter = '${subjectContains.replace(/'/g, "''")}'
   $maxBody = ${maxBodyChars}
   $needed = ${limit}
+  $saveAttachments = $${saveAttachments ? "true" : "false"}
+  $attachDir = '${attachDirEsc}'
   $found = @()
   $scanned = 0
   $maxScan = 1000
@@ -1202,6 +1215,31 @@ try {
     $text = if ($mail.Body) { $mail.Body.ToString() } else { '' }
     if ($html.Length -gt $maxBody) { $html = $html.Substring(0, $maxBody) }
     if ($text.Length -gt $maxBody) { $text = $text.Substring(0, $maxBody) }
+
+    # Optional: save attachments
+    $attachList = @()
+    if ($saveAttachments -and $mail.Attachments.Count -gt 0) {
+      $stamp = $mail.ReceivedTime.ToString('yyyy-MM-dd_HHmmss')
+      $sanitized = ($sender -replace '[^\\w@.-]', '_')
+      for ($a = 1; $a -le $mail.Attachments.Count; $a++) {
+        $att = $mail.Attachments.Item($a)
+        if ($null -eq $att) { continue }
+        $fname = $att.FileName
+        if ([string]::IsNullOrEmpty($fname)) { continue }
+        $ext = [System.IO.Path]::GetExtension($fname).ToLower()
+        # Only save common doc / spreadsheet / image formats
+        if ($ext -notin @('.pdf', '.xlsx', '.xls', '.csv', '.docx', '.doc', '.png', '.jpg', '.jpeg')) { continue }
+        $safeName = $fname -replace '[^\\w.\\-]', '_'
+        $outPath = Join-Path $attachDir ($stamp + '_' + $sanitized + '_' + $safeName)
+        try {
+          $att.SaveAsFile($outPath)
+          $attachList += @{ filename = $fname; savedPath = $outPath; ext = $ext; sizeBytes = (Get-Item $outPath).Length }
+        } catch {
+          $attachList += @{ filename = $fname; error = $_.Exception.Message }
+        }
+      }
+    }
+
     $found += @{
       from = if ($mail.SenderName) { $mail.SenderName.ToString() } else { '' }
       senderEmail = $sender
@@ -1211,10 +1249,11 @@ try {
       textBody = $text
       htmlLength = if ($mail.HTMLBody) { $mail.HTMLBody.Length } else { 0 }
       textLength = if ($mail.Body) { $mail.Body.Length } else { 0 }
+      attachments = $attachList
     }
   }
   $result = @{ scanned = $scanned; matched = $found.Count; emails = $found }
-  $result | ConvertTo-Json -Depth 5 -Compress
+  $result | ConvertTo-Json -Depth 6 -Compress
 } catch {
   Write-Error $_.Exception.Message
   exit 1
@@ -1250,6 +1289,108 @@ try {
             error: true,
             message: `Email search failed: ${msg}. Outlook desktop must be installed and logged in.`,
           });
+        }
+      },
+    },
+
+    // ── PDF Text Extraction ──
+    // Shell-out to pdftotext (ships with Git for Windows mingw64). Supports
+    // password-protected PDFs via -upw <password>. Used by RM-email statement
+    // parsing to read PDF attachments.
+    {
+      name: "enso_pdf_extract_text",
+      label: "Extract PDF text",
+      description:
+        "Extract plain text from a local PDF file using pdftotext. Supports password-protected PDFs via the `password` param. " +
+        "Returns { text, pageCount, charCount, truncated }. Used by financial-statement parsers to read RM email attachments.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          path: { type: "string", description: "Absolute path to the PDF file." },
+          password: { type: "string", description: "Optional user password for encrypted PDFs." },
+          maxChars: { type: "number", description: "Truncate output to this many characters (default 60000, max 200000)." },
+          firstPage: { type: "number", description: "First page to extract (default 1)." },
+          lastPage: { type: "number", description: "Last page to extract (default: all)." },
+        },
+        required: ["path"],
+      },
+      async execute(_callId, params) {
+        const pdfPath = String(params.path ?? "").trim();
+        if (!pdfPath) return jsonResult({ tool: "enso_pdf_extract_text", error: true, message: "path is required" });
+        if (!existsSync(pdfPath)) return jsonResult({ tool: "enso_pdf_extract_text", error: true, message: `PDF not found: ${pdfPath}` });
+
+        const password = params.password ? String(params.password) : undefined;
+        const maxChars = Math.max(2000, Math.min(200000, Number(params.maxChars ?? 60000)));
+        const firstPage = params.firstPage ? Number(params.firstPage) : undefined;
+        const lastPage = params.lastPage ? Number(params.lastPage) : undefined;
+
+        // Try common pdftotext locations on Windows (Git for Windows ships it).
+        // Note: `pdftotext -v` exits 99 (info command), so we can't probe via execSync.
+        // Use existsSync for absolute paths; fall through to PATH for the bare name.
+        const candidates = [
+          "C:\\Program Files\\Git\\mingw64\\bin\\pdftotext.exe",
+          "C:\\Program Files (x86)\\Git\\mingw64\\bin\\pdftotext.exe",
+        ];
+        let pdftotext: string | null = null;
+        for (const c of candidates) {
+          if (existsSync(c)) { pdftotext = c; break; }
+        }
+        if (!pdftotext) {
+          // Try PATH fallback — verify with `which` which exits 0 on success
+          try {
+            const whichCmd = platform() === "win32" ? "where pdftotext" : "which pdftotext";
+            const found = execSync(whichCmd, { timeout: 3000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim().split(/\r?\n/)[0];
+            if (found) pdftotext = found;
+          } catch { /* not on PATH */ }
+        }
+        if (!pdftotext) {
+          return jsonResult({ tool: "enso_pdf_extract_text", error: true, message: "pdftotext binary not found. Install poppler-utils, or ensure Git for Windows is installed (ships pdftotext at C:\\Program Files\\Git\\mingw64\\bin\\pdftotext.exe)." });
+        }
+
+        const outPath = join(tmpdir(), `enso-pdf-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.txt`);
+        try {
+          const args: string[] = ["-layout", "-enc", "UTF-8"];
+          if (password) { args.push("-upw", password); args.push("-opw", password); }
+          if (firstPage) args.push("-f", String(firstPage));
+          if (lastPage) args.push("-l", String(lastPage));
+          args.push(pdfPath, outPath);
+
+          // Quote args for execSync
+          const cmd = `"${pdftotext}" ${args.map(a => `"${a.replace(/"/g, '\\"')}"`).join(" ")}`;
+          try {
+            execSync(cmd, { timeout: 60000, stdio: ["pipe", "pipe", "pipe"] });
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            try { unlinkSync(outPath); } catch { /* ignore */ }
+            const isPwd = /encrypt|password/i.test(msg);
+            return jsonResult({ tool: "enso_pdf_extract_text", error: true, requiresPassword: isPwd, message: `pdftotext failed: ${msg.slice(0, 300)}` });
+          }
+
+          if (!existsSync(outPath)) {
+            return jsonResult({ tool: "enso_pdf_extract_text", error: true, message: "pdftotext produced no output file" });
+          }
+
+          const raw = readFileSync(outPath, "utf-8");
+          try { unlinkSync(outPath); } catch { /* ignore */ }
+
+          const pageCount = (raw.match(/\f/g) || []).length + 1;
+          const truncated = raw.length > maxChars;
+          const text = truncated ? raw.slice(0, maxChars) + "\n[…truncated…]" : raw;
+
+          logAction({ ts: Date.now(), type: "action", category: "user-context", message: `PDF extracted: ${pdfPath.split(/[/\\]/).pop()} (${raw.length} chars, ${pageCount} pages)` });
+
+          return jsonResult({
+            tool: "enso_pdf_extract_text",
+            success: true,
+            charCount: raw.length,
+            pageCount,
+            truncated,
+            text,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return jsonResult({ tool: "enso_pdf_extract_text", error: true, message: `PDF extraction failed: ${msg}` });
         }
       },
     },
