@@ -11,7 +11,7 @@ import { hostname } from "node:os";
 import { randomUUID } from "node:crypto";
 import { ENSO_HOME } from "./utils/home.js";
 import { loadApiKeys } from "./api-keys.js";
-import { logAction, logError } from "./action-log.js";
+import { logAction, logError, errorResponse } from "./action-log.js";
 import type { Request, Response } from "express";
 
 // ── Types ──
@@ -551,8 +551,7 @@ export async function handleImport(req: Request, res: Response): Promise<void> {
 
     res.json({ success: true, summary });
   } catch (err) {
-    logError("settings-transfer", "Import failed", err);
-    res.status(500).json({ error: err instanceof Error ? err.message : "Import failed" });
+    errorResponse(res, 500, "settings-transfer", "Import failed", err);
   }
 }
 

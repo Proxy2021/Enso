@@ -22,8 +22,9 @@ import { cancelClaudeCodeRun } from "./claude-code.js";
 import { getDomainEvolutionJob, getDomainEvolutionJobs } from "./domain-evolution.js";
 import { transcribeAudioBuffer } from "./transcribe.js";
 import { APP_CATALOG } from "./app-catalog.js";
-import { logAction, logError, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog, onFixLogged } from "./action-log.js";
+import { logAction, logError, errorResponse, getUnacknowledgedFixes, acknowledgeFixes, getRecentLog, getErrorSummary, onFixLogged } from "./action-log.js";
 import type { FixEntry } from "./action-log.js";
+import { httpRequestContext } from "./request-context.js";
 import {
   clearCardHistory,
   pruneStaleJournals,
@@ -273,6 +274,9 @@ export async function startEnsoServer(opts: {
     if (_req.method === "OPTIONS") { res.status(204).end(); return; }
     next();
   });
+
+  // ── Request context — auto-generates correlation IDs for all HTTP requests ──
+  app.use(httpRequestContext);
 
   // ── Shared paths ──
   const pluginDir = dirname(fileURLToPath(import.meta.url));
@@ -528,8 +532,8 @@ export async function startEnsoServer(opts: {
           res.status(413).json({ error: "File too large (max 300 MB)" });
           return;
         }
-      } catch {
-        res.status(500).json({ error: "Cannot read file" });
+      } catch (err) {
+        errorResponse(res, 500, "media", "Cannot read file", err);
         return;
       }
     }
@@ -796,7 +800,7 @@ export async function startEnsoServer(opts: {
 
       res.json({ apps: result });
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      errorResponse(res, 500, "cortex-apps", "Failed to list cortex apps", err);
     }
   });
 
@@ -1314,7 +1318,7 @@ export async function startEnsoServer(opts: {
 
       res.json({ error: `Unknown action: ${action}`, action, appFamily });
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      errorResponse(res, 500, "server", "Request failed", err);
     }
   });
 
@@ -1351,7 +1355,7 @@ export async function startEnsoServer(opts: {
       }
       res.json(result || {});
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      errorResponse(res, 500, "server", "Request failed", err);
     }
   });
 
@@ -1405,7 +1409,7 @@ export async function startEnsoServer(opts: {
       }
       res.json(result || {});
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      errorResponse(res, 500, "server", "Request failed", err);
     }
   });
 
@@ -1464,7 +1468,7 @@ export async function startEnsoServer(opts: {
         streamUrl: `/api/podcast/stream/${slug}`,
       });
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      errorResponse(res, 500, "server", "Request failed", err);
     }
   });
 
@@ -1472,7 +1476,20 @@ export async function startEnsoServer(opts: {
   app.get("/api/action-log", (req, res) => {
     const count = Math.min(Math.max(parseInt(req.query.count as string) || 100, 1), 500);
     const typeFilter = (req.query.type as string) || undefined;
-    res.json(getRecentLog(count, typeFilter));
+    const source = req.query.source === "errors" ? "errors" as const : "all" as const;
+    res.json(getRecentLog(count, typeFilter, source));
+  });
+
+  app.get("/api/error-log", (req, res) => {
+    const count = Math.min(Math.max(parseInt(req.query.count as string) || 100, 1), 500);
+    const severity = (req.query.severity as string) || undefined;
+    const entries = getRecentLog(count, "error", "errors");
+    res.json(severity ? entries.filter(e => e.severity === severity) : entries);
+  });
+
+  app.get("/api/error-summary", (req, res) => {
+    const hours = Math.min(Math.max(parseInt(req.query.hours as string) || 24, 1), 168);
+    res.json(getErrorSummary(hours));
   });
 
   // ── Entity Index API ──
@@ -1496,7 +1513,7 @@ export async function startEnsoServer(opts: {
       for (const e of index.values()) stats[e.source] = (stats[e.source] || 0) + 1;
       return res.json({ totalEntities: index.size, bySource: stats });
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      errorResponse(res, 500, "server", "Request failed", err);
     }
   });
 
@@ -1508,7 +1525,7 @@ export async function startEnsoServer(opts: {
       const result = await ingestFromDataSources();
       res.json(result);
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      errorResponse(res, 500, "server", "Request failed", err);
     }
   });
 
@@ -1521,7 +1538,7 @@ export async function startEnsoServer(opts: {
       const result = await directIngestFromSources({ sourceIds, forceUpdate });
       res.json(result);
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      errorResponse(res, 500, "server", "Request failed", err);
     }
   });
 
@@ -1532,7 +1549,7 @@ export async function startEnsoServer(opts: {
       loadEntityIndex();
       res.json({ ok: true });
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      errorResponse(res, 500, "entity-index", "Failed to reload entity index", err);
     }
   });
 
@@ -1605,7 +1622,7 @@ export async function startEnsoServer(opts: {
         videosRemaining: needVideos.length - videoLimit,
       });
     } catch (err) {
-      res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+      errorResponse(res, 500, "server", "Request failed", err);
     }
   });
 
@@ -1684,9 +1701,8 @@ export async function startEnsoServer(opts: {
         logError("book-recommendation", `Background pipeline failed for "${book.title}"`, bgErr);
       }
     } catch (err) {
-      logError("book-recommendation", "Daily pipeline failed", err);
       if (!res.headersSent) {
-        res.status(500).json({ success: false, message: err instanceof Error ? err.message : String(err) });
+        errorResponse(res, 500, "book-recommendation", "Daily pipeline failed", err);
       }
     }
   });
@@ -2262,7 +2278,7 @@ Return ONLY JSON.`;
       const state = await inferFocusAreas();
       res.json(state);
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Inference failed" });
+      errorResponse(res, 500, "focus-areas", "Inference failed", err);
     }
   });
 
@@ -2272,7 +2288,7 @@ Return ONLY JSON.`;
       const state = await refreshFocusProgress();
       res.json(state || { areas: [] });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Refresh failed" });
+      errorResponse(res, 500, "focus-areas", "Refresh failed", err);
     }
   });
 
@@ -2289,7 +2305,7 @@ Return ONLY JSON.`;
       }
       res.json(area);
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Update failed" });
+      errorResponse(res, 500, "focus-areas", "Update failed", err);
     }
   });
 
@@ -2300,7 +2316,7 @@ Return ONLY JSON.`;
       if (!ok) { res.status(404).json({ error: "Focus area not found" }); return; }
       res.json({ deleted: true });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Delete failed" });
+      errorResponse(res, 500, "focus-areas", "Delete failed", err);
     }
   });
 
@@ -2310,7 +2326,7 @@ Return ONLY JSON.`;
       const area = addFocusArea(req.body);
       res.json(area);
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Create failed" });
+      errorResponse(res, 500, "focus-areas", "Create failed", err);
     }
   });
 
@@ -2323,7 +2339,7 @@ Return ONLY JSON.`;
       if (!result) { res.status(404).json({ error: "Focus area not found" }); return; }
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Preparation failed" });
+      errorResponse(res, 500, "focus-areas", "Preparation failed", err);
     }
   });
 
@@ -2382,7 +2398,7 @@ Return ONLY JSON.`;
 
       res.json({ transcript });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to load transcript" });
+      errorResponse(res, 500, "focus-areas", "Failed to load transcript", err);
     }
   });
 
@@ -2542,7 +2558,7 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
 
       res.json({ updated: changed, area });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Absorption failed" });
+      errorResponse(res, 500, "focus-areas", "Absorption failed", err);
     }
   });
 
@@ -2626,7 +2642,7 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
 
       res.json({ synced });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Sync failed" });
+      errorResponse(res, 500, "focus-areas", "Sync failed", err);
     }
   });
 
@@ -2637,7 +2653,7 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
       if (!result) { res.status(404).json({ error: "Focus area not found or analysis failed" }); return; }
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Gap analysis failed" });
+      errorResponse(res, 500, "focus-areas", "Gap analysis failed", err);
     }
   });
 
@@ -2648,7 +2664,7 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
       if (!area) { res.status(404).json({ error: "Focus area not found" }); return; }
       res.json(area);
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Enrichment failed" });
+      errorResponse(res, 500, "focus-areas", "Enrichment failed", err);
     }
   });
 
@@ -2659,7 +2675,7 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
       if (!result) { res.status(404).json({ error: "Focus area not found" }); return; }
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Plan generation failed" });
+      errorResponse(res, 500, "focus-areas", "Plan generation failed", err);
     }
   });
 
@@ -2670,7 +2686,7 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
       if (!result) { res.status(404).json({ error: "Focus area not found" }); return; }
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Activity fetch failed" });
+      errorResponse(res, 500, "focus-areas", "Activity fetch failed", err);
     }
   });
 
@@ -2707,7 +2723,7 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
       });
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to submit react" });
+      errorResponse(res, 500, "reacts", "Failed to submit react", err);
     }
   };
   app.post("/api/reacts/web", express.json(), handleReactsWeb);
@@ -2755,7 +2771,7 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
       });
       res.json({ success: true, react });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to submit react" });
+      errorResponse(res, 500, "reacts", "Failed to submit react", err);
     }
   };
   app.post("/api/reacts", express.json(), handleReactsInApp);
@@ -2819,7 +2835,7 @@ BEHAVIOR:
 
       res.json({ reply: reply.trim() });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Discuss failed" });
+      errorResponse(res, 500, "focus-areas", "Discuss failed", err);
     }
   });
 
@@ -2860,7 +2876,7 @@ BEHAVIOR:
       const pending = (req.query.pending === "true");
       res.json({ reacts: pending ? getPendingReacts() : getAllReacts(50) });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to load reacts" });
+      errorResponse(res, 500, "reacts", "Failed to load reacts", err);
     }
   };
   app.get("/api/reacts", handleReactsList);
@@ -2905,7 +2921,7 @@ BEHAVIOR:
 
       const tradePassword = process.env.FACTORSTRATEGIES_TRADE_PASSWORD;
       if (!tradePassword) {
-        res.status(500).json({ success: false, error: "FACTORSTRATEGIES_TRADE_PASSWORD is not configured — set it in Settings > Service Keys" });
+        errorResponse(res, 500, "factor-strategies", "FACTORSTRATEGIES_TRADE_PASSWORD is not configured — set it in Settings > Service Keys");
         return;
       }
       const pythonPath = "D:/Github/FactorStrategies/.venv/Scripts/python.exe";
@@ -2943,11 +2959,10 @@ BEHAVIOR:
 
       child.on("error", (err) => {
         clearTimeout(timeoutHandle);
-        logError("factor-strategies", `Portfolio check-in spawn error`, err);
-        res.status(500).json({ success: false, error: err.message, output: stdout });
+        errorResponse(res, 500, "factor-strategies", "Portfolio check-in spawn error", err);
       });
     } catch (err: any) {
-      res.status(500).json({ success: false, error: err?.message || "unknown" });
+      errorResponse(res, 500, "factor-strategies", "Portfolio check-in failed", err);
     }
   });
 
@@ -2958,7 +2973,7 @@ BEHAVIOR:
       const { loadConfig } = await import("./team-leader.js");
       res.json(loadConfig());
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to load config" });
+      errorResponse(res, 500, "team-leader", "Failed to load config", err);
     }
   });
 
@@ -2980,7 +2995,7 @@ BEHAVIOR:
       saveConfig(current);
       res.json(current);
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to update config" });
+      errorResponse(res, 500, "team-leader", "Failed to update config", err);
     }
   });
 
@@ -2990,7 +3005,7 @@ BEHAVIOR:
       const briefing = await runMorningRoutine();
       res.json({ success: true, headline: briefing.headline, sections: briefing.sections, actions: briefing.proposedActions.length });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Morning routine failed" });
+      errorResponse(res, 500, "team-leader", "Morning routine failed", err);
     }
   });
 
@@ -3000,7 +3015,7 @@ BEHAVIOR:
       const result = await runCheckIn();
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Check-in failed" });
+      errorResponse(res, 500, "team-leader", "Check-in failed", err);
     }
   });
 
@@ -3010,7 +3025,7 @@ BEHAVIOR:
       const briefing = getLastBriefing();
       res.json(briefing || { message: "No briefing yet. Run POST /api/team-leader/morning first." });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to load briefing" });
+      errorResponse(res, 500, "team-leader", "Failed to load briefing", err);
     }
   });
 
@@ -3019,7 +3034,7 @@ BEHAVIOR:
       const { getTeamLeaderState } = await import("./team-leader.js");
       res.json(getTeamLeaderState());
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to load state" });
+      errorResponse(res, 500, "team-leader", "Failed to load state", err);
     }
   });
 
@@ -3029,7 +3044,7 @@ BEHAVIOR:
       const success = completeAction(req.params.id);
       res.json({ completed: success });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to complete action" });
+      errorResponse(res, 500, "team-leader", "Failed to complete action", err);
     }
   });
 
@@ -3038,7 +3053,7 @@ BEHAVIOR:
       const { getPendingUserActions } = await import("./team-leader.js");
       res.json({ actions: getPendingUserActions() });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to load pending actions" });
+      errorResponse(res, 500, "team-leader", "Failed to load pending actions", err);
     }
   });
 
@@ -3082,7 +3097,7 @@ BEHAVIOR:
 
       res.json({ experts });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Expert generation failed" });
+      errorResponse(res, 500, "focus-experts", "Expert generation failed", err);
     }
   });
 
@@ -3092,7 +3107,7 @@ BEHAVIOR:
       const health = getExpertHealthSummary(req.params.id);
       res.json({ experts: health });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to get expert health" });
+      errorResponse(res, 500, "focus-experts", "Failed to get expert health", err);
     }
   });
 
@@ -3102,7 +3117,7 @@ BEHAVIOR:
       const updated = await detectFocusTypes();
       res.json({ updated });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Detection failed" });
+      errorResponse(res, 500, "focus-areas", "Detection failed", err);
     }
   });
 
@@ -3119,7 +3134,7 @@ BEHAVIOR:
       if (req.query.limit) filter.limit = parseInt(req.query.limit as string, 10);
       res.json({ artifacts: getArtifacts(filter as any) });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to load artifacts" });
+      errorResponse(res, 500, "artifacts", "Failed to load artifacts", err);
     }
   });
 
@@ -3128,7 +3143,7 @@ BEHAVIOR:
       const { getArtifactCounts } = await import("./agent-artifacts.js");
       res.json(getArtifactCounts());
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Failed to count artifacts" });
+      errorResponse(res, 500, "artifacts", "Failed to count artifacts", err);
     }
   });
 
@@ -3138,7 +3153,7 @@ BEHAVIOR:
       const result = await executeArtifactAction(req.params.id, req.body.actionId);
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Action failed" });
+      errorResponse(res, 500, "artifacts", "Action failed", err);
     }
   });
 
@@ -3154,7 +3169,7 @@ BEHAVIOR:
       }
       res.json({ assessed: toAssess.length });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Assessment failed" });
+      errorResponse(res, 500, "focus-areas", "Assessment failed", err);
     }
   });
 
@@ -3166,7 +3181,7 @@ BEHAVIOR:
       const result = await backfillSprintSummaries();
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Backfill failed" });
+      errorResponse(res, 500, "focus-agent", "Backfill failed", err);
     }
   });
 
@@ -3176,7 +3191,7 @@ BEHAVIOR:
       const pulse = await generateProgressPulse();
       res.json({ success: true, headline: pulse.headline, items: pulse.items, analyses: pulse.analyses.length });
     } catch (err: any) {
-      res.status(500).json({ error: err?.message || "Pulse failed" });
+      errorResponse(res, 500, "focus-agent", "Pulse failed", err);
     }
   });
 
@@ -3203,7 +3218,7 @@ BEHAVIOR:
       saveProject(project);
       res.json({ ok: true, project });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      errorResponse(res, 500, "projects", "Request failed", err);
     }
   });
 
@@ -3251,7 +3266,7 @@ BEHAVIOR:
 
       res.json({ branch, currentBranch, aheadOfMain, behindMain, hasUncommitted });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      errorResponse(res, 500, "projects", "Request failed", err);
     }
   });
 
@@ -3286,7 +3301,7 @@ BEHAVIOR:
       const commitHash = execSync("git rev-parse --short HEAD", { cwd, encoding: "utf-8" }).trim();
       res.json({ ok: true, commitHash, pushed, message });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      errorResponse(res, 500, "projects", "Request failed", err);
     }
   });
 
@@ -3311,7 +3326,7 @@ BEHAVIOR:
       });
       res.json(result);
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      errorResponse(res, 500, "projects", "Request failed", err);
     }
   });
 
@@ -3353,7 +3368,7 @@ BEHAVIOR:
       saveProject(project);
       res.json({ ok: true, project });
     } catch (err: any) {
-      res.status(500).json({ error: err.message });
+      errorResponse(res, 500, "projects", "Request failed", err);
     }
   });
 
@@ -3399,7 +3414,7 @@ BEHAVIOR:
       cancelClaudeCodeRun(req.params.runId);
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Failed to cancel session" });
+      errorResponse(res, 500, "sessions", "Failed to cancel session", err);
     }
   });
 
@@ -3414,7 +3429,7 @@ BEHAVIOR:
       handleOrchestrationCancel(req.params.id);
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Failed to cancel orchestration" });
+      errorResponse(res, 500, "orchestrations", "Failed to cancel orchestration", err);
     }
   });
 
@@ -3424,7 +3439,7 @@ BEHAVIOR:
       handleOrchestrationPause(req.params.id);
       res.json({ success: true });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Failed to pause orchestration" });
+      errorResponse(res, 500, "orchestrations", "Failed to pause orchestration", err);
     }
   });
 
@@ -3545,7 +3560,7 @@ BEHAVIOR:
       runtime.log?.(`[enso] Service key updated: ${sk.id} (${sk.envVar})`);
       res.json({ success: true, configured: !!value });
     } catch (err: any) {
-      res.status(500).json({ error: err.message || "Failed to save key" });
+      errorResponse(res, 500, "settings", "Failed to save key", err);
     }
   });
 
@@ -3651,7 +3666,7 @@ BEHAVIOR:
         logAction({ ts: Date.now(), type: "action", category: "settings-transfer", message: `Audio import: ${imported} files` });
         res.json({ success: true, imported, fileCount });
       } catch (err) {
-        res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+        errorResponse(res, 500, "settings-transfer", "Audio import failed", err);
       }
     });
   });
@@ -3820,7 +3835,7 @@ BEHAVIOR:
 
       res.json({ success: true, candidateCount: candidates.length, emailCount: totalEmails, emailSent: true, token: pending.token, message: `Found ${candidates.length} promo senders (${totalEmails} emails). Report sent.` });
     } catch (err) {
-      res.status(500).json({ success: false, error: err instanceof Error ? err.message : String(err) });
+      errorResponse(res, 500, "email-cleanup", "Email cleanup failed", err);
     }
   });
 
@@ -3868,7 +3883,7 @@ BEHAVIOR:
       res.setHeader("Content-Disposition", `attachment; filename="discovery-${req.params.id}.pptx"`);
       res.send(buf);
     } catch (err) {
-      res.status(500).json({ error: "Failed to generate PPTX" });
+      errorResponse(res, 500, "discovery", "Failed to generate PPTX", err);
     }
   });
 
@@ -3895,11 +3910,11 @@ BEHAVIOR:
     const { user, memory } = req.body as { user?: string; memory?: string };
     if (typeof user === "string") {
       const ok = writeEnsoUser(user);
-      if (!ok) { res.status(500).json({ error: "Failed to write ENSO_USER.md" }); return; }
+      if (!ok) { errorResponse(res, 500, "memory", "Failed to write ENSO_USER.md"); return; }
     }
     if (typeof memory === "string") {
       const ok = writeEnsoMemory(memory);
-      if (!ok) { res.status(500).json({ error: "Failed to write ENSO_MEMORY.md" }); return; }
+      if (!ok) { errorResponse(res, 500, "memory", "Failed to write ENSO_MEMORY.md"); return; }
     }
     res.json({ ok: true });
   });
@@ -3951,7 +3966,7 @@ BEHAVIOR:
       const { listAllCollections } = await import("./persistence.js");
       res.json({ collections: listAllCollections() });
     } catch (err) {
-      res.status(500).json({ error: "Failed to list collections" });
+      errorResponse(res, 500, "persistence", "Failed to list collections", err);
     }
   });
 
@@ -3965,7 +3980,7 @@ BEHAVIOR:
         res.json(doc);
       }
     } catch (err) {
-      res.status(500).json({ error: "Failed to load document" });
+      errorResponse(res, 500, "persistence", "Failed to load document", err);
     }
   });
 
@@ -4070,9 +4085,7 @@ BEHAVIOR:
       logAction({ ts: Date.now(), type: "action", category: "upload", message: `Upload saved: ${filename} (${fileBuffer.length} bytes, ${mimeType})` });
       res.json({ mediaUrl, filePath });
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Unknown upload error";
-      logError("upload", `Upload failed: ${message}`);
-      res.status(500).json({ error: `Upload failed: ${message}` });
+      errorResponse(res, 500, "upload", "Upload failed", err);
     }
   });
 
@@ -4126,8 +4139,7 @@ BEHAVIOR:
         res.status(422).json({ error: "Could not transcribe audio" });
       }
     } catch (err) {
-      logError("upload", "Audio transcription failed", err);
-      res.status(500).json({ error: "Transcription failed" });
+      errorResponse(res, 500, "upload", "Audio transcription failed", err);
     }
   });
 

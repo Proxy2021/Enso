@@ -17,7 +17,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { createHash } from "crypto";
 import { ENSO_HOME } from "./utils/home.js";
-import { logAction, logError } from "./action-log.js";
+import { logAction, logError, errorResponse } from "./action-log.js";
 
 const DOMAIN = "enso.net";
 const REGISTRY_FILE = join(ENSO_HOME, "tunnel-registry.json");
@@ -224,8 +224,7 @@ tunnelRoutes.post("/register", async (req: Request, res: Response) => {
 
     res.json({ tunnelToken, tunnelId, publicUrl });
   } catch (err: any) {
-    logError("tunnel", "Registration failed", err);
-    res.status(500).json({ error: err.message || "Tunnel registration failed" });
+    errorResponse(res, 500, "tunnel", "Registration failed", err);
   }
 });
 
@@ -266,8 +265,7 @@ tunnelRoutes.delete("/:specifier", async (req: Request, res: Response) => {
 
     res.json({ ok: true });
   } catch (err: any) {
-    logError("tunnel", "Deletion failed", err);
-    res.status(500).json({ error: err.message || "Tunnel deletion failed" });
+    errorResponse(res, 500, "tunnel", "Deletion failed", err);
   }
 });
 

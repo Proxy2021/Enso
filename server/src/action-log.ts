@@ -3,16 +3,20 @@
  *
  * Files:
  *   ~/.enso/action.log   — NDJSON, all actions/errors/tools (rotate at 1000 lines)
+ *   ~/.enso/errors.log   — NDJSON, errors only (rotate at 5000 lines, extended retention)
  *   ~/.enso/fixes.json   — JSON array of bug fix records
  */
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { randomUUID } from "crypto";
 import { getEnsoPath, ENSO_HOME } from "./utils/home.js";
+import { getRequestId } from "./request-context.js";
+import type { Response } from "express";
 
 // ── Types ──
 
 export type LogEntryType = "action" | "error" | "fix" | "build" | "system" | "claude-code";
+export type ErrorSeverity = "critical" | "error" | "warning" | "info";
 
 export interface LogEntry {
   ts: number;
@@ -20,6 +24,8 @@ export interface LogEntry {
   category: string;
   message: string;
   error?: string;
+  severity?: ErrorSeverity;
+  requestId?: string;
   cardId?: string;
   toolFamily?: string;
   sessionId?: string;
@@ -38,13 +44,25 @@ export interface FixEntry {
   acknowledged: boolean;
 }
 
+export interface ErrorResponseBody {
+  error: {
+    code: string;
+    message: string;
+    requestId?: string;
+    category?: string;
+  };
+}
+
 // ── Paths ──
 
 const LOG_PATH = getEnsoPath("action.log");
+const ERROR_LOG_PATH = getEnsoPath("errors.log");
 const FIXES_PATH = getEnsoPath("fixes.json");
 
 const MAX_LINES = 1000;
 const KEEP_LINES = 800;
+const ERROR_MAX_LINES = 5000;
+const ERROR_KEEP_LINES = 4000;
 
 function ensureDir(): void {
   if (!existsSync(ENSO_HOME)) {
@@ -54,14 +72,14 @@ function ensureDir(): void {
 
 // ── Rotation ──
 
-function rotateIfNeeded(): void {
+function rotateFile(path: string, maxLines: number, keepLines: number): void {
   try {
-    if (!existsSync(LOG_PATH)) return;
-    const content = readFileSync(LOG_PATH, "utf-8");
+    if (!existsSync(path)) return;
+    const content = readFileSync(path, "utf-8");
     const lines = content.split("\n").filter(Boolean);
-    if (lines.length > MAX_LINES) {
-      const kept = lines.slice(lines.length - KEEP_LINES);
-      writeFileSync(LOG_PATH, kept.join("\n") + "\n");
+    if (lines.length > maxLines) {
+      const kept = lines.slice(lines.length - keepLines);
+      writeFileSync(path, kept.join("\n") + "\n");
     }
   } catch {
     // Best-effort rotation
@@ -76,7 +94,14 @@ export function logAction(entry: LogEntry): void {
     const line = JSON.stringify(entry);
     appendFileSync(LOG_PATH, line + "\n");
     console.log(`[enso:${entry.category}] ${entry.message}`);
-    rotateIfNeeded();
+    rotateFile(LOG_PATH, MAX_LINES, KEEP_LINES);
+
+    if (entry.type === "error") {
+      try {
+        appendFileSync(ERROR_LOG_PATH, line + "\n");
+        rotateFile(ERROR_LOG_PATH, ERROR_MAX_LINES, ERROR_KEEP_LINES);
+      } catch { /* best-effort */ }
+    }
   } catch (err) {
     console.error(`[enso:action-log] write failed:`, err);
   }
@@ -84,15 +109,52 @@ export function logAction(entry: LogEntry): void {
 
 export function logError(category: string, message: string, error?: unknown, extra?: Partial<LogEntry>): void {
   const errStr = error instanceof Error ? error.message : error != null ? String(error) : undefined;
+  const severity: ErrorSeverity = (extra?.severity as ErrorSeverity) ?? "error";
+  const requestId = extra?.requestId ?? getRequestId();
+
   logAction({
     ts: Date.now(),
     type: "error",
     category,
     message,
     error: errStr,
+    severity,
+    requestId,
     ...extra,
   });
-  if (errStr) console.error(`[enso:${category}] ${message}: ${errStr}`);
+
+  const prefix = severity === "critical" ? "CRITICAL" : severity === "warning" ? "WARN" : severity === "info" ? "INFO" : "ERROR";
+  const ridTag = requestId ? ` [${requestId}]` : "";
+  if (errStr) console.error(`[${prefix}:${category}]${ridTag} ${message}: ${errStr}`);
+}
+
+// ── Standardized HTTP Error Response ──
+
+function categoryToCode(category: string): string {
+  return category.toUpperCase().replace(/-/g, "_") + "_ERROR";
+}
+
+export function errorResponse(
+  res: Response,
+  status: number,
+  category: string,
+  message: string,
+  err?: unknown,
+  severity?: ErrorSeverity,
+): void {
+  const requestId = getRequestId();
+  const errMsg = err instanceof Error ? err.message : err != null ? String(err) : message;
+
+  logError(category, message, err, { requestId, severity });
+
+  res.status(status).json({
+    error: {
+      code: categoryToCode(category),
+      message: errMsg,
+      requestId,
+      category,
+    },
+  } satisfies ErrorResponseBody);
 }
 
 // ── Fix Tracking ──
@@ -165,25 +227,76 @@ export function acknowledgeFixes(ids: string[]): void {
 
 // ── Recent Log Reader ──
 
-export function getRecentLog(count = 100, typeFilter?: string): LogEntry[] {
+function readLogFile(path: string): string[] {
   try {
-    if (!existsSync(LOG_PATH)) return [];
-    const content = readFileSync(LOG_PATH, "utf-8");
-    const lines = content.split("\n").filter(Boolean);
-    const entries: LogEntry[] = [];
-    // Read from end for most recent first
-    for (let i = lines.length - 1; i >= 0 && entries.length < count; i--) {
-      try {
-        const entry = JSON.parse(lines[i]) as LogEntry;
-        if (!typeFilter || entry.type === typeFilter) {
-          entries.push(entry);
-        }
-      } catch {
-        // Skip malformed lines
-      }
-    }
-    return entries;
+    if (!existsSync(path)) return [];
+    return readFileSync(path, "utf-8").split("\n").filter(Boolean);
   } catch {
     return [];
   }
+}
+
+export function getRecentLog(count = 100, typeFilter?: string, source?: "all" | "errors"): LogEntry[] {
+  const lines = readLogFile(source === "errors" ? ERROR_LOG_PATH : LOG_PATH);
+  const entries: LogEntry[] = [];
+  for (let i = lines.length - 1; i >= 0 && entries.length < count; i--) {
+    try {
+      const entry = JSON.parse(lines[i]) as LogEntry;
+      if (!typeFilter || entry.type === typeFilter) {
+        entries.push(entry);
+      }
+    } catch {
+      // Skip malformed lines
+    }
+  }
+  return entries;
+}
+
+// ── Error Summary ──
+
+export interface ErrorSummary {
+  period: { from: number; to: number };
+  total: number;
+  bySeverity: Record<string, number>;
+  byCategory: Array<{ category: string; count: number; lastSeen: number }>;
+  recentErrors: LogEntry[];
+}
+
+export function getErrorSummary(hours = 24): ErrorSummary {
+  const now = Date.now();
+  const from = now - hours * 60 * 60 * 1000;
+  const lines = readLogFile(ERROR_LOG_PATH);
+
+  const bySeverity: Record<string, number> = { critical: 0, error: 0, warning: 0, info: 0 };
+  const categoryMap = new Map<string, { count: number; lastSeen: number }>();
+  const filtered: LogEntry[] = [];
+
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line) as LogEntry;
+      if (entry.ts < from) continue;
+      filtered.push(entry);
+      const sev = entry.severity ?? "error";
+      bySeverity[sev] = (bySeverity[sev] ?? 0) + 1;
+      const cat = categoryMap.get(entry.category);
+      if (cat) {
+        cat.count++;
+        if (entry.ts > cat.lastSeen) cat.lastSeen = entry.ts;
+      } else {
+        categoryMap.set(entry.category, { count: 1, lastSeen: entry.ts });
+      }
+    } catch { /* skip */ }
+  }
+
+  const byCategory = Array.from(categoryMap.entries())
+    .map(([category, v]) => ({ category, ...v }))
+    .sort((a, b) => b.count - a.count);
+
+  return {
+    period: { from, to: now },
+    total: filtered.length,
+    bySeverity,
+    byCategory,
+    recentErrors: filtered.slice(-10).reverse(),
+  };
 }

@@ -18,7 +18,7 @@ import type { ServerMessage } from "./types.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { CoreConfig } from "./types.js";
 import type { EnsoRuntime } from "./local-types.js";
-import { logAction, logError } from "./action-log.js";
+import { logAction, logError, errorResponse } from "./action-log.js";
 import { DEFAULT_CONVERSATION_ID } from "./memory-bridge.js";
 import { GEMINI_MODEL_FAST } from "./config.js";
 
@@ -176,8 +176,7 @@ export function createActionRouter(deps: {
         endSSE(res);
       });
     } catch (err) {
-      logError("action-api", "orchestrate setup failed", err);
-      res.status(500).json({ error: String(err) });
+      errorResponse(res, 500, "action-api", "Orchestrate setup failed", err);
     }
 
     // Keep connection open — orchestration streams progress over minutes
@@ -210,8 +209,7 @@ export function createActionRouter(deps: {
         endSSE(res);
       });
     } catch (err) {
-      logError("action-api", "evolve setup failed", err);
-      res.status(500).json({ error: String(err) });
+      errorResponse(res, 500, "action-api", "Evolve setup failed", err);
     }
 
     req.on("close", () => { /* client disconnected */ });
@@ -242,8 +240,7 @@ export function createActionRouter(deps: {
         endSSE(res);
       });
     } catch (err) {
-      logError("action-api", "discover setup failed", err);
-      res.status(500).json({ error: String(err) });
+      errorResponse(res, 500, "action-api", "Discover setup failed", err);
     }
 
     req.on("close", () => { /* client disconnected */ });
@@ -283,8 +280,7 @@ export function createActionRouter(deps: {
         endSSE(res, { runId });
       });
     } catch (err) {
-      logError("action-api", "code setup failed", err);
-      res.status(500).json({ error: String(err) });
+      errorResponse(res, 500, "action-api", "Code setup failed", err);
     }
 
     req.on("close", () => { /* client disconnected */ });
@@ -325,8 +321,7 @@ export function createActionRouter(deps: {
 
       res.json({ apps: [...builtInApps, ...dynamicApps] });
     } catch (err) {
-      logError("action-api", "apps list failed", err);
-      res.status(500).json({ error: String(err) });
+      errorResponse(res, 500, "action-api", "Apps list failed", err);
     }
   });
 
@@ -426,8 +421,7 @@ export function createActionRouter(deps: {
         endSSE(res);
       });
     } catch (err) {
-      logError("action-api", "build setup failed", err);
-      res.status(500).json({ error: String(err) });
+      errorResponse(res, 500, "action-api", "Build setup failed", err);
     }
 
     req.on("close", () => { /* client disconnected */ });
@@ -440,7 +434,7 @@ export function createActionRouter(deps: {
       const cancelled = cancelClaudeCodeRun(String(req.params.runId));
       res.json({ cancelled, runId: req.params.runId });
     } catch (err) {
-      res.status(500).json({ error: String(err) });
+      errorResponse(res, 500, "action-api", "Cancel failed", err);
     }
   });
 

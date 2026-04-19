@@ -19,6 +19,7 @@ import { handleCardEnhance, handlePluginCardAction } from "./outbound.js";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { toProxiedImageUrl } from "./utils/proxy-url.js";
 import { logError, logFix } from "./action-log.js";
+import { runWithRequestId } from "./request-context.js";
 import { setActiveClientId } from "./runtime.js";
 import {
   persistCard,
@@ -304,6 +305,14 @@ Reply with ONLY the research topic as a single line of plain text (no JSON, no m
 // ── Main WebSocket Message Handler ───────────────────────────────────
 
 export async function handleWebSocketMessage(
+  msg: ClientMessage,
+  ctx: WsHandlerContext,
+): Promise<void> {
+  const { result } = runWithRequestId(() => _handleWebSocketMessage(msg, ctx));
+  await result;
+}
+
+async function _handleWebSocketMessage(
   msg: ClientMessage,
   ctx: WsHandlerContext,
 ): Promise<void> {
