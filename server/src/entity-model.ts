@@ -36,13 +36,14 @@ export type EntityType =
   | "project"
   | "article" | "place"
   | "person" | "twitter-account"
-  | "idea" | "synthesis" | "app";
+  | "idea" | "synthesis" | "app"
+  | "financial-account" | "financial-statement";
 
 /** Data source identifiers */
 export type EntitySource =
   | "kindle" | "weread" | "steam" | "movies_tv" | "photos" | "qq_music"
   | "youtube" | "twitter" | "files" | "browser" | "email"
-  | "cortex" | "research" | "manual";
+  | "cortex" | "research" | "manual" | "finances";
 
 /** Lightweight reference — carried in arrays, card data, parent/child links */
 export interface EntityRef {
@@ -216,6 +217,19 @@ export const ENTITY_TYPES: Record<string, EntityTypeDef> = {
     sources: ["cortex", "files"],
     cortexPrefix: "synthesis/",
     detailFields: ["toolFamily", "toolCount", "createdAt"],
+  },
+  "financial-account": {
+    sources: ["finances", "manual"],
+    cortexPrefix: "entities/account-",
+    canContain: ["financial-statement"],
+    detailFields: ["institution", "accountType", "baseCurrency", "currentValue", "lastUpdated", "holdingsCount", "broker"],
+    appFamily: "finances",
+  },
+  "financial-statement": {
+    sources: ["finances"],
+    cortexPrefix: "synthesis/statement-",
+    detailFields: ["accountId", "institution", "period", "openingValue", "closingValue", "netChange", "currency", "holdingsCount"],
+    appFamily: "finances",
   },
 };
 

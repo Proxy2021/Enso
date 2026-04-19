@@ -1118,6 +1118,142 @@ export function createUserContextTools(): EnsoAgentTool[] {
       },
     },
 
+    // ── Email Search with Bodies (full content) ──
+    // Targeted email fetcher: filter by sender email + subject pattern, return
+    // matching messages with their HTML body. Used by the `finances` family to
+    // pull RM performance emails for parsing. Privacy: this is a local-only
+    // read of the user's inbox — no payload leaves the machine.
+    {
+      name: "enso_email_search_full",
+      label: "Search Email (with bodies)",
+      description:
+        "Fetch matching emails from the inbox WITH their HTML body. Filter by sender email substring + subject substring. " +
+        "Returns up to `limit` most-recent matches as { from, senderEmail, subject, date, htmlBody, textBody }. " +
+        "Bodies are truncated to ~80KB each. Used by structured-extraction pipelines (e.g. financial statement parsing). " +
+        "Outlook COM only (Windows). Requires user consent on first run.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          senderContains: { type: "string", description: "Substring match against SenderEmailAddress (e.g. 'gtjas.com.hk' or full email)." },
+          subjectContains: { type: "string", description: "Substring match against subject (case-insensitive). Empty = match any." },
+          folder: { type: "string", description: "Email folder (default INBOX)." },
+          limit: { type: "number", description: "Max matching emails to return (default 10, max 50)." },
+          maxBodyChars: { type: "number", description: "Truncate htmlBody/textBody to this many chars (default 80000)." },
+        },
+      },
+      async execute(_callId, params) {
+        const blocked = checkConsent("email");
+        if (blocked) return blocked;
+
+        if (platform() !== "win32") {
+          return jsonResult({ tool: "enso_email_search_full", error: true, message: "Outlook COM only available on Windows." });
+        }
+
+        const senderContains = String(params.senderContains ?? "").trim();
+        const subjectContains = String(params.subjectContains ?? "").trim();
+        const folder = String(params.folder ?? "INBOX").trim();
+        const limit = Math.max(1, Math.min(50, Number(params.limit ?? 10)));
+        const maxBodyChars = Math.max(2000, Math.min(200000, Number(params.maxBodyChars ?? 80000)));
+
+        if (!senderContains && !subjectContains) {
+          return jsonResult({ tool: "enso_email_search_full", error: true, message: "Provide at least one of senderContains or subjectContains." });
+        }
+
+        const folderMap: Record<string, number> = {
+          "INBOX": 6, "inbox": 6,
+          "SENT": 5, "sent": 5,
+          "DRAFTS": 16, "drafts": 16,
+          "TRASH": 3, "trash": 3,
+          "JUNK": 23, "junk": 23,
+        };
+        const folderConst = folderMap[folder] ?? 6;
+
+        try {
+          const psPath = join(tmpdir(), `enso-email-search-${Date.now()}.ps1`);
+          // PowerShell script — iterate inbox, filter by sender/subject, fetch bodies for matches.
+          // Bodies escaped via single-line JSON to survive PowerShell stdout.
+          const psScript = `
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$ErrorActionPreference = 'Stop'
+try {
+  $outlook = New-Object -ComObject Outlook.Application
+  $ns = $outlook.GetNamespace('MAPI')
+  $folder = $ns.GetDefaultFolder(${folderConst})
+  $items = $folder.Items
+  $items.Sort('[ReceivedTime]', $true)
+  $senderFilter = '${senderContains.replace(/'/g, "''")}'
+  $subjectFilter = '${subjectContains.replace(/'/g, "''")}'
+  $maxBody = ${maxBodyChars}
+  $needed = ${limit}
+  $found = @()
+  $scanned = 0
+  $maxScan = 1000
+  for ($i = 1; $i -le $items.Count -and $scanned -lt $maxScan -and $found.Count -lt $needed; $i++) {
+    $scanned++
+    $mail = $items.Item($i)
+    if ($null -eq $mail) { continue }
+    $sender = if ($mail.SenderEmailAddress) { $mail.SenderEmailAddress.ToString() } else { '' }
+    $subj = if ($mail.Subject) { $mail.Subject.ToString() } else { '' }
+    $matchSender = ($senderFilter -eq '') -or ($sender.ToLower().Contains($senderFilter.ToLower()))
+    $matchSubject = ($subjectFilter -eq '') -or ($subj.ToLower().Contains($subjectFilter.ToLower()))
+    if (-not ($matchSender -and $matchSubject)) { continue }
+    $html = if ($mail.HTMLBody) { $mail.HTMLBody.ToString() } else { '' }
+    $text = if ($mail.Body) { $mail.Body.ToString() } else { '' }
+    if ($html.Length -gt $maxBody) { $html = $html.Substring(0, $maxBody) }
+    if ($text.Length -gt $maxBody) { $text = $text.Substring(0, $maxBody) }
+    $found += @{
+      from = if ($mail.SenderName) { $mail.SenderName.ToString() } else { '' }
+      senderEmail = $sender
+      subject = $subj
+      date = $mail.ReceivedTime.ToString('o')
+      htmlBody = $html
+      textBody = $text
+      htmlLength = if ($mail.HTMLBody) { $mail.HTMLBody.Length } else { 0 }
+      textLength = if ($mail.Body) { $mail.Body.Length } else { 0 }
+    }
+  }
+  $result = @{ scanned = $scanned; matched = $found.Count; emails = $found }
+  $result | ConvertTo-Json -Depth 5 -Compress
+} catch {
+  Write-Error $_.Exception.Message
+  exit 1
+}`;
+          writeFileSync(psPath, psScript, "utf-8");
+
+          const raw = execSync(
+            `powershell -NoProfile -NonInteractive -ExecutionPolicy Bypass -File "${psPath}"`,
+            { timeout: 60000, encoding: "utf-8", maxBuffer: 32 * 1024 * 1024, stdio: ["pipe", "pipe", "pipe"] },
+          );
+          try { unlinkSync(psPath); } catch { /* ignore */ }
+
+          const parsed = JSON.parse(raw.trim());
+          const emails = Array.isArray(parsed.emails) ? parsed.emails : (parsed.emails ? [parsed.emails] : []);
+
+          logAction({
+            ts: Date.now(), type: "action", category: "user-context",
+            message: `Email search: sender~"${senderContains}" subject~"${subjectContains}" → scanned ${parsed.scanned}, matched ${emails.length}`,
+          });
+
+          return jsonResult({
+            tool: "enso_email_search_full",
+            scanned: parsed.scanned ?? 0,
+            matched: emails.length,
+            folder,
+            emails,
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          logError("user-context", `Email search failed: ${msg}`);
+          return jsonResult({
+            tool: "enso_email_search_full",
+            error: true,
+            message: `Email search failed: ${msg}. Outlook desktop must be installed and logged in.`,
+          });
+        }
+      },
+    },
+
     // ── Files ──
     {
       name: "enso_context_scan_files",

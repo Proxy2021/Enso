@@ -1,0 +1,161 @@
+{
+  "version": 1,
+  "createdAt": 1713600000000,
+  "spec": {
+    "toolFamily": "finances",
+    "toolPrefix": "enso_finances_",
+    "description": "Financial accounts dashboard — unified view across brokerage and private-bank accounts. Each account is a Cortex entity; each periodic statement is its own synthesis page. Privacy: all data lives at ~/.enso/wiki/ and ~/.enso/data/finances/ (local only — never committed to git).",
+    "signatureId": "finances_dashboard",
+    "tools": [
+      {
+        "suffix": "list_accounts",
+        "description": "List all known financial accounts with current balance, account type, and holdings count. Reads ~/.enso/data/finances/accounts.json (the local index built by the refresh executors). Use when the user says 'show my accounts', 'financial dashboard', 'net worth', 'wealth overview'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_finances_list_accounts",
+          "totalAccounts": 2,
+          "totalValueByCurrency": {"USD": 1234567},
+          "lastRefreshAt": "2026-04-19T12:00:00Z",
+          "accounts": [
+            {"accountId": "FAKE_ACCT_A", "displayName": "FAKE Brokerage A", "institution": "FAKE_INSTITUTION", "accountType": "brokerage", "baseCurrency": "USD", "currentValue": 0, "holdingsCount": 0, "statementCount": 0, "lastUpdated": "2026-04-19T12:00:00Z"}
+          ]
+        },
+        "requiredDataKeys": ["tool", "accounts"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "account_detail",
+        "description": "Show full detail for one financial account: holdings, recent activity, statements list. Use when user clicks an account row or says 'show <account>'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "accountId": {"type": "string", "description": "Stable account identifier"}
+          },
+          "required": ["accountId"]
+        },
+        "sampleParams": {"accountId": "FAKE_ACCT_A"},
+        "sampleData": {
+          "tool": "enso_finances_account_detail",
+          "accountId": "FAKE_ACCT_A",
+          "displayName": "FAKE Brokerage A",
+          "institution": "FAKE_INSTITUTION",
+          "accountType": "brokerage",
+          "baseCurrency": "USD",
+          "currentValue": 0,
+          "holdings": [],
+          "statements": [],
+          "recentActivity": []
+        },
+        "requiredDataKeys": ["tool", "accountId"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "statement_detail",
+        "description": "Show one periodic statement (snapshot) for an account. Renders opening/closing value, net change, holdings, transactions, fees.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "statementId": {"type": "string"}
+          },
+          "required": ["statementId"]
+        },
+        "sampleParams": {"statementId": "FAKE_STATEMENT"},
+        "sampleData": {
+          "tool": "enso_finances_statement_detail",
+          "statementId": "FAKE_STATEMENT",
+          "accountId": "FAKE_ACCT_A",
+          "period": "2026-04",
+          "openingValue": 0,
+          "closingValue": 0,
+          "netChange": 0,
+          "holdings": [],
+          "transactions": []
+        },
+        "requiredDataKeys": ["tool", "statementId"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "refresh_kk_live",
+        "description": "Re-read the local FactorStrategies accounts directory (data/development/accounts/*.json) and rewrite the financial-account entity pages + per-rebalance statement pages in the Cortex. Use when user says 'refresh accounts', 'update KK_Live', or after a new rebalance.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "accountsDir": {"type": "string", "description": "Override the default FactorStrategies accounts dir."}
+          }
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_finances_refresh_kk_live",
+          "success": true,
+          "accountsScanned": 1,
+          "statementsWritten": 1,
+          "message": "Refreshed 1 account, wrote 1 statement page"
+        },
+        "requiredDataKeys": ["tool", "success"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "configure_bank",
+        "description": "Add, update, or remove a bank entry in the local config at ~/.enso/data/finances/banks.json. Each entry binds a sender email + subject pattern to a bank id used by refresh_rm_emails. The shipped repo has NO seed entries — config is per-user, local-only, never committed.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "id": {"type": "string", "description": "Short bank slug (e.g. 'gtjas', 'citi-pb')."},
+            "displayName": {"type": "string", "description": "Human-readable bank name."},
+            "senderEmail": {"type": "string", "description": "Substring or full sender email (e.g. RM address)."},
+            "subjectMatch": {"type": "string", "description": "Substring (case-insensitive) the email subject must contain."},
+            "accountType": {"type": "string", "description": "'brokerage' or 'private-bank'. Default 'brokerage'."},
+            "baseCurrency": {"type": "string", "description": "Default currency. Default 'USD'."},
+            "remove": {"type": "boolean", "description": "If true, remove the entry with this id."}
+          },
+          "required": ["id"]
+        },
+        "sampleParams": {"id": "fake-bank-id", "displayName": "Fake Bank", "senderEmail": "fake@example.com", "subjectMatch": "Fake Pattern"},
+        "sampleData": {
+          "tool": "enso_finances_configure_bank",
+          "success": true,
+          "action": "added",
+          "bank": {"id": "fake-bank-id"},
+          "bankCount": 0
+        },
+        "requiredDataKeys": ["tool", "success"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "refresh_rm_emails",
+        "description": "For each configured bank in ~/.enso/data/finances/banks.json, fetch matching RM performance emails via Outlook COM, LLM-extract structured statement data, and persist as financial-account entity + financial-statement synthesis pages. Use when user says 'refresh RM statements', 'pull bank emails', or after a new RM email arrives.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "bankId": {"type": "string", "description": "Optional: only refresh this bank id."},
+            "limit": {"type": "number", "description": "Max emails per bank to process (default 6, max 20)."},
+            "force": {"type": "boolean", "description": "If true, re-extract emails even if cached."}
+          }
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_finances_refresh_rm_emails",
+          "success": true,
+          "banksProcessed": 0,
+          "totalScanned": 0,
+          "totalMatched": 0,
+          "totalExtracted": 0,
+          "bankResults": [],
+          "message": "Processed 0 banks (no entries in config)."
+        },
+        "requiredDataKeys": ["tool", "success"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

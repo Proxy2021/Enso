@@ -49,6 +49,17 @@ export interface SystemSignals {
   pendingReacts: Array<{ id: string; channel: string; text: string; action?: string; contextSummary: string; timestamp: string }>;
   /** Self-queued tasks from previous cycles */
   pendingTasks: Array<{ id: string; title: string; description: string; source: string }>;
+  /** Wealth snapshot from the finances family. Null when no accounts indexed. */
+  finances?: {
+    accountCount: number;
+    primaryCurrency: string;
+    primaryTotal: number;
+    delta: number | null;
+    deltaPct: number | null;
+    deltaPeriod: string | null;
+    staleAccounts: number;
+    line: string;
+  } | null;
 }
 
 export interface TeamLeaderAction {
@@ -1053,10 +1064,30 @@ export async function gatherSignals(): Promise<SystemSignals> {
     id: t.id, title: t.title, description: t.description, source: t.source,
   }));
 
+  // Finances rollup (local read; null when no accounts indexed yet)
+  let finances: SystemSignals["finances"] = null;
+  try {
+    const { getFinancesSnapshot, getFinancesBriefingLine } = await import("./finances-summary.js");
+    const snap = getFinancesSnapshot();
+    const line = getFinancesBriefingLine();
+    if (snap && line) {
+      finances = {
+        accountCount: snap.accountCount,
+        primaryCurrency: snap.primaryCurrency,
+        primaryTotal: snap.primaryTotal,
+        delta: snap.delta,
+        deltaPct: snap.deltaPct,
+        deltaPeriod: snap.deltaPeriod,
+        staleAccounts: snap.staleAccounts,
+        line,
+      };
+    }
+  } catch { /* finances module not available — non-fatal */ }
+
   return {
     recentErrors, recentActions, focusAnalyses, cortexStats, taskResults,
     platformHealth: { errorRate, failedTasks, uptimeHours: Math.round(process.uptime() / 3600) },
-    pendingReacts, pendingTasks,
+    pendingReacts, pendingTasks, finances,
   };
 }
 
@@ -1112,6 +1143,9 @@ export async function assessAndPrioritize(signals: SystemSignals): Promise<TeamL
     signals.pendingTasks.length > 0
       ? signals.pendingTasks.map(t => `- "${t.title}": ${t.description} (source: ${t.source})`).join("\n")
       : "No self-queued tasks.",
+    "",
+    `## Wealth`,
+    signals.finances ? signals.finances.line : "No financial accounts indexed yet.",
   ].join("\n");
 
   const prompt = `You are the Team Leader of Enso, a personal AI assistant platform.
@@ -1239,7 +1273,7 @@ SYSTEM STATE SUMMARY:
 - ${signals.focusAnalyses.length} active focus areas, ${signals.focusAnalyses.filter(f => f.hasUnreviewedResults).length} with unreviewed results
 - ${signals.cortexStats.totalPages} Cortex pages, ${signals.cortexStats.entityCount} entities
 - ${signals.platformHealth.failedTasks.length} failed tasks, ${(signals.platformHealth.errorRate * 100).toFixed(0)}% error rate
-- ${signals.taskResults.filter(t => t.status === "success").length} tasks completed in last 24h
+- ${signals.taskResults.filter(t => t.status === "success").length} tasks completed in last 24h${signals.finances ? `\n- Wealth: ${signals.finances.line}` : ""}
 
 ACTION PLAN:
 ${actionsText}
