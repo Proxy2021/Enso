@@ -1078,6 +1078,89 @@ export function createCortexTools(): EnsoAgentTool[] {
       },
     },
 
+    // ── Register a pre-written page in both _index.md and entity-index.json ──
+    // Used by app executors that write Cortex pages directly (e.g. finances)
+    // so the pages become discoverable via Cortex search/list/graph.
+    {
+      name: "enso_wiki_register_page",
+      label: "Register Cortex Page",
+      description:
+        "Append or update an entry in ~/.enso/wiki/_index.md AND upsert an EntityIndexEntry in ~/.enso/data/entity-index.json " +
+        "for a page that has already been written to disk. Used by family executors that write Cortex pages directly " +
+        "(without going through the data-source ingest pipeline). Idempotent — safe to call repeatedly.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          path: { type: "string", description: "Path under ~/.enso/wiki/, e.g. 'entities/account-foo.md'" },
+          title: { type: "string" },
+          summary: { type: "string" },
+          tags: { type: "array", items: { type: "string" } },
+          entityId: { type: "string", description: "EntityId in 'source:type:slug' form" },
+          type: { type: "string", description: "Entity type (e.g. financial-account)" },
+          source: { type: "string", description: "Entity source (e.g. finances)" },
+        },
+        required: ["path", "title", "entityId", "type", "source"],
+      },
+      execute: async (_callId, params) => {
+        try {
+          const { existsSync, readFileSync, writeFileSync } = await import("node:fs");
+          const { join } = await import("node:path");
+          const { homedir } = await import("node:os");
+          const { upsertEntityIndex, saveEntityIndex, parseEntityId } = await import("./entity-model.js");
+
+          const path = String(params.path).trim();
+          const title = String(params.title).trim();
+          const summary = String(params.summary || "").slice(0, 200);
+          const tags = Array.isArray(params.tags) ? params.tags.map(String) : [];
+          const entityId = String(params.entityId).trim();
+          const type = String(params.type).trim();
+          const source = String(params.source).trim();
+
+          if (!path || !title || !entityId) {
+            return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_wiki_register_page", error: true, message: "path, title, entityId required" }) }] };
+          }
+
+          // 1. Update _index.md
+          const indexPath = join(homedir(), ".enso", "wiki", "_index.md");
+          const entityIdLine = `\nEntityId: ${entityId}`;
+          const entry = `\n## ${path}\n**${title}** — ${summary}. Tags: ${tags.join(", ")}.\nUpdated: ${new Date().toISOString()}${entityIdLine}\n`;
+          let raw = existsSync(indexPath) ? readFileSync(indexPath, "utf-8") : "";
+          const escapedPath = path.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const pattern = new RegExp(`\\n## ${escapedPath}\\n[\\s\\S]*?(?=\\n## |$)`, "m");
+          raw = pattern.test(raw) ? raw.replace(pattern, entry) : raw + entry;
+          writeFileSync(indexPath, raw, "utf-8");
+
+          // 2. Upsert entity-index.json
+          const parsed = parseEntityId(entityId);
+          if (parsed) {
+            upsertEntityIndex({
+              entityId,
+              type: parsed.type,
+              source: parsed.source,
+              title,
+              slug: parsed.slug,
+              cortexPath: path,
+              tags,
+              metadata: { summary },
+              updatedAt: new Date().toISOString(),
+            });
+            saveEntityIndex();
+          }
+
+          return { content: [{ type: "text", text: JSON.stringify({
+            tool: "enso_wiki_register_page",
+            success: true,
+            path,
+            entityId,
+          }) }] };
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return { content: [{ type: "text", text: JSON.stringify({ tool: "enso_wiki_register_page", error: true, message: msg }) }] };
+        }
+      },
+    },
+
     // ── Lint ──
     {
       name: "enso_wiki_lint",

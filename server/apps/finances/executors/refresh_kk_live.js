@@ -125,6 +125,17 @@ for (var fi = 0; fi < files.length; fi++) {
   fs.writeFileSync(entityPath, entityLines.join("\n"), "utf-8");
   accountsScanned++;
 
+  // Register in Cortex index so search/list/graph find it
+  await ctx.callTool("enso_wiki_register_page", {
+    path: "entities/account-" + slug + ".md",
+    title: accountName,
+    summary: "Brokerage account at " + broker + " · " + holdings.length + " holdings · " + rebalances.length + " rebalances",
+    tags: ["financial-account", "finances", "brokerage", broker],
+    entityId: accountId,
+    type: "financial-account",
+    source: "finances"
+  }).catch(function(e) { /* non-fatal */ });
+
   // ── Statement pages (one per rebalance entry) ──
   for (var rb_i = 0; rb_i < rebalances.length; rb_i++) {
     var r = rebalances[rb_i];
@@ -191,6 +202,16 @@ for (var fi = 0; fi < files.length; fi++) {
 
     fs.writeFileSync(statementPath, sLines.join("\n"), "utf-8");
     statementsWritten++;
+
+    await ctx.callTool("enso_wiki_register_page", {
+      path: "synthesis/statement-" + statementSlug + ".md",
+      title: accountName + " — " + period,
+      summary: (r.action || "rebalance") + " statement for " + accountName + " on " + period,
+      tags: ["financial-statement", "finances", "statement"],
+      entityId: statementId,
+      type: "financial-statement",
+      source: "finances"
+    }).catch(function(e) { /* non-fatal */ });
   }
 
   indexEntries.push({

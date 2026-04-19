@@ -778,7 +778,8 @@ export async function startEnsoServer(opts: {
         youtube_manager: { label: "YouTube", icon: "📺", order: 5 },
         articles: { label: "Articles", icon: "📰", order: 6 },
         travel: { label: "Travel", icon: "🌍", order: 7 },
-        cortex: { label: "Knowledge", icon: "🧠", order: 8 },
+        finances: { label: "Finances", icon: "💰", order: 8 },
+        cortex: { label: "Knowledge", icon: "🧠", order: 9 },
       };
 
       const result = allApps

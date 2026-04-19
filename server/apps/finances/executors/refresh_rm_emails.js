@@ -281,6 +281,16 @@ for (var bi = 0; bi < banks.length; bi++) {
 
     fs.writeFileSync(statementPath, sLines.join("\n"), "utf-8");
 
+    await ctx.callTool("enso_wiki_register_page", {
+      path: "synthesis/statement-" + statementSlug + ".md",
+      title: bank.displayName + " — " + period,
+      summary: "Periodic statement for " + bank.displayName + " (" + period + ")" + (extracted.closingValue != null ? " · closing " + (extracted.currency || latestCurrency) + " " + extracted.closingValue : ""),
+      tags: ["financial-statement", "finances", "rm-email", bank.id],
+      entityId: statementId,
+      type: "financial-statement",
+      source: "finances"
+    }).catch(function(e) { /* non-fatal */ });
+
     // Write structured sidecar so statement_detail can render without re-parsing markdown.
     var sidecarPath = path.join(STATEMENTS_DIR, bank.id + "-" + period + ".json");
     try {
@@ -354,6 +364,16 @@ for (var bi = 0; bi < banks.length; bi++) {
   aLines.push("Updated: " + new Date().toISOString());
   aLines.push("");
   fs.writeFileSync(accountPath, aLines.join("\n"), "utf-8");
+
+  await ctx.callTool("enso_wiki_register_page", {
+    path: "entities/account-" + accountSlug + ".md",
+    title: bank.displayName,
+    summary: bank.accountType + " account at " + bank.displayName + " · " + statementEntries.length + " statements" + (latestClosing != null ? " · latest " + latestCurrency + " " + latestClosing : ""),
+    tags: ["financial-account", "finances", bank.accountType, bank.id, "rm-email"],
+    entityId: accountId,
+    type: "financial-account",
+    source: "finances"
+  }).catch(function(e) { /* non-fatal */ });
 
   indexEntriesByBank[bank.id] = {
     accountId: accountId,
