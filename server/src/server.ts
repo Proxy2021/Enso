@@ -2902,6 +2902,49 @@ BEHAVIOR:
     }
   });
 
+  // ── Share Cards: interactive landing pages for scheduled-task notifications ──
+  // GET payload: returns the card snapshot (template + data + allowed actions)
+  // for the frontend /share/<id> route to render via DynamicUICard.
+  app.get("/api/share/:notificationId", async (req, res) => {
+    try {
+      const { getSharePayload } = await import("./share-cards.js");
+      const result = getSharePayload(req.params.notificationId);
+      if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
+      res.json(result.payload);
+    } catch (err: any) {
+      errorResponse(res, 500, "share", "Failed to load share payload", err);
+    }
+  });
+
+  // Action: invoke a whitelisted executor on behalf of the recipient.
+  // Body: { action: string, payload?: object }. Returns updated card data.
+  app.post("/api/share/:notificationId/action", express.json(), async (req, res) => {
+    try {
+      const { invokeShareAction } = await import("./share-cards.js");
+      const action = String((req.body as { action?: unknown })?.action ?? "").trim();
+      const payload = (req.body as { payload?: unknown })?.payload;
+      if (!action) { res.status(400).json({ error: "action is required" }); return; }
+      const result = await invokeShareAction(req.params.notificationId, action, payload);
+      if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
+      res.json({ data: result.data });
+    } catch (err: any) {
+      errorResponse(res, 500, "share", "Share action failed", err);
+    }
+  });
+
+  // Refresh: re-run the primary tool with default params. Only works if the
+  // snapshot was created with refreshable: true.
+  app.post("/api/share/:notificationId/refresh", async (req, res) => {
+    try {
+      const { invokeShareRefresh } = await import("./share-cards.js");
+      const result = await invokeShareRefresh(req.params.notificationId);
+      if (!result.ok) { res.status(result.status).json({ error: result.error }); return; }
+      res.json({ data: result.data });
+    } catch (err: any) {
+      errorResponse(res, 500, "share", "Share refresh failed", err);
+    }
+  });
+
   // Portfolio Check-in button on FactorStrategies briefing landing pages.
   // Runs: python portfolio_manager.py checkin KK_Live --trade-password <pw>
   // Gated by matching notificationId + type=factor-strategies so the URL
@@ -4518,6 +4561,27 @@ BEHAVIOR:
               notifyOnComplete: false,
             });
             runtime.log?.(`[enso] Team Leader check-in registered (${config.schedule.checkIn})`);
+          }
+
+          // Daily Stock Picks — fires after US market close on weekdays.
+          // Sends an email + WeChat with the flagship preset and a /share/<id>
+          // link to the full interactive dashboard.
+          if (!getTask("stocks-daily")) {
+            try {
+              createTask({
+                taskId: "stocks-daily",
+                name: "Daily Stock Picks",
+                description: "FactorStrategies' multi-factor consensus portfolio — emailed daily after US market close with an interactive dashboard link",
+                cron: "30 16 * * 1-5",
+                action: { type: "tool" as const, toolId: "enso_stocks_daily_briefing", params: { to: "kkwong@xiaomi.com" } },
+                enabled: true,
+                recurring: true,
+                notifyOnComplete: false,
+              });
+              runtime.log?.(`[enso] Daily Stock Picks task registered (weekdays 16:30)`);
+            } catch (err) {
+              runtime.log?.(`[enso] Daily Stock Picks task registration deferred: ${err instanceof Error ? err.message : String(err)}`);
+            }
           }
 
         }).catch(() => {});

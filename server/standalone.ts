@@ -39,6 +39,7 @@ import { createCortexTools } from "./src/cortex-tools.js";
 import { createPageTools } from "./src/page-tools.js";
 import { createFocusAgentTools } from "./src/focus-agent.js";
 import { createTeamLeaderTools } from "./src/team-leader.js";
+import { createStocksDailyBriefingTools } from "./src/stocks-daily-briefing.js";
 import { startSelfHealing } from "./src/self-heal.js";
 import { setCardAccountResolver, cardContexts } from "./src/outbound/card-context.js";
 import { loadAllPersistedCards } from "./src/outbound/card-persistence.js";
@@ -69,6 +70,7 @@ function registerAllTools(): void {
     createPageTools(),
     createFocusAgentTools(),
     createTeamLeaderTools(),
+    createStocksDailyBriefingTools(),
   ];
   for (const tools of allToolSets) {
     for (const tool of tools) {

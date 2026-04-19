@@ -29,10 +29,18 @@ import SettingsPanel from "./components/SettingsPanel";
 import ToastContainer from "./components/ToastContainer";
 import BackgroundTaskBar from "./components/BackgroundTaskBar";
 import ProactiveNudgeBanner from "./components/ProactiveNudgeBanner";
+import PublicShareApp from "./PublicShareApp";
 import { reportError } from "./lib/error-reporter";
 import { useKeyboardShortcuts } from "./lib/keyboard-shortcuts";
 import { t, useT } from "./lib/i18n";
 import "./cards";
+
+/** Match /share/<notificationId> paths so we can render the public single-card view. */
+function detectSharePath(): string | null {
+  if (typeof window === "undefined") return null;
+  const m = window.location.pathname.match(/^\/share\/([^/?#]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
 
 class AppErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -248,6 +256,21 @@ function TabContent() {
 }
 
 export default function App() {
+  // Public share route — bypass the entire chat shell, no WS connection.
+  // Hooks below are inside ChatApp, so this early-return doesn't violate
+  // the rules of hooks.
+  const sharedNotificationId = detectSharePath();
+  if (sharedNotificationId) {
+    return (
+      <AppErrorBoundary>
+        <PublicShareApp notificationId={sharedNotificationId} />
+      </AppErrorBoundary>
+    );
+  }
+  return <ChatApp />;
+}
+
+function ChatApp() {
   const connect = useChatStore((s) => s.connect);
   const disconnect = useChatStore((s) => s.disconnect);
   const connectToBackend = useChatStore((s) => s.connectToBackend);

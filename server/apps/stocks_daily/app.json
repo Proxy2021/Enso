@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "createdAt": 1713532800000,
+  "spec": {
+    "toolFamily": "stocks_daily",
+    "toolPrefix": "enso_stocks_daily_",
+    "description": "Daily Stock Picks Dashboard — surfaces the multi-factor consensus portfolios computed by the local FactorStrategies project. Shows today's holdings per preset, cash fraction, factor-blend rationale, and lets the user add picks to a personal watchlist or pull factor explanations.",
+    "signatureId": "stocks_daily_dashboard",
+    "tools": [
+      {
+        "suffix": "today",
+        "description": "Load today's stock picks from FactorStrategies. Returns all consensus presets with their holdings, weights, qualify counts, factor-blend description, and watchlist status. Reads D:/Github/FactorStrategies/data/development/daily_holdings/latest.json — does not refresh the underlying compute. Use when the user says 'show today's picks', 'what stocks today', 'daily portfolio', 'consensus picks', 'factor strategies dashboard'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "preset": {
+              "type": "string",
+              "description": "Optional preset id to focus on (e.g. 'M24_5f_consensus'). Omit to show all presets."
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_stocks_daily_today",
+          "panelDate": "2026-04-17",
+          "generatedAt": "2026-04-19T02:40:57Z",
+          "universeSize": 780,
+          "presetCount": 11,
+          "watchlist": ["AAPL", "MSFT"],
+          "presets": [
+            {
+              "id": "M24_5f_consensus",
+              "label": "M24 · 5-factor consensus (top 10)",
+              "factorBlend": "F1 + F2 + F4 + F5 + F7 — value, quality-conditional growth, long-term momentum, book growth, defensive",
+              "theme": "Multi-factor balanced",
+              "holdings": [
+                {"ticker": "HCA", "weight": 0.1, "watching": false},
+                {"ticker": "LMT", "weight": 0.1, "watching": false}
+              ],
+              "cashFraction": 0,
+              "nQualify": 45,
+              "nTarget": 10,
+              "nFilled": 10,
+              "isFlagship": true
+            }
+          ]
+        },
+        "requiredDataKeys": ["tool", "presets"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "add_to_watchlist",
+        "description": "Add or remove a ticker from the user's personal stock watchlist. The watchlist is shared across all presets and persisted at ~/.enso/data/factor-strategies/watchlist.json. Use when the user clicks 'Watch' or 'Unwatch' on a holding, or says 'add TICKER to my watchlist', 'remove TICKER', 'track this stock'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ticker": { "type": "string", "description": "Stock ticker symbol (e.g. 'AAPL')" },
+            "action": { "type": "string", "description": "'add' (default) or 'remove'" }
+          },
+          "required": ["ticker"]
+        },
+        "sampleParams": { "ticker": "HCA", "action": "add" },
+        "sampleData": {
+          "tool": "enso_stocks_daily_add_to_watchlist",
+          "ticker": "HCA",
+          "action": "add",
+          "watching": true,
+          "watchlistSize": 3,
+          "watchlist": ["AAPL", "MSFT", "HCA"],
+          "message": "Added HCA to watchlist"
+        },
+        "requiredDataKeys": ["tool", "ticker"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "factor_info",
+        "description": "Show the factor methodology behind a preset — what each factor measures and why this blend was chosen. Pure lookup, no LLM call. Use when the user clicks 'Why these picks?', 'Show factors', or asks 'how is M24 constructed', 'what factors does M9 use'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "presetId": { "type": "string", "description": "Preset identifier (e.g. 'M24_5f_consensus')" }
+          },
+          "required": ["presetId"]
+        },
+        "sampleParams": { "presetId": "M24_5f_consensus" },
+        "sampleData": {
+          "tool": "enso_stocks_daily_factor_info",
+          "presetId": "M24_5f_consensus",
+          "label": "M24 · 5-factor consensus",
+          "blendDescription": "Five-factor consensus voting across value, growth, momentum, quality, and defensiveness. A stock enters the portfolio when at least 3 of 5 factors rank it in the top decile.",
+          "factors": [
+            { "id": "F1", "theme": "Value × Quality × Short Reversal", "formula": "zscore(rank(-PB) × rank(ROIC) × rank(-ret_10d))", "oosSharpe": 1.07 },
+            { "id": "F2", "theme": "Quality-conditional Growth", "formula": "where(ROIC > 60th pct, rank(earnings_growth_yoy))", "oosSharpe": 0.86 }
+          ]
+        },
+        "requiredDataKeys": ["tool", "presetId"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "stock_detail",
+        "description": "Show full detail for a single stock from the daily picks: company name + sector + description, fundamentals (PE, ROE, growth, dividend, beta), analyst target + rating distribution, and which presets currently include it. Reads FactorStrategies' overview JSON for the ticker. Use when the user clicks 'Detail →' on a pick or asks 'tell me more about TICKER', 'show TICKER fundamentals'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "ticker": { "type": "string", "description": "Stock ticker symbol (uppercased)." }
+          },
+          "required": ["ticker"]
+        },
+        "sampleParams": { "ticker": "HCA" },
+        "sampleData": {
+          "tool": "enso_stocks_daily_stock_detail",
+          "ticker": "HCA",
+          "name": "HCA Holdings Inc",
+          "sector": "HEALTHCARE",
+          "marketCap": "$108B",
+          "fundamentals": { "pe": 17.04, "roe": 136.3, "earningsGrowthYoy": 44.5 },
+          "analyst": { "targetPrice": 542.67, "counts": { "strongBuy": 2, "buy": 13, "hold": 9 }, "total": 25 },
+          "presetsContaining": [{ "presetId": "M24_5f_consensus", "weightPct": 10, "rank": 1 }],
+          "inPresetCount": 4
+        },
+        "requiredDataKeys": ["tool", "ticker"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "portfolio_checkin",
+        "description": "Run the FactorStrategies portfolio check-in: invokes `python portfolio_manager.py checkin <account>` against the live FactorStrategies account, reports current value + holdings vs target, and identifies any swaps the strategy thinks are needed. With FACTORSTRATEGIES_TRADE_PASSWORD set the script may execute trades; without it, runs in report-only mode. Use when the user clicks 'Run Portfolio Check-in' or says 'check my portfolio', 'should I rebalance'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "account": { "type": "string", "description": "FactorStrategies account name (default: KK_Live)" },
+            "dryRun": { "type": "boolean", "description": "If true, skip the trade password even when set — forces a report-only run." }
+          }
+        },
+        "sampleParams": { "account": "KK_Live" },
+        "sampleData": {
+          "tool": "enso_stocks_daily_portfolio_checkin",
+          "success": true,
+          "account": "KK_Live",
+          "summary": { "currentValue": 125000, "totalReturnPct": 8.4, "rebalanceNeeded": true, "swaps": [{ "action": "buy", "ticker": "HCA" }] },
+          "output": "ACCOUNT CHECK-IN: KK_Live\nCurrent value: $125,000.00 (return +8.40%)…",
+          "outputLength": 4200,
+          "message": "Portfolio check-in completed for KK_Live — rebalance executed/proposed"
+        },
+        "requiredDataKeys": ["tool", "success"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

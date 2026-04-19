@@ -22,7 +22,7 @@ import { logAction, logError } from "./action-log.js";
 
 export interface NotificationContext {
   /** What type of notification this was */
-  type: "briefing" | "pulse" | "sprint-complete" | "alert" | "checkin" | "discovery" | "card" | "focus" | "entity" | "sprint" | "deliverable" | "direct" | "factor-strategies" | "book-recommendation" | "youtube-daily" | "focus-progress";
+  type: "briefing" | "pulse" | "sprint-complete" | "alert" | "checkin" | "discovery" | "card" | "focus" | "entity" | "sprint" | "deliverable" | "direct" | "factor-strategies" | "book-recommendation" | "youtube-daily" | "focus-progress" | "stocks-daily";
   /** Unique ID for the notification instance */
   notificationId: string;
   /** Which focus area this relates to (if any) */
@@ -37,6 +37,35 @@ export interface NotificationContext {
   briefingHtml?: string;
   /** Short subject line of the email (e.g. "FactorStrategies Daily — 2026-04-18 Saturday") */
   subject?: string;
+  /** Interactive card snapshot for /share/<id> landing pages. */
+  card?: SharedCardSnapshot;
+}
+
+/**
+ * A card snapshot attached to a notification. Lets the recipient open
+ * /share/<notificationId> and interact with the same JSX template that
+ * renders inside the chat — buttons trigger executor calls scoped to
+ * the allowedActions whitelist.
+ */
+export interface SharedCardSnapshot {
+  /** App family id (e.g. "stocks_daily") used to resolve the tool prefix. */
+  appId: string;
+  /** Tool prefix, e.g. "enso_stocks_daily_". */
+  toolPrefix: string;
+  /** Primary tool name (used by /refresh), e.g. "enso_stocks_daily_today". */
+  primaryToolName: string;
+  /** JSX template source — frozen at send time so the share view stays stable. */
+  templateJSX: string;
+  /** Most recent executor output. Updated by /action and /refresh calls. */
+  data: unknown;
+  /** Action suffixes that the recipient is allowed to invoke from /share. */
+  allowedActions: string[];
+  /** Whether /refresh is enabled (re-runs primary tool). */
+  refreshable: boolean;
+  /** Page title shown above the card. */
+  title: string;
+  /** Optional days until snapshot expires. Defaults to NOTIFICATION_TTL_DAYS (7). */
+  ttlDays?: number;
 }
 
 export interface React {
@@ -93,10 +122,13 @@ function loadContextRegistry(): ContextRegistry {
 function saveContextRegistry(reg: ContextRegistry): void {
   const dir = dirname(NOTIFICATION_CONTEXT_PATH);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  // Keep registry compact — prune contexts older than 7 days
-  const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  // Keep registry compact — prune contexts past their per-snapshot TTL (default 7 days).
+  const now = Date.now();
+  const defaultMs = 7 * 24 * 60 * 60 * 1000;
   for (const [id, ctx] of Object.entries(reg.contexts)) {
-    if (new Date(ctx.sentAt).getTime() < cutoff) delete reg.contexts[id];
+    const ttlMs = (ctx.card?.ttlDays ?? 7) * 24 * 60 * 60 * 1000;
+    const ageMs = now - new Date(ctx.sentAt).getTime();
+    if (ageMs > Math.max(ttlMs, defaultMs)) delete reg.contexts[id];
   }
   writeFileSync(NOTIFICATION_CONTEXT_PATH, JSON.stringify(reg, null, 2), "utf-8");
 }
@@ -169,6 +201,32 @@ export function storeBriefingHtml(notificationId: string, briefingHtml: string, 
   ctx.briefingHtml = briefingHtml;
   if (subject) ctx.subject = subject;
   saveContextRegistry(reg);
+}
+
+/**
+ * Attach an interactive card snapshot to a notification. Enables the
+ * /share/<id> landing page to render the card and accept actions.
+ */
+export function attachCardSnapshot(notificationId: string, snapshot: SharedCardSnapshot): void {
+  const reg = loadContextRegistry();
+  const ctx = reg.contexts[notificationId];
+  if (!ctx) return;
+  ctx.card = snapshot;
+  saveContextRegistry(reg);
+}
+
+/**
+ * Update only the live `data` portion of an attached snapshot — used by
+ * /share/<id>/action and /refresh to persist executor results without
+ * reissuing the template.
+ */
+export function updateSnapshotData(notificationId: string, data: unknown): boolean {
+  const reg = loadContextRegistry();
+  const ctx = reg.contexts[notificationId];
+  if (!ctx?.card) return false;
+  ctx.card.data = data;
+  saveContextRegistry(reg);
+  return true;
 }
 
 /**
