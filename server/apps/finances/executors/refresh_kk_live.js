@@ -42,8 +42,15 @@ function fmtMoney(v, currency) {
 }
 
 // ── Discover accounts ──
+// Skip:
+//  - files starting with `_` (metadata)
+//  - files containing 'demo' or 'test' in the name (demo/sandbox accounts)
+//  - JSON whose contents have is_demo / demo / test flags set true
 var files = fs.readdirSync(accountsDir).filter(function(f) {
-  return /\.json$/i.test(f) && !f.startsWith("_");
+  if (!/\.json$/i.test(f)) return false;
+  if (f.startsWith("_")) return false;
+  if (/(^|[_-])(demo|test|sandbox)([_.-]|$)/i.test(f)) return false;
+  return true;
 });
 
 var accountsScanned = 0;
@@ -55,6 +62,9 @@ for (var fi = 0; fi < files.length; fi++) {
   var raw;
   try { raw = JSON.parse(fs.readFileSync(fpath, "utf-8")); }
   catch (e) { continue; }
+
+  // Also skip when the JSON itself flags demo/test
+  if (raw && (raw.is_demo === true || raw.demo === true || raw.is_test === true || raw.test === true)) continue;
 
   var accountName = raw.account_name || files[fi].replace(/\.json$/i, "");
   var broker = raw.broker || "unknown";
