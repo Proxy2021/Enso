@@ -21,7 +21,7 @@ import { homedir } from "node:os";
 import { readdirSync } from "node:fs";
 import { logAction, logError } from "./action-log.js";
 import { llm } from "./llm.js";
-import { renderPodcastSegment, pcmToWav } from "./podcast.js";
+import { renderPodcastSegment, pcmToWav, normalizeAndPadPcm } from "./podcast.js";
 import { resolveEntity, lookupEntity, getEntityIndex, type EntityId } from "./entity-model.js";
 import { braveWebSearch, fetchPageContent } from "./researcher-tools.js";
 import { registerPage, type PageConfig, type PageSection } from "./shareable-pages.js";
@@ -604,8 +604,14 @@ CRITICAL RULES:
   });
 
   try {
-    // Parse JSON from response (may have markdown code fences)
-    const jsonStr = synthesisResult?.replace(/```json\n?|\n?```/g, "").trim() ?? "{}";
+    // Parse JSON from response — LLMs often wrap JSON in markdown fences or
+    // prefix it with explanatory text. Extract the outermost { ... } object.
+    let jsonStr = synthesisResult?.replace(/```(?:json|JSON)?\n?|\n?```/g, "").trim() ?? "{}";
+    const firstBrace = jsonStr.indexOf("{");
+    const lastBrace = jsonStr.lastIndexOf("}");
+    if (firstBrace >= 0 && lastBrace > firstBrace) {
+      jsonStr = jsonStr.slice(firstBrace, lastBrace + 1);
+    }
     const parsed = JSON.parse(jsonStr);
 
     const result: EntityResearchResult = {
@@ -691,7 +697,10 @@ Rules:
 
   const result = await llm({ prompt: outlinePrompt, tier: "utility", timeoutMs: 30_000 });
   try {
-    const jsonStr = result?.replace(/```json\n?|\n?```/g, "").trim() ?? "{}";
+    let jsonStr = result?.replace(/```(?:json|JSON)?\n?|\n?```/g, "").trim() ?? "{}";
+    const fb = jsonStr.indexOf("{");
+    const lb = jsonStr.lastIndexOf("}");
+    if (fb >= 0 && lb > fb) jsonStr = jsonStr.slice(fb, lb + 1);
     return JSON.parse(jsonStr) as PodcastOutline;
   } catch {
     // Fallback outline with substantial section lengths
@@ -753,9 +762,9 @@ ${section.id === "criticism" || section.id === "perspectives" ? `\nCritical Pers
 ${previousEnding ? `\nPREVIOUS SECTION ENDED WITH: "${previousEnding}"` : ""}
 
 Rules:
-- Use "Host A:" and "Host B:" speaker tags (one per line)
-- Host A drives conversation, asks probing questions, provides context
-- Host B provides deep insights, challenges assumptions, adds nuance
+- Use "Joe:" (male host) and "Jane:" (female host) speaker tags (one per line). Always keep these exact English names even when the dialogue is in another language — they are speaker IDs, not translated names.
+- Joe drives conversation, asks probing questions, provides context
+- Jane provides deep insights, challenges assumptions, adds nuance
 - WRITE LONG — each host should speak 2-4 sentences per turn, not just one-liners
 - Include specific examples, case studies, data points, and quotes from the book
 - Explore the "why" behind each insight — don't just state facts
@@ -828,24 +837,60 @@ export async function generateFullScript(
 // ─── Phase 4: Audio Rendering ────────────────────────────────────────────────
 
 /**
- * Split a script into segments of ≤maxChars, breaking at Host A/B boundaries.
+ * Split a script into segments of ≤maxChars, breaking at sentence boundaries.
  *
- * NOTE: 2000 chars (~2 min audio) keeps each TTS response inside the preview
- * model's clean quality range. Longer single-shot prompts (3000-4000 chars)
- * produce audible decoder drift — voice gets deeper and coarser toward the
- * end of the segment.
+ * The Gemini preview TTS decoder drifts with length — Google's own docs warn
+ * that quality degrades past "a few minutes." At ~800 chars each response
+ * stays well under a minute of audio, keeping every segment inside the clean
+ * range. Splits happen on sentence punctuation (. ? ! 。？！) so we never
+ * cut mid-sentence. If a single speaker turn exceeds maxChars, the speaker
+ * tag is preserved on each sub-chunk so the multi-speaker model keeps its
+ * voice assignment.
  */
-function splitScriptIntoSegments(script: string, maxChars = 2000): string[] {
-  const lines = script.split("\n");
+function splitScriptIntoSegments(script: string, maxChars = 800): string[] {
+  const lines = script.split("\n").map((l) => l.trim()).filter(Boolean);
+
+  // Step 1: expand lines into "units" — each unit fits within maxChars.
+  // Oversized turns get sentence-sub-split with speaker tag carried over.
+  const units: string[] = [];
+  for (const line of lines) {
+    if (line.length <= maxChars) { units.push(line); continue; }
+
+    // Preserve speaker tag on each sub-chunk so multi-speaker TTS keeps its
+    // voice assignment. Matches "Joe:" / "Jane:" (current) or the legacy
+    // "Host A:" / "Host B:" so re-rendering old cached scripts still works.
+    const tagMatch = line.match(/^(Joe|Jane|Host\s+[AB])\s*:\s*(.*)$/i);
+    const prefix = tagMatch ? tagMatch[1].replace(/\s+/g, " ").trim() + ": " : "";
+    const body = tagMatch ? tagMatch[2] : line;
+
+    // Sentence tokens: runs ending in . ? ! 。？！ (plus trailing text with no terminator).
+    const sentences = body.match(/[^.!?。！？]+[.!?。！？]+|[^.!?。！？]+$/g) ?? [body];
+
+    let chunk = "";
+    for (const raw of sentences) {
+      const s = raw.trim();
+      if (!s) continue;
+      const candidate = chunk ? `${chunk} ${s}` : s;
+      if (prefix.length + candidate.length > maxChars && chunk) {
+        units.push(prefix + chunk);
+        chunk = s;
+      } else {
+        chunk = candidate;
+      }
+    }
+    if (chunk) units.push(prefix + chunk);
+  }
+
+  // Step 2: pack units into segments up to maxChars, preserving turn boundaries.
   const segments: string[] = [];
   let current = "";
-
-  for (const line of lines) {
-    if (current.length + line.length + 1 > maxChars && current.length > 0) {
+  for (const unit of units) {
+    if (current.length + unit.length + 1 > maxChars && current) {
       segments.push(current.trim());
-      current = "";
+      current = unit;
+    } else {
+      current += (current ? "\n" : "") + unit;
     }
-    current += line + "\n";
   }
   if (current.trim()) segments.push(current.trim());
 
@@ -879,8 +924,12 @@ export async function renderLongformAudio(
   await Promise.all(
     allSegments.map((seg, idx) =>
       withTtsSlot(() => renderPodcastSegment(seg, geminiKey))
-        .then((res) => {
-          pcmBuffers[idx] = res.pcm;
+        .then(async (res) => {
+          // Normalize loudness + append silence pad so per-call drift doesn't
+          // compound across the concatenated podcast. Falls back to raw PCM
+          // if ffmpeg isn't available.
+          const normalized = await normalizeAndPadPcm(res.pcm, res.sampleRate, 150);
+          pcmBuffers[idx] = normalized;
           sampleRates[idx] = res.sampleRate;
           completed++;
           onProgress?.(completed - 1, allSegments.length);
@@ -905,7 +954,14 @@ export async function renderLongformAudio(
   }
 
   // Concatenate PCM in order (preserves audio sequence) and wrap with WAV header
-  const totalPcm = Buffer.concat(pcmBuffers.filter((b) => b.length > 0));
+  const successfulSegments = pcmBuffers.filter((b) => b.length > 0);
+  if (successfulSegments.length === 0) {
+    throw new Error(`All ${allSegments.length} audio segments failed to render — no audio produced`);
+  }
+  if (successfulSegments.length < allSegments.length) {
+    logError("book-podcast", `${allSegments.length - successfulSegments.length}/${allSegments.length} segments failed — audio will have gaps`, null);
+  }
+  const totalPcm = Buffer.concat(successfulSegments);
   return pcmToWav(totalPcm, firstRate);
 }
 

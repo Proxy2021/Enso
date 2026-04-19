@@ -37,9 +37,9 @@ export async function getGeminiApiKey(): Promise<string | undefined> {
 const PODCAST_SCRIPT_PROMPT = `You are a podcast script writer. Given content to discuss, write a natural 3-5 minute conversational podcast script between two hosts.
 
 Rules:
-- Use exactly "Host A:" and "Host B:" as speaker tags (one per line, alternating)
-- Host A drives the conversation, introduces the topic, asks questions
-- Host B provides insights, adds detail, plays devil's advocate
+- Use exactly "Joe:" (male host) and "Jane:" (female host) as speaker tags (one per line, alternating)
+- Joe drives the conversation, introduces the topic, asks questions
+- Jane provides insights, adds detail, plays devil's advocate
 - Cover the key points naturally — don't just list them
 - Reference specific data points, statistics, and sources when available
 - If there are contradictions or challenges, discuss both sides
@@ -48,7 +48,7 @@ Rules:
 - Output ONLY the dialogue script, no stage directions or metadata
 - Keep total script under 3000 characters (API limit)
 
-CRITICAL LANGUAGE RULE: Detect the language that the TITLE TEXT ITSELF is written in — ignore the language of any data or snippets below. The podcast dialogue MUST be in the same language as the title. If the title is written in English, the ENTIRE dialogue must be in English. If the title is written in Chinese characters, speak Chinese. If in Japanese, speak Japanese. Default to English when uncertain. Always keep "Host A:" and "Host B:" tags in English.`;
+CRITICAL LANGUAGE RULE: Detect the language that the TITLE TEXT ITSELF is written in — ignore the language of any data or snippets below. The podcast dialogue MUST be in the same language as the title. If the title is written in English, the ENTIRE dialogue must be in English. If the title is written in Chinese characters, speak Chinese. If in Japanese, speak Japanese. Default to English when uncertain. Always keep "Joe:" and "Jane:" tags in English — these are speaker identifiers for the TTS engine, NEVER translate them or use Chinese/Japanese names in their place.`;
 
 export async function generatePodcastScript(
   content: PodcastContent,
@@ -114,25 +114,106 @@ export async function renderPodcastAudio(script: string, geminiKey: string): Pro
   return seg.pcm;
 }
 
-export async function renderPodcastSegment(script: string, geminiKey: string): Promise<TTSSegment> {
-  const endpoint = `${GEMINI_API_BASE}/models/gemini-3.1-flash-tts-preview:generateContent`;
+/**
+ * Group a two-speaker script into consecutive-speaker turns.
+ * Input:  "Joe: line1\nJane: line2\nJoe: line3a\nJoe: line3b"
+ * Output: [{speaker:"Joe",text:"line1"},{speaker:"Jane",text:"line2"},{speaker:"Joe",text:"line3a line3b"}]
+ *
+ * Lines that don't match a Joe/Jane tag are appended to the current turn
+ * (handles multi-line speaker turns). Lines before the first tag are dropped.
+ */
+export function parseSpeakerTurns(script: string): Array<{ speaker: "Joe" | "Jane"; text: string }> {
+  const lines = script.split("\n").map((l) => l.trim()).filter(Boolean);
+  const turns: Array<{ speaker: "Joe" | "Jane"; text: string }> = [];
+  let curSpeaker: "Joe" | "Jane" | null = null;
+  let curBody: string[] = [];
+  const flush = () => {
+    if (curSpeaker && curBody.length) {
+      const text = curBody.join(" ").trim();
+      if (text) turns.push({ speaker: curSpeaker, text });
+    }
+    curBody = [];
+  };
+  for (const line of lines) {
+    const m = line.match(/^(Joe|Jane)\s*:\s*(.*)$/);
+    if (m) {
+      const nextSpeaker = m[1] as "Joe" | "Jane";
+      if (curSpeaker === nextSpeaker) {
+        // Same speaker as previous line — keep accumulating
+        if (m[2]) curBody.push(m[2]);
+      } else {
+        flush();
+        curSpeaker = nextSpeaker;
+        curBody = m[2] ? [m[2]] : [];
+      }
+    } else if (curSpeaker) {
+      curBody.push(line);
+    }
+  }
+  flush();
+  return turns;
+}
 
+const VOICE_FOR_SPEAKER: Record<"Joe" | "Jane", string> = {
+  Joe: "Enceladus",  // male, breathy
+  Jane: "Zephyr",    // female, bright
+};
+
+/**
+ * Render a script as audio, using one SINGLE-SPEAKER TTS call per speaker turn.
+ *
+ * Gemini's multi-speaker mode (`multiSpeakerVoiceConfig`) has a documented bug
+ * where voices get swapped or blended unpredictably across calls — even with
+ * identical configs. The dominant workaround in Google's own developer forums
+ * is to split dialogues into single-speaker calls and stitch the PCM buffers
+ * together. This guarantees each turn is rendered by exactly the voice we
+ * asked for.
+ *
+ * Per-turn PCMs are concatenated; the outer pipeline handles loudnorm and
+ * silence padding at the segment level.
+ *
+ * Tracked issues:
+ *   https://discuss.ai.google.dev/t/gemini-tts-multi-speaker-mode-7-critical-bugs-after-3-weeks-in-production-finishreason-other-truncation-voice-swapping-hallucinated-lines/132776
+ *   https://discuss.ai.google.dev/t/2-5-flash-tts-multispeaker-no-wrong-voice-switch/112023
+ */
+export async function renderPodcastSegment(script: string, geminiKey: string): Promise<TTSSegment> {
+  const turns = parseSpeakerTurns(script);
+  if (turns.length === 0) {
+    // No Joe/Jane tags found — fall back to rendering the whole thing as Joe.
+    const fallback = await renderSingleSpeakerTTS(script, VOICE_FOR_SPEAKER.Joe, geminiKey);
+    return fallback;
+  }
+
+  const turnResults: TTSSegment[] = [];
+  for (const turn of turns) {
+    const result = await renderSingleSpeakerTTS(turn.text, VOICE_FOR_SPEAKER[turn.speaker], geminiKey);
+    turnResults.push(result);
+  }
+  const pcm = Buffer.concat(turnResults.map((r) => r.pcm));
+  const sampleRate = turnResults[0]?.sampleRate ?? 24000;
+  return { pcm, sampleRate };
+}
+
+/**
+ * One single-speaker Gemini TTS call. Used as the building block for
+ * renderPodcastSegment (per-turn) and any other single-voice text.
+ */
+export async function renderSingleSpeakerTTS(
+  text: string,
+  voiceName: string,
+  geminiKey: string,
+): Promise<TTSSegment> {
+  const endpoint = `${GEMINI_API_BASE}/models/gemini-3.1-flash-tts-preview:generateContent`;
   const body = {
-    contents: [{ parts: [{ text: `TTS the following conversation between Host A and Host B:\n\n${script}` }] }],
+    contents: [{ parts: [{ text }] }],
     generationConfig: {
       responseModalities: ["AUDIO"],
       speechConfig: {
-        multiSpeakerVoiceConfig: {
-          speakerVoiceConfigs: [
-            { speaker: "Host A", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Enceladus" } } },
-            { speaker: "Host B", voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } } },
-          ],
-        },
+        voiceConfig: { prebuiltVoiceConfig: { voiceName } },
       },
     },
   };
 
-  // Retry up to 3 times on transient network errors
   const maxAttempts = 3;
   let lastError: Error | null = null;
 
@@ -147,7 +228,6 @@ export async function renderPodcastSegment(script: string, geminiKey: string): P
       if (!res.ok) {
         const errText = await res.text().catch(() => "unknown");
         const status = res.status;
-        // Retry on 429 (rate limit) and 5xx (server errors)
         if ((status === 429 || status >= 500) && attempt < maxAttempts) {
           lastError = new Error(`Gemini TTS API error ${status}: ${errText}`);
           await new Promise(r => setTimeout(r, 2000 * attempt));
@@ -163,7 +243,6 @@ export async function renderPodcastSegment(script: string, geminiKey: string): P
       const b64 = inline?.data;
       if (!b64) throw new Error("No audio data in Gemini TTS response");
 
-      // Parse sample rate from mimeType (e.g. "audio/L16;codec=pcm;rate=24000")
       const mime = inline?.mimeType ?? "";
       const rateMatch = mime.match(/rate=(\d+)/i);
       const sampleRate = rateMatch ? Number(rateMatch[1]) : 24000;
@@ -232,6 +311,57 @@ async function getFfmpegPath(): Promise<string | null> {
     _ffmpegPath = null;
   }
   return _ffmpegPath;
+}
+
+/**
+ * Loudness-normalize a raw PCM segment and append a short silence tail.
+ *
+ * Gemini TTS responses exhibit per-call pitch/loudness drift. Concatenating
+ * raw PCM preserves that drift across a long podcast (voice gets "deeper and
+ * crackier" over time). Running each segment through ffmpeg loudnorm (EBU R128,
+ * -16 LUFS) flattens the per-segment energy to a stable target, and apad
+ * inserts a small silence gap so joins don't click.
+ *
+ * Falls back to the original PCM if ffmpeg is unavailable.
+ */
+export async function normalizeAndPadPcm(
+  pcm: Buffer,
+  sampleRate: number,
+  padMs: number = 150,
+): Promise<Buffer> {
+  const ffmpeg = await getFfmpegPath();
+  if (!ffmpeg || pcm.length === 0) return pcm;
+
+  const { spawn } = await import("node:child_process");
+  const padSec = (padMs / 1000).toFixed(3);
+
+  return new Promise<Buffer>((resolve) => {
+    const chunks: Buffer[] = [];
+    let errBuf = "";
+    const proc = spawn(ffmpeg, [
+      "-hide_banner", "-loglevel", "error",
+      "-f", "s16le", "-ar", String(sampleRate), "-ac", "1", "-i", "pipe:0",
+      "-af", `loudnorm=I=-16:TP=-1.5:LRA=11,apad=pad_dur=${padSec}`,
+      "-f", "s16le", "-ar", String(sampleRate), "-ac", "1", "pipe:1",
+    ], { windowsHide: true });
+
+    proc.stdout.on("data", (c: Buffer) => chunks.push(c));
+    proc.stderr.on("data", (c: Buffer) => { errBuf += c.toString(); });
+    proc.on("error", (err) => {
+      logError("podcast", "ffmpeg spawn failed during PCM normalization", err);
+      resolve(pcm);
+    });
+    proc.on("close", (code) => {
+      if (code === 0 && chunks.length > 0) {
+        resolve(Buffer.concat(chunks));
+      } else {
+        logError("podcast", `ffmpeg normalization exited ${code}: ${errBuf.slice(0, 200)}`, null);
+        resolve(pcm);
+      }
+    });
+    proc.stdin.on("error", () => { /* proc may close before we finish writing */ });
+    proc.stdin.end(pcm);
+  });
 }
 
 /**

@@ -251,10 +251,10 @@ function GeneratedUI({ data, onAction }) {
                 {showTranscript && (
                   <div style={{ marginTop: "6px", maxHeight: "300px", overflow: "auto", fontSize: "11px", lineHeight: 1.6 }}>
                     {podcastScript.split("\n").map(function(line, i) {
-                      var hostA = line.match(/^Host A:\s*(.*)/);
-                      var hostB = line.match(/^Host B:\s*(.*)/);
-                      if (hostA) return <div key={i}><span style={{ color: "#22d3ee", fontWeight: 600 }}>Host A:</span> {hostA[1]}</div>;
-                      if (hostB) return <div key={i}><span style={{ color: "#fbbf24", fontWeight: 600 }}>Host B:</span> {hostB[1]}</div>;
+                      var hostA = line.match(/^(Joe|Host A):\s*(.*)/);
+                      var hostB = line.match(/^(Jane|Host B):\s*(.*)/);
+                      if (hostA) return <div key={i}><span style={{ color: "#22d3ee", fontWeight: 600 }}>{hostA[1]}:</span> {hostA[2]}</div>;
+                      if (hostB) return <div key={i}><span style={{ color: "#fbbf24", fontWeight: 600 }}>{hostB[1]}:</span> {hostB[2]}</div>;
                       return line.trim() ? <div key={i} style={{ color: "#64748b" }}>{line}</div> : null;
                     })}
                   </div>
@@ -334,10 +334,10 @@ function GeneratedUI({ data, onAction }) {
                 {showInterviewTranscript && (
                   <div style={{ marginTop: "6px", maxHeight: "300px", overflow: "auto", fontSize: "11px", lineHeight: 1.6 }}>
                     {interviewScript.split("\n").map(function(line, i) {
-                      var hostA = line.match(/^Host A:\s*(.*)/);
-                      var hostB = line.match(/^Host B:\s*(.*)/);
-                      if (hostA) return <div key={i}><span style={{ color: "#22d3ee", fontWeight: 600 }}>Interviewer:</span> {hostA[1]}</div>;
-                      if (hostB) return <div key={i}><span style={{ color: "#fbbf24", fontWeight: 600 }}>Author:</span> {hostB[1]}</div>;
+                      var hostA = line.match(/^(Joe|Host A):\s*(.*)/);
+                      var hostB = line.match(/^(Jane|Host B):\s*(.*)/);
+                      if (hostA) return <div key={i}><span style={{ color: "#22d3ee", fontWeight: 600 }}>Interviewer:</span> {hostA[2]}</div>;
+                      if (hostB) return <div key={i}><span style={{ color: "#fbbf24", fontWeight: 600 }}>Author:</span> {hostB[2]}</div>;
                       return line.trim() ? <div key={i} style={{ color: "#64748b" }}>{line}</div> : null;
                     })}
                   </div>

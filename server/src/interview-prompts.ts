@@ -12,8 +12,8 @@
  *   2. designInterviewQuestions — rank 8-12 questions that target
  *      load-bearing claims, tensions inside the book, and the user's own
  *      Cortex context.
- *   3. writeInterviewDialogue — produce the full Host A (interviewer) /
- *      Host B (author) script in one pass.
+ *   3. writeInterviewDialogue — produce the full Joe (interviewer) /
+ *      Jane (author) script in one pass.
  */
 import { llm } from "./llm.js";
 import { braveWebSearch, fetchPageContent } from "./researcher-tools.js";
@@ -152,7 +152,10 @@ Output ONLY valid JSON:
 
   const result = await llm({ prompt, tier: "pro", timeoutMs: 45_000 });
   try {
-    const jsonStr = result?.replace(/```json\n?|\n?```/g, "").trim() ?? "{}";
+    let jsonStr = result?.replace(/```(?:json|JSON)?\n?|\n?```/g, "").trim() ?? "{}";
+    const fb = jsonStr.indexOf("{");
+    const lb = jsonStr.lastIndexOf("}");
+    if (fb >= 0 && lb > fb) jsonStr = jsonStr.slice(fb, lb + 1);
     const parsed = JSON.parse(jsonStr) as { questions: InterviewQuestion[] };
     return parsed.questions ?? [];
   } catch (err) {
@@ -190,7 +193,7 @@ GROUNDED SOURCE MATERIAL (use when you can; paraphrase — don't invent quotes):
 ${authorVoice.quotes.map((q, i) => `[${i + 1}] ${q.source}: ${q.text.slice(0, 600)}`).join("\n\n")}`
     : `AUTHOR VOICE: We don't have strong sourced material on ${author}'s speaking style. Have them speak as a thoughtful, articulate domain expert defending the positions in "${title}". If a specific question requires extrapolation beyond the book, the author should signal it: "If I had to speculate..." or "This goes beyond what I wrote, but..."`;
 
-  const prompt = `You are writing an imagined interview podcast with ${author}, author of "${title}". Host A is the interviewer. Host B is ${author}.
+  const prompt = `You are writing an imagined interview podcast with ${author}, author of "${title}". Joe is the male interviewer. Jane is the female guest (${author}).
 
 QUESTION LIST (the interviewer asks these in order, but may follow up conversationally):
 ${questions.map((q, i) => `${i + 1}. [${q.probes}] ${q.question}`).join("\n")}
@@ -203,14 +206,14 @@ Critical perspectives: ${research.criticalPerspectives.slice(0, 5).join(" | ")}
 ${voiceSection}
 
 WRITING RULES
-- Format: "Host A:" and "Host B:" speaker tags, one speaker per line
-- Open with Host A introducing ${author} and "${title}" in 1-2 sentences — ground the listener and note this is an imagined interview based on ${author}'s published work
+- Format: "Joe:" and "Jane:" speaker tags, one speaker per line. Always keep these exact English names even when the dialogue is in another language — they are speaker IDs, not translated names.
+- Open with Joe introducing ${author} and "${title}" in 1-2 sentences — ground the listener and note this is an imagined interview based on ${author}'s published work
 - Follow the question list order, but allow 1-2 follow-ups per answer when natural ("Wait, you said X earlier — doesn't that contradict...")
-- Host B's answers should be 3-6 sentences, substantive, specific — use concrete examples from the book
-- Host A's questions should be crisp and probing, not preamble
-- When the author makes a strong claim, Host A should occasionally push back rather than just moving on
-- If the question requires extrapolation beyond the book, Host B explicitly signals it ("If I had to speculate...")
-- End with Host A asking a reflective closing question, Host B's brief answer, Host A thanking the author
+- Jane's answers should be 3-6 sentences, substantive, specific — use concrete examples from the book
+- Joe's questions should be crisp and probing, not preamble
+- When the author makes a strong claim, Joe should occasionally push back rather than just moving on
+- If the question requires extrapolation beyond the book, Jane explicitly signals it ("If I had to speculate...")
+- End with Joe asking a reflective closing question, Jane's brief answer, Joe thanking the author
 - Target length: ~${targetChars} characters of dialogue
 - Output ONLY the dialogue script — no narrator, no stage directions, no markdown headers${language && language !== "English" ? `\n- CRITICAL: Write the ENTIRE dialogue in ${language}. Both hosts speak fluent ${language}. Do NOT use English.` : ""}`;
 
