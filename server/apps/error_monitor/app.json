@@ -1,0 +1,208 @@
+{
+  "version": 1,
+  "createdAt": 1713513600000,
+  "spec": {
+    "toolFamily": "error_monitor",
+    "toolPrefix": "enso_error_monitor_",
+    "description": "Real-time error monitoring dashboard: error summary with severity breakdown, error trends over time, category analysis, recent error feed, fix tracking, and system health check. Reads from Enso's action log and error log.",
+    "signatureId": "error_monitor_view",
+    "tools": [
+      {
+        "suffix": "overview",
+        "description": "Get error monitoring overview: total errors, severity breakdown (critical/error/warning/info), top error categories, and recent errors for a given time window. Use when the user says: 'show error dashboard', 'error overview', 'system errors', 'error monitor', 'how many errors', 'error health'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hours": {
+              "type": "number",
+              "description": "Time window in hours (1-168, default: 24)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_error_monitor_overview",
+          "hours": 24,
+          "summary": {
+            "period": { "from": 1713427200000, "to": 1713513600000 },
+            "total": 42,
+            "bySeverity": { "critical": 1, "error": 15, "warning": 18, "info": 8 },
+            "byCategory": [
+              { "category": "standalone-agent", "count": 8, "lastSeen": 1713510000000 },
+              { "category": "cortex-tools", "count": 6, "lastSeen": 1713509000000 },
+              { "category": "action:refine", "count": 4, "lastSeen": 1713508000000 }
+            ],
+            "recentErrors": [
+              { "ts": 1713513000000, "type": "error", "category": "standalone-agent", "message": "Tool call failed: timeout", "severity": "error", "requestId": "abc12345" }
+            ]
+          },
+          "fixes": { "total": 3, "unacknowledged": 1 },
+          "generatedAt": 1713513600000
+        },
+        "requiredDataKeys": ["tool", "summary"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "errors",
+        "description": "Get recent error entries with optional severity filter. Returns chronological error list with full details including category, message, severity, requestId, and timestamps. Use when the user says: 'show recent errors', 'error list', 'what errors happened', 'show critical errors', 'error log'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "type": "number",
+              "description": "Number of errors to return (1-200, default: 50)"
+            },
+            "severity": {
+              "type": "string",
+              "description": "Filter by severity: 'all', 'critical', 'error', 'warning', 'info' (default: 'all')"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_error_monitor_errors",
+          "count": 50,
+          "severity": "all",
+          "total": 3,
+          "entries": [
+            { "ts": 1713513000000, "type": "error", "category": "standalone-agent", "message": "Tool call failed: timeout", "severity": "error", "requestId": "abc12345", "error": "ETIMEOUT" },
+            { "ts": 1713512000000, "type": "error", "category": "cortex-tools", "message": "Wiki page not found", "severity": "warning", "requestId": "def67890" },
+            { "ts": 1713511000000, "type": "error", "category": "build-via-claude", "message": "Build failed: syntax error", "severity": "error", "requestId": "ghi11223", "error": "SyntaxError: Unexpected token" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "entries"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "trends",
+        "description": "Get error trends over time — hourly error counts bucketed by severity for a given time window. Shows how error rates change over hours. Use when the user says: 'error trends', 'error rate', 'error frequency', 'error timeline', 'when do errors happen'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hours": {
+              "type": "number",
+              "description": "Time window in hours (1-168, default: 24)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_error_monitor_trends",
+          "hours": 24,
+          "buckets": [
+            { "hour": "2026-04-18T00:00", "critical": 0, "error": 2, "warning": 3, "info": 1, "total": 6 },
+            { "hour": "2026-04-18T01:00", "critical": 0, "error": 1, "warning": 0, "info": 0, "total": 1 },
+            { "hour": "2026-04-18T02:00", "critical": 1, "error": 3, "warning": 2, "info": 0, "total": 6 }
+          ],
+          "peak": { "hour": "2026-04-18T02:00", "total": 6 },
+          "average": 2.5,
+          "totalErrors": 13
+        },
+        "requiredDataKeys": ["tool", "buckets"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "categories",
+        "description": "Get error breakdown by category with counts, severity distribution, and last occurrence. Identifies which subsystems produce the most errors. Use when the user says: 'error categories', 'where are errors coming from', 'error sources', 'error breakdown', 'which module has errors'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hours": {
+              "type": "number",
+              "description": "Time window in hours (1-168, default: 24)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_error_monitor_categories",
+          "hours": 24,
+          "categories": [
+            { "category": "standalone-agent", "count": 8, "critical": 0, "error": 5, "warning": 2, "info": 1, "lastSeen": 1713510000000, "percentage": 19.0 },
+            { "category": "cortex-tools", "count": 6, "critical": 0, "error": 3, "warning": 3, "info": 0, "lastSeen": 1713509000000, "percentage": 14.3 },
+            { "category": "action:refine", "count": 4, "critical": 0, "error": 4, "warning": 0, "info": 0, "lastSeen": 1713508000000, "percentage": 9.5 }
+          ],
+          "totalCategories": 3,
+          "totalErrors": 18
+        },
+        "requiredDataKeys": ["tool", "categories"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "fixes",
+        "description": "Get bug fix records — tracked resolutions of past errors with description, original error, resolution applied, and acknowledgement status. Use when the user says: 'show fixes', 'bug fixes', 'what was fixed', 'fix history', 'acknowledged fixes'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {
+              "type": "string",
+              "description": "Action: 'list' to view fixes, 'acknowledge' to mark fix as seen (default: 'list')"
+            },
+            "fixId": {
+              "type": "string",
+              "description": "Fix ID to acknowledge (required for acknowledge action)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_error_monitor_fixes",
+          "action": "list",
+          "fixes": [
+            { "id": "fix-001", "timestamp": 1713500000000, "description": "Fixed template compilation crash", "error": "SyntaxError in JSX", "resolution": "Added missing closing tag", "category": "build-via-claude", "acknowledged": false },
+            { "id": "fix-002", "timestamp": 1713490000000, "description": "Fixed null pointer in cortex search", "error": "Cannot read property of undefined", "resolution": "Added null check before access", "category": "cortex-tools", "acknowledged": true }
+          ],
+          "unacknowledged": 1,
+          "total": 2
+        },
+        "requiredDataKeys": ["tool", "fixes"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "activity",
+        "description": "Get full action log feed — all backend operations (actions, errors, builds, system events, claude-code sessions) with optional type filter. Use when the user says: 'show activity log', 'action log', 'what happened', 'system activity', 'recent operations'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "count": {
+              "type": "number",
+              "description": "Number of entries to return (1-200, default: 50)"
+            },
+            "type": {
+              "type": "string",
+              "description": "Filter by type: 'all', 'action', 'error', 'fix', 'build', 'system', 'claude-code' (default: 'all')"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_error_monitor_activity",
+          "count": 50,
+          "type": "all",
+          "total": 5,
+          "entries": [
+            { "ts": 1713513000000, "type": "action", "category": "chat:send", "message": "User sent message" },
+            { "ts": 1713512500000, "type": "error", "category": "standalone-agent", "message": "Tool call failed", "severity": "error" },
+            { "ts": 1713512000000, "type": "build", "category": "build-via-claude", "message": "App build started: weather" },
+            { "ts": 1713511000000, "type": "system", "category": "server:start", "message": "Server started on port 3001" },
+            { "ts": 1713510000000, "type": "claude-code", "category": "claude-code:session", "message": "Session started" }
+          ]
+        },
+        "requiredDataKeys": ["tool", "entries"],
+        "isPrimary": false
+      }
+    ]
+  }
+}
