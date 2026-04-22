@@ -49,6 +49,43 @@ function ensureDirs(): void {
   mkdirSync(CACHE_DIR, { recursive: true });
 }
 
+// ── Cache guard ──────────────────────────────────────────────────────────────
+// Preserve existing non-empty cache when a scan returns zero items. Protects
+// against expired auth sessions (WeRead), missing source paths (Windows paths
+// on Mac), network failures, and partial scanner breakage. Without this guard,
+// a single failed scan wipes the user's good data and downstream Cortex pages
+// lose their backing entities.
+
+function safeWriteCache(
+  cachePath: string,
+  newData: unknown,
+  newCount: number,
+  getExistingCount: (existing: Record<string, unknown>) => number,
+  label: string,
+): boolean {
+  if (newCount > 0) {
+    writeFileSync(cachePath, JSON.stringify(newData, null, 2));
+    return true;
+  }
+  let existingCount = 0;
+  try {
+    const existing = JSON.parse(readFileSync(cachePath, "utf-8")) as Record<string, unknown>;
+    existingCount = getExistingCount(existing) || 0;
+  } catch { /* no existing cache */ }
+  if (existingCount > 0) {
+    logAction({
+      ts: Date.now(),
+      type: "action",
+      category: "user-context",
+      message: `[cache-guard] ${label}: scan returned 0 but existing cache has ${existingCount} — preserving (likely auth/network/path issue)`,
+    });
+    return false;
+  }
+  // No existing data either — safe to write empty placeholder
+  writeFileSync(cachePath, JSON.stringify(newData, null, 2));
+  return true;
+}
+
 // ── Result helpers (match browser-tools.ts pattern) ─────────────────────────
 
 type AgentToolResult = { content: Array<{ type: string; text?: string }> };
@@ -1010,7 +1047,13 @@ export function createUserContextTools(): EnsoAgentTool[] {
         };
 
         // Cache reduced result
-        writeFileSync(join(CACHE_DIR, "browser-history.json"), JSON.stringify(result, null, 2));
+        safeWriteCache(
+          join(CACHE_DIR, "browser-history.json"),
+          result,
+          entries.length,
+          (e) => Number(e.totalEntries) || 0,
+          "browser-history",
+        );
         updateScanLog("browserHistory");
         logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Browser history scanned: ${entries.length} entries, ${topDomains.length} domains` });
 
@@ -1053,7 +1096,13 @@ export function createUserContextTools(): EnsoAgentTool[] {
           })),
         };
 
-        writeFileSync(join(CACHE_DIR, "bookmarks.json"), JSON.stringify(result, null, 2));
+        safeWriteCache(
+          join(CACHE_DIR, "bookmarks.json"),
+          result,
+          bookmarks.length,
+          (e) => Number(e.totalBookmarks) || 0,
+          "bookmarks",
+        );
         updateScanLog("bookmarks");
         logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Bookmarks scanned: ${bookmarks.length} bookmarks in ${byFolder.size} folders` });
 
@@ -1110,7 +1159,13 @@ export function createUserContextTools(): EnsoAgentTool[] {
           })),
         };
 
-        writeFileSync(join(CACHE_DIR, "email-summary.json"), JSON.stringify(result, null, 2));
+        safeWriteCache(
+          join(CACHE_DIR, "email-summary.json"),
+          result,
+          emails.length,
+          (e) => Number(e.totalEmails) || 0,
+          "email-summary",
+        );
         updateScanLog("email");
         logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Email scanned: ${emails.length} emails, ${topSenders.length} senders` });
 
@@ -1672,7 +1727,13 @@ try {
             scannedAt: new Date().toISOString(),
           };
 
-          writeFileSync(join(CACHE_DIR, "youtube-data.json"), JSON.stringify(cacheData, null, 2));
+          safeWriteCache(
+            join(CACHE_DIR, "youtube-data.json"),
+            cacheData,
+            subscriptions.length + likedVideos.length + feed.length,
+            (e) => (Number(e.totalSubscriptions) || 0) + (Number(e.totalLikedVideos) || 0) + (Number(e.totalFeedVideos) || 0),
+            "youtube",
+          );
           updateScanLog("youtube" as keyof ScanLog);
           logAction({ ts: Date.now(), type: "action", category: "user-context", message: `YouTube scanned: ${subscriptions.length} subs, ${likedVideos.length} liked, ${feed.length} feed` });
           return jsonResult(cacheData);
@@ -1756,7 +1817,13 @@ try {
           }
 
           const result = { source: "steam-games", games, totalGames: games.length, steamDir, scannedAt: new Date().toISOString() };
-          writeFileSync(cachePath, JSON.stringify(result, null, 2));
+          safeWriteCache(
+            cachePath,
+            result,
+            games.length,
+            (e) => Number(e.totalGames) || (Array.isArray(e.games) ? e.games.length : 0),
+            "steam-games",
+          );
           updateScanLog("steam" as keyof ScanLog);
           logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Steam library scanned: ${games.length} games` });
           return jsonResult(result);
@@ -1898,7 +1965,13 @@ try {
           }
 
           const result = { source: "movies-tv", items, totalItems: items.length, scannedAt: new Date().toISOString() };
-          writeFileSync(cachePath, JSON.stringify(result, null, 2));
+          safeWriteCache(
+            cachePath,
+            result,
+            items.length,
+            (e) => Number(e.totalItems) || (Array.isArray(e.items) ? e.items.length : 0),
+            "movies-tv",
+          );
           updateScanLog("moviesTv" as keyof ScanLog);
           logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Movies/TV scanned: ${items.length} items` });
           return jsonResult(result);
@@ -2040,7 +2113,13 @@ try {
             scannedAt: new Date().toISOString(),
           };
 
-          writeFileSync(join(CACHE_DIR, "photo-library.json"), JSON.stringify(result, null, 2));
+          safeWriteCache(
+            join(CACHE_DIR, "photo-library.json"),
+            result,
+            totalPhotos,
+            (e) => Number(e.totalPhotos) || 0,
+            "photo-library",
+          );
           updateScanLog("photos" as keyof ScanLog);
           logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Photo library scanned: ${totalPhotos} photos in ${albums.length} albums` });
           return jsonResult(result);
@@ -2462,24 +2541,6 @@ try {
 
               await browser.close();
 
-              // Guard: don't overwrite existing cache with empty results
-              if (books.length === 0) {
-                const cachePath = join(homedir(), ".enso", "data", "user-context", "cache", "weread-library.json");
-                let existingCount = 0;
-                try { existingCount = JSON.parse(readFileSync(cachePath, "utf-8")).books?.length || 0; } catch {}
-                if (existingCount > 0) {
-                  logAction({ ts: Date.now(), type: "action", category: "weread-scan", message: `Scan returned 0 books but cache has ${existingCount} — keeping existing cache (likely expired session)` });
-                  return {
-                    content: [{ type: "text", text: JSON.stringify({
-                      tool: "enso_context_scan_weread",
-                      totalBooks: 0,
-                      existingBooks: existingCount,
-                      warning: `Scan returned 0 books (session may have expired). Existing cache with ${existingCount} books was preserved. Please log in to WeRead again via /browser → weread.qq.com.`,
-                    }) }],
-                  };
-                }
-              }
-
               // Normalize books and save to cache
               const normalizedBooks = books.filter(b => b.title).map(b => ({
                 title: String(b.title || ""),
@@ -2504,11 +2565,28 @@ try {
                 books: normalizedBooks,
               };
 
-              writeFileSync(
-                join(homedir(), ".enso", "data", "user-context", "cache", "weread-library.json"),
-                JSON.stringify(cacheData, null, 2),
-                "utf-8",
+              const wereadCachePath = join(homedir(), ".enso", "data", "user-context", "cache", "weread-library.json");
+              const written = safeWriteCache(
+                wereadCachePath,
+                cacheData,
+                normalizedBooks.length,
+                (e) => Number(e.totalBooks) || (Array.isArray(e.books) ? e.books.length : 0),
+                "weread-library",
               );
+
+              if (!written) {
+                // Cache preserved — scan returned 0 but existing cache has books
+                let existingCount = 0;
+                try { existingCount = JSON.parse(readFileSync(wereadCachePath, "utf-8")).books?.length || 0; } catch {}
+                return {
+                  content: [{ type: "text", text: JSON.stringify({
+                    tool: "enso_context_scan_weread",
+                    totalBooks: 0,
+                    existingBooks: existingCount,
+                    warning: `Scan returned 0 books (session may have expired). Existing cache with ${existingCount} books was preserved. Please log in to WeRead again via /browser → weread.qq.com.`,
+                  }) }],
+                };
+              }
 
               updateScanLog("wereadLibrary");
 
@@ -2678,7 +2756,13 @@ try {
             scannedAt: new Date().toISOString(),
           };
 
-          writeFileSync(join(CACHE_DIR, "qq-music.json"), JSON.stringify(result, null, 2));
+          safeWriteCache(
+            join(CACHE_DIR, "qq-music.json"),
+            result,
+            favorites.length + localFiles.length + playlists.length,
+            (e) => (Number(e.totalTracks) || 0) + (Number(e.totalPlaylists) || 0),
+            "qq-music",
+          );
           updateScanLog("qqMusic" as keyof ScanLog);
           logAction({ ts: Date.now(), type: "action", category: "user-context", message: `QQ Music scanned: ${favorites.length} favorites, ${localFiles.length} local files` });
           return jsonResult(result);
