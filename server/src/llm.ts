@@ -259,10 +259,43 @@ export async function llmTTS(opts: {
   }
 }
 
+// ── Global concurrency semaphore ──
+
+/**
+ * Caps the number of concurrent Gemini API calls to reduce 429 exposure.
+ * Background enrichment and batch operations share this pool with real-time
+ * calls, so a burst of cortex enrichment work cannot crowd out the agent.
+ */
+const MAX_CONCURRENT_GEMINI = 4;
+let _activeCalls = 0;
+const _waitQueue: Array<() => void> = [];
+
+function acquireSemaphore(): Promise<void> {
+  if (_activeCalls < MAX_CONCURRENT_GEMINI) {
+    _activeCalls++;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => _waitQueue.push(resolve));
+}
+
+function releaseSemaphore(): void {
+  const next = _waitQueue.shift();
+  if (next) {
+    next(); // pass the slot directly to the next waiter
+  } else {
+    _activeCalls--;
+  }
+}
+
 // ── Internal Helpers ──
 
 function isGeminiModel(model: string): boolean {
   return model.startsWith("gemini-") || model.includes("gemini");
+}
+
+/** Small random jitter (±20%) prevents thundering-herd retries after a 429 burst. */
+function withJitter(delayMs: number): number {
+  return Math.floor(delayMs * (0.8 + Math.random() * 0.4));
 }
 
 async function callGeminiWithRetry(
@@ -275,12 +308,14 @@ async function callGeminiWithRetry(
   responseMimeType?: string,
   systemPrompt?: string,
   image?: { base64: string; mimeType: string },
-  maxAttempts = 3,
+  maxAttempts = 5,
   responseSchema?: object,
 ): Promise<string> {
   let lastError: Error | undefined;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    await acquireSemaphore();
+    let retryDelayMs = 0;
     try {
       const result = await callGeminiOnce(prompt, apiKey, model, timeoutMs, maxOutputTokens, temperature, responseMimeType, systemPrompt, image, responseSchema);
       return result;
@@ -293,12 +328,29 @@ async function callGeminiWithRetry(
       if (!isRetryable || attempt === maxAttempts) break;
 
       const is429 = msg.includes("429");
-      const delayMs = is429
-        ? Math.min(5000 * Math.pow(2, attempt - 1), 30000)   // 5s, 10s, 20s for rate limits
-        : Math.min(500 * Math.pow(2, attempt - 1), 4000);     // 500ms, 1s, 2s for other errors
-      logAction({ ts: Date.now(), type: "action", category: "llm", message: `Retrying LLM call (${attempt}/${maxAttempts}) in ${delayMs}ms — model=${model}` });
-      await new Promise((r) => setTimeout(r, delayMs));
+
+      // Honor Retry-After if the server told us how long to wait
+      const retryAfterMatch = msg.match(/retry-after:(\d+)/i);
+      const retryAfterSec = retryAfterMatch ? parseInt(retryAfterMatch[1], 10) : 0;
+
+      if (retryAfterSec > 0) {
+        retryDelayMs = retryAfterSec * 1000;
+      } else if (is429) {
+        // 5s → 10s → 20s → 40s → 60s (capped) with jitter
+        retryDelayMs = withJitter(Math.min(5000 * Math.pow(2, attempt - 1), 60000));
+      } else {
+        // 500ms → 1s → 2s → 4s with jitter
+        retryDelayMs = withJitter(Math.min(500 * Math.pow(2, attempt - 1), 4000));
+      }
+
+      logAction({ ts: Date.now(), type: "action", category: "llm", message: `Retrying LLM call (${attempt}/${maxAttempts}) in ${retryDelayMs}ms — model=${model}${is429 ? " [rate-limited]" : ""}` });
+    } finally {
+      // Release the semaphore slot BEFORE sleeping so other callers aren't blocked
+      // during the backoff period.
+      releaseSemaphore();
     }
+
+    if (retryDelayMs > 0) await new Promise((r) => setTimeout(r, retryDelayMs));
   }
 
   throw lastError ?? new Error("LLM call failed after retries");
@@ -348,8 +400,11 @@ async function callGeminiOnce(
 
     if (!response.ok) {
       const errText = await response.text().catch(() => "");
+      const retryAfter = response.headers.get("Retry-After") ?? response.headers.get("retry-after");
       logError("llm", `Gemini API error (${model}): ${response.status}`, errText);
-      throw new Error(`Gemini API error: ${response.status}`);
+      // Embed Retry-After into the message so callGeminiWithRetry can use it
+      const retryHint = retryAfter ? ` retry-after:${retryAfter}` : "";
+      throw new Error(`Gemini API error: ${response.status}${retryHint}`);
     }
 
     const result = (await response.json()) as {

@@ -132,6 +132,11 @@ Return ONLY the JSON array, no markdown fences.`;
     } catch (err) {
       logError("cortex-enrichment", "Semantic tagging batch failed", err);
     }
+
+    // Small inter-batch pause to ease rate-limit pressure between sequential batches
+    if (i + SEMANTIC_TAG_BATCH_SIZE < entityIds.length) {
+      await new Promise(r => setTimeout(r, 1000));
+    }
   }
 
   if (totalEnriched > 0) saveEntityIndex();
@@ -275,6 +280,11 @@ Only include meaningful connections, not forced ones. If no good cross-source ma
       });
     } catch (err) {
       logError("cortex-enrichment", "Cross-reference batch failed", err);
+    }
+
+    // Inter-batch pause to reduce rate-limit pressure
+    if (i + CROSS_REF_BATCH_SIZE < entityIds.length) {
+      await new Promise(r => setTimeout(r, 2000));
     }
   }
 
