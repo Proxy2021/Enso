@@ -536,6 +536,10 @@ export function createYouTubeTools(): EnsoAgentTool[] {
           logAction({ ts: Date.now(), type: "action", category: "youtube", message: `Search "${params.query}": ${videos.length} results` });
           return jsonResult({ tool: "enso_youtube_search", query: params.query, count: videos.length, videos });
         } catch (err) {
+          if (isAuthError(err)) {
+            logError("youtube", "search auth expired", err);
+            return errorResult(REAUTH_MESSAGE);
+          }
           logError("youtube", "search failed", err);
           return errorResult(err instanceof Error ? err.message : String(err));
         }
@@ -561,6 +565,10 @@ export function createYouTubeTools(): EnsoAgentTool[] {
           logAction({ ts: Date.now(), type: "action", category: "youtube", message: `Channel ${params.channelId}: ${videos.length} videos` });
           return jsonResult({ tool: "enso_youtube_channel_videos", channelId: params.channelId, count: videos.length, videos });
         } catch (err) {
+          if (isAuthError(err)) {
+            logError("youtube", "channel_videos auth expired", err);
+            return errorResult(REAUTH_MESSAGE);
+          }
           logError("youtube", "channel_videos failed", err);
           return errorResult(err instanceof Error ? err.message : String(err));
         }
@@ -603,6 +611,10 @@ export function createYouTubeTools(): EnsoAgentTool[] {
           logAction({ ts: Date.now(), type: "action", category: "youtube", message: `Channel stats: ${Object.keys(stats).length} channels` });
           return jsonResult({ tool: "enso_youtube_channel_stats", count: Object.keys(stats).length, stats });
         } catch (err) {
+          if (isAuthError(err)) {
+            logError("youtube", "channel_stats auth expired", err);
+            return errorResult(REAUTH_MESSAGE);
+          }
           logError("youtube", "channel_stats failed", err);
           return errorResult(err instanceof Error ? err.message : String(err));
         }
