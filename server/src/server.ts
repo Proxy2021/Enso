@@ -3744,8 +3744,13 @@ BEHAVIOR:
   });
 
   app.get("/api/youtube/status", async (_req, res) => {
-    const { isAuthorized } = await import("./youtube-auth.js");
-    res.json({ authorized: isAuthorized() });
+    const { isAuthorized, checkTokenHealth } = await import("./youtube-auth.js");
+    if (!isAuthorized()) {
+      res.json({ authorized: false, tokenValid: false, error: "No OAuth credentials configured" });
+      return;
+    }
+    const health = await checkTokenHealth();
+    res.json({ authorized: true, tokenValid: health.valid, ...(health.error ? { error: health.error } : {}) });
   });
 
   // ── Email-Triggered Orchestration API ──

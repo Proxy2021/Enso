@@ -84,6 +84,31 @@ export function isAuthorized(): boolean {
   return !!(process.env.YOUTUBE_CLIENT_ID && process.env.YOUTUBE_CLIENT_SECRET && process.env.YOUTUBE_REFRESH_TOKEN);
 }
 
+/** Detect OAuth2 auth errors (invalid_grant, invalid_client, token revoked) */
+export function isAuthError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /invalid_grant|invalid_client|token.*revoked|token.*expired|unauthorized_client/i.test(msg);
+}
+
+export const REAUTH_MESSAGE = "YouTube authorization expired or revoked. Re-authorize at /api/youtube/auth to fix this.";
+
+/** Test whether the current refresh token is still valid */
+export async function checkTokenHealth(): Promise<{ valid: boolean; error?: string }> {
+  const client = getAuthenticatedClient();
+  if (!client) return { valid: false, error: "No OAuth credentials configured" };
+
+  try {
+    const yt = google.youtube({ version: "v3", auth: client });
+    await yt.channels.list({ part: ["id"], mine: true, maxResults: 1 });
+    return { valid: true };
+  } catch (err) {
+    if (isAuthError(err)) {
+      return { valid: false, error: REAUTH_MESSAGE };
+    }
+    return { valid: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /** Get a configured YouTube API instance */
 export function getYouTubeAPI() {
   const auth = getAuthenticatedClient();

@@ -228,7 +228,7 @@ export async function renderSingleSpeakerTTS(
       if (!res.ok) {
         const errText = await res.text().catch(() => "unknown");
         const status = res.status;
-        if ((status === 429 || status >= 500) && attempt < maxAttempts) {
+        if ((status === 429 || status === 499 || status >= 500) && attempt < maxAttempts) {
           lastError = new Error(`Gemini TTS API error ${status}: ${errText}`);
           await new Promise(r => setTimeout(r, 2000 * attempt));
           continue;
@@ -241,7 +241,14 @@ export async function renderSingleSpeakerTTS(
       };
       const inline = json.candidates?.[0]?.content?.parts?.[0]?.inlineData;
       const b64 = inline?.data;
-      if (!b64) throw new Error("No audio data in Gemini TTS response");
+      if (!b64) {
+        if (attempt < maxAttempts) {
+          lastError = new Error("No audio data in Gemini TTS response");
+          await new Promise(r => setTimeout(r, 2000 * attempt));
+          continue;
+        }
+        throw new Error("No audio data in Gemini TTS response");
+      }
 
       const mime = inline?.mimeType ?? "";
       const rateMatch = mime.match(/rate=(\d+)/i);
@@ -257,7 +264,7 @@ export async function renderSingleSpeakerTTS(
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       const msg = lastError.message;
-      const isRetryable = msg.includes("fetch failed") || msg.includes("ECONNRESET") || msg.includes("429") || msg.includes("500") || msg.includes("502") || msg.includes("503");
+      const isRetryable = msg.includes("fetch failed") || msg.includes("ECONNRESET") || msg.includes("429") || msg.includes("499") || msg.includes("500") || msg.includes("502") || msg.includes("503");
       if (isRetryable && attempt < maxAttempts) {
         await new Promise(r => setTimeout(r, 2000 * attempt));
         continue;

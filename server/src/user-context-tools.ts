@@ -1636,41 +1636,60 @@ try {
           let subscriptions: unknown[] = [];
           let likedVideos: unknown[] = [];
           let feed: unknown[] = [];
+          const authErrors: string[] = [];
 
           // Fetch subscriptions (all pages)
           try {
             const subTool = ytTools.find(t => t.name === "enso_youtube_subscriptions");
             if (subTool) {
-              const r = JSON.parse((await subTool.execute("yt-scan", { all: true })).content[0].text!);
-              subscriptions = r.channels || [];
+              const raw = (await subTool.execute("yt-scan", { all: true })).content[0].text!;
+              if (raw.includes("authorization expired")) { authErrors.push("subscriptions"); }
+              else { subscriptions = JSON.parse(raw).channels || []; }
             }
-          } catch { /* subscriptions not available */ }
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (/invalid_grant|authorization expired/i.test(msg)) authErrors.push("subscriptions");
+          }
 
           // Fetch liked videos
           try {
             const likedTool = ytTools.find(t => t.name === "enso_youtube_liked_videos");
             if (likedTool) {
-              const r = JSON.parse((await likedTool.execute("yt-scan", { maxResults: 50 })).content[0].text!);
-              likedVideos = r.videos || [];
+              const raw = (await likedTool.execute("yt-scan", { maxResults: 50 })).content[0].text!;
+              if (raw.includes("authorization expired")) { authErrors.push("liked_videos"); }
+              else { likedVideos = JSON.parse(raw).videos || []; }
             }
-          } catch { /* liked not available */ }
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (/invalid_grant|authorization expired/i.test(msg)) authErrors.push("liked_videos");
+          }
 
           // Fetch feed
           try {
             const feedTool = ytTools.find(t => t.name === "enso_youtube_my_feed");
             if (feedTool) {
-              const r = JSON.parse((await feedTool.execute("yt-scan", { maxResults: 50 })).content[0].text!);
-              feed = r.videos || [];
+              const raw = (await feedTool.execute("yt-scan", { maxResults: 50 })).content[0].text!;
+              if (raw.includes("authorization expired")) { authErrors.push("feed"); }
+              else { feed = JSON.parse(raw).videos || []; }
             }
-          } catch { /* feed not available */ }
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            if (/invalid_grant|authorization expired/i.test(msg)) authErrors.push("feed");
+          }
 
-          const cacheData = {
+          const cacheData: Record<string, unknown> = {
             source: "youtube", subscriptions, likedVideos, feed,
             totalSubscriptions: subscriptions.length,
             totalLikedVideos: likedVideos.length,
             totalFeedVideos: feed.length,
             scannedAt: new Date().toISOString(),
           };
+
+          if (authErrors.length > 0) {
+            cacheData.authError = true;
+            cacheData.authErrorMessage = `YouTube authorization expired for: ${authErrors.join(", ")}. Re-authorize at /api/youtube/auth`;
+            logError("user-context", `YouTube scan auth expired (${authErrors.join(", ")})`, new Error("invalid_grant"));
+          }
 
           writeFileSync(join(CACHE_DIR, "youtube-data.json"), JSON.stringify(cacheData, null, 2));
           updateScanLog("youtube" as keyof ScanLog);
