@@ -26,6 +26,7 @@ import type { ConnectedClient } from "./server.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { ServerMessage, ToolBuildSummary, EnhanceResult } from "./types.js";
 import { logAction, logError, logFix } from "./action-log.js";
+import { buildError } from "./errors.js";
 import { getEnsoPath } from "./utils/home.js";
 import { persistCard, DEFAULT_CONVERSATION_ID } from "./memory-bridge.js";
 
@@ -92,7 +93,7 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
     });
     sessionId = result.sessionId;
   } catch (err) {
-    logError("build-via-claude", "Claude Code build error", err, { cardId });
+    logError("build-via-claude", "Claude Code build error", buildError("Claude Code build error", err instanceof Error ? err : undefined), { cardId });
     sendBuildComplete(send, cardId, false, undefined, `Claude Code error: ${err instanceof Error ? err.message : String(err)}`);
     return;
   }

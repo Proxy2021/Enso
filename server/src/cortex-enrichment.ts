@@ -20,6 +20,8 @@ import {
   type EntityId, type EntityIndexEntry,
 } from "./entity-model.js";
 import { logAction, logError } from "./action-log.js";
+import { cortexError } from "./errors.js";
+import { suppressCategory } from "./error-rate-monitor.js";
 import { cleanJson } from "./json-utils.js";
 
 // ── Constants ──
@@ -39,6 +41,7 @@ const INVENTORY_MAX_ENTRIES = 500;
  */
 export async function enrichNewEntities(entityIds: string[]): Promise<{ enriched: number }> {
   if (entityIds.length === 0) return { enriched: 0 };
+  suppressCategory("cortex", 30 * 60 * 1000);
 
   let totalEnriched = 0;
 
@@ -130,7 +133,7 @@ Return ONLY the JSON array, no markdown fences.`;
         message: `Semantic tagging: ${items.length} items → ${totalEnriched} enriched`,
       });
     } catch (err) {
-      logError("cortex-enrichment", "Semantic tagging batch failed", err);
+      logError("cortex-enrichment", "Semantic tagging batch failed", cortexError("Semantic tagging batch failed", "enrichment", err instanceof Error ? err : undefined));
     }
 
     // Small inter-batch pause to ease rate-limit pressure between sequential batches
@@ -279,7 +282,7 @@ Only include meaningful connections, not forced ones. If no good cross-source ma
         message: `Cross-reference: ${newItems.length} new items → ${totalRefs} cross-refs created`,
       });
     } catch (err) {
-      logError("cortex-enrichment", "Cross-reference batch failed", err);
+      logError("cortex-enrichment", "Cross-reference batch failed", cortexError("Cross-reference batch failed", "cross-ref", err instanceof Error ? err : undefined));
     }
 
     // Inter-batch pause to reduce rate-limit pressure

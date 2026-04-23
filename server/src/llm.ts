@@ -20,6 +20,7 @@ import {
   LLM_DEFAULT_TIMEOUT_MS, LLM_FAST_TIMEOUT_MS, LLM_PRO_TIMEOUT_MS,
 } from "./config.js";
 import { logAction, logError } from "./action-log.js";
+import { llmError, llmRateLimited, llmTimeout } from "./errors.js";
 
 // Re-export model constants for convenience
 export { GEMINI_MODEL_FAST, GEMINI_MODEL_PRO, GEMINI_MODEL_UTILITY };
@@ -180,7 +181,7 @@ export async function llm(opts: LLMCallOptions): Promise<string> {
       timeoutMs,
     });
   } catch (err) {
-    throw new Error(`LLM call failed: ${err instanceof Error ? err.message : String(err)}`);
+    throw llmError(`LLM call failed: ${err instanceof Error ? err.message : String(err)}`, err instanceof Error ? err : undefined);
   }
 }
 
@@ -401,10 +402,12 @@ async function callGeminiOnce(
     if (!response.ok) {
       const errText = await response.text().catch(() => "");
       const retryAfter = response.headers.get("Retry-After") ?? response.headers.get("retry-after");
-      logError("llm", `Gemini API error (${model}): ${response.status}`, errText);
-      // Embed Retry-After into the message so callGeminiWithRetry can use it
       const retryHint = retryAfter ? ` retry-after:${retryAfter}` : "";
-      throw new Error(`Gemini API error: ${response.status}${retryHint}`);
+      const is429 = response.status === 429;
+      const errFactory = is429 ? llmRateLimited : llmError;
+      const structured = errFactory(`Gemini API error: ${response.status}${retryHint}`);
+      logError("llm", `Gemini API error (${model}): ${response.status}`, errText);
+      throw structured;
     }
 
     const result = (await response.json()) as {
@@ -420,7 +423,7 @@ async function callGeminiOnce(
       .trim();
   } catch (err) {
     if ((err as Error).name === "AbortError") {
-      throw new Error(`LLM timeout after ${timeoutMs}ms`);
+      throw llmTimeout(`LLM timeout after ${timeoutMs}ms`, timeoutMs);
     }
     throw err;
   } finally {

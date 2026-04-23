@@ -12,6 +12,8 @@ import { join } from "path";
 import type { OrchestrationPlan, OrchestrationTask, TaskStructuredResult } from "@shared/types.js";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { logAction, logError } from "./action-log.js";
+import { orchestrationError } from "./errors.js";
+import { runWithOrchestrationContext } from "./request-context.js";
 import type { ConnectedClient } from "./server.js";
 import type { ServerMessage } from "./types.js";
 import type { OrchestrationWorkspace } from "./orchestration-workspace.js";
@@ -154,14 +156,14 @@ export async function executeDAG(params: DAGExecutorParams): Promise<void> {
       // Spawn Claude Code session for this task
       const taskPromise = (async () => {
         try {
-          const { sessionId } = await runClaudeCode({
+          const { sessionId } = await runWithOrchestrationContext(orchId, task.taskId, () => runClaudeCode({
             prompt,
             cwd,
             client: taskClient,
             runId,
             targetCardId: virtualCardId,
             skipPersist: true,
-          });
+          }));
 
           orch.taskSessionIds.set(task.taskId, sessionId);
 
@@ -238,7 +240,7 @@ export async function executeDAG(params: DAGExecutorParams): Promise<void> {
           // Block all downstream dependents
           blockDependents(plan, task.taskId, blockedSet);
 
-          logError("orchestrator", `DAG: task ${task.taskId} failed`, err);
+          logError("orchestrator", `DAG: task ${task.taskId} failed`, orchestrationError(`Task ${task.taskId} failed`, "dag-execution", err instanceof Error ? err : undefined));
         } finally {
           semaphore.release();
           runningMap.delete(task.taskId);

@@ -8,10 +8,11 @@
  */
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
-import { randomUUID } from "crypto";
+import { randomUUID, createHash } from "crypto";
 import { getEnsoPath, ENSO_HOME } from "./utils/home.js";
 import { getRequestId } from "./request-context.js";
 import type { Response } from "express";
+import * as errorRateMonitor from "./error-rate-monitor.js";
 
 // ── Types ──
 
@@ -24,13 +25,18 @@ export interface LogEntry {
   category: string;
   message: string;
   error?: string;
+  stack?: string;
   severity?: ErrorSeverity;
+  code?: string;
+  fingerprint?: string;
+  dedupCount?: number;
   requestId?: string;
+  orchestrationId?: string;
+  taskId?: string;
   cardId?: string;
   toolFamily?: string;
   sessionId?: string;
   metadata?: Record<string, unknown>;
-  /** Allow domain-specific extra fields (topic, orchestrationId, etc.) */
   [key: string]: unknown;
 }
 
@@ -86,10 +92,87 @@ function rotateFile(path: string, maxLines: number, keepLines: number): void {
   }
 }
 
+// ── Stack Trace Truncation ──
+
+function truncateStack(stack: string | undefined, maxFrames = 15): string | undefined {
+  if (!stack) return undefined;
+  const lines = stack.split("\n");
+  const header = lines[0];
+  const frames = lines.slice(1).filter(l => l.trim().startsWith("at "));
+  const meaningful = frames.filter(f => !f.includes("node_modules"));
+  if (meaningful.length <= maxFrames) return [header, ...meaningful].join("\n");
+  const head = meaningful.slice(0, 5);
+  const tail = meaningful.slice(-5);
+  return [header, ...head, `    ... ${meaningful.length - 10} frames omitted ...`, ...tail].join("\n");
+}
+
+// ── Error Fingerprinting & Deduplication ──
+
+function errorFingerprint(category: string, message: string): string {
+  const normalized = message
+    .replace(/[0-9a-f]{8,}/gi, "<ID>")
+    .replace(/\/[\w/.\-\\]+\.\w+/g, "<PATH>")
+    .replace(/\d{10,}/g, "<TS>")
+    .replace(/:\d{2,5}/g, ":<PORT>")
+    .replace(/\d+ms/g, "<DUR>");
+  return createHash("md5").update(`${category}:${normalized}`).digest("hex").slice(0, 12);
+}
+
+const dedupWindow = new Map<string, { count: number; firstSeen: number; lastSeen: number }>();
+const DEDUP_WINDOW_MS = 5 * 60 * 1000;
+const DEDUP_THRESHOLDS = [10, 100, 1000];
+
+function dedupGate(fingerprint: string): { write: boolean; dedupCount?: number } {
+  const now = Date.now();
+  const existing = dedupWindow.get(fingerprint);
+
+  if (!existing || now - existing.lastSeen > DEDUP_WINDOW_MS) {
+    dedupWindow.set(fingerprint, { count: 1, firstSeen: now, lastSeen: now });
+    return { write: true };
+  }
+
+  existing.count++;
+  existing.lastSeen = now;
+
+  if (DEDUP_THRESHOLDS.includes(existing.count)) {
+    return { write: true, dedupCount: existing.count };
+  }
+
+  return { write: false };
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [fp, entry] of dedupWindow) {
+    if (now - entry.lastSeen > DEDUP_WINDOW_MS * 2) {
+      dedupWindow.delete(fp);
+    }
+  }
+}, 10 * 60 * 1000).unref();
+
+// ── Category Validation ──
+
+const VALID_PREFIXES = new Set([
+  "system", "agent", "llm", "cortex", "orchestration",
+  "build", "ws", "client", "action", "focus", "evolution",
+  "discovery", "team-leader", "claude-code", "deep-research-build",
+  "card-release", "action-api", "content-enrich", "error-rate-monitor",
+  "wechat", "onboarding", "tunnel", "shell", "researcher",
+  "data-source", "email", "mission", "task-router", "ui-gen",
+]);
+
+function validateCategory(category: string): void {
+  const prefix = category.split(/[:\-]/)[0];
+  if (prefix && !VALID_PREFIXES.has(prefix)) {
+    console.warn(`[enso:action-log] Unknown category prefix "${prefix}" in "${category}".`);
+  }
+}
+
 // ── Core Logging ──
 
 export function logAction(entry: LogEntry): void {
   try {
+    validateCategory(entry.category);
     ensureDir();
     const line = JSON.stringify(entry);
     appendFileSync(LOG_PATH, line + "\n");
@@ -108,24 +191,40 @@ export function logAction(entry: LogEntry): void {
 }
 
 export function logError(category: string, message: string, error?: unknown, extra?: Partial<LogEntry>): void {
-  const errStr = error instanceof Error ? error.message : error != null ? String(error) : undefined;
+  const err = error instanceof Error ? error : error != null ? new Error(String(error)) : undefined;
+  const errStr = err?.message;
+  const stack = truncateStack(err?.stack);
   const severity: ErrorSeverity = (extra?.severity as ErrorSeverity) ?? "error";
   const requestId = extra?.requestId ?? getRequestId();
 
-  logAction({
-    ts: Date.now(),
-    type: "error",
-    category,
-    message,
-    error: errStr,
-    severity,
-    requestId,
-    ...extra,
-  });
+  const isEnsoError = err && err.name === "EnsoError";
+  const code = isEnsoError ? (err as any).code as string : extra?.code as string | undefined;
+
+  const fp = errorFingerprint(category, message);
+  const { write, dedupCount } = dedupGate(fp);
+
+  if (write) {
+    logAction({
+      ts: Date.now(),
+      type: "error",
+      category,
+      message: dedupCount ? `${message} (×${dedupCount} in 5min)` : message,
+      error: errStr,
+      stack,
+      severity,
+      code,
+      fingerprint: fp,
+      dedupCount,
+      requestId,
+      ...extra,
+    });
+  }
+
+  errorRateMonitor.record(severity, category);
 
   const prefix = severity === "critical" ? "CRITICAL" : severity === "warning" ? "WARN" : severity === "info" ? "INFO" : "ERROR";
   const ridTag = requestId ? ` [${requestId}]` : "";
-  if (errStr) console.error(`[${prefix}:${category}]${ridTag} ${message}: ${errStr}`);
+  if (errStr && write) console.error(`[${prefix}:${category}]${ridTag} ${message}: ${errStr}`);
 }
 
 // ── Standardized HTTP Error Response ──

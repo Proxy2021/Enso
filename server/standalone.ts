@@ -175,6 +175,12 @@ async function main(): Promise<void> {
     console.error("[enso:standalone] Failed to restore persisted cards:", err);
   }
 
+  // ── Wire error rate monitoring ──
+  const { onErrorRateAlert } = await import("./src/error-rate-monitor.js");
+  onErrorRateAlert((message, severity) => {
+    console.warn(`[enso:error-rate] ALERT (${severity}): ${message}`);
+  });
+
   // Tell guardian what port we're on (if running under guardian)
   if (process.send) {
     try {

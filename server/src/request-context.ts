@@ -5,6 +5,8 @@ import type { Request, Response, NextFunction } from "express";
 interface RequestContext {
   requestId: string;
   startTime: number;
+  orchestrationId?: string;
+  taskId?: string;
 }
 
 const store = new AsyncLocalStorage<RequestContext>();
@@ -27,4 +29,22 @@ export function runWithRequestId<T>(fn: () => T): { requestId: string; result: T
   const requestId = randomUUID().slice(0, 8);
   const result = store.run({ requestId, startTime: Date.now() }, fn);
   return { requestId, result };
+}
+
+export function getRequestContext(): Partial<RequestContext> {
+  const ctx = store.getStore();
+  return {
+    requestId: ctx?.requestId,
+    orchestrationId: ctx?.orchestrationId,
+    taskId: ctx?.taskId,
+  };
+}
+
+export function runWithOrchestrationContext<T>(
+  orchestrationId: string,
+  taskId: string,
+  fn: () => T,
+): T {
+  const requestId = randomUUID().slice(0, 8);
+  return store.run({ requestId, startTime: Date.now(), orchestrationId, taskId }, fn);
 }
