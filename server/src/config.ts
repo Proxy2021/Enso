@@ -58,6 +58,11 @@ export const LLM_RESEARCH_TIMEOUT_MS = 45_000;
 export const LLM_PRO_TIMEOUT_MS = 90_000;
 export const BRAVE_SEARCH_TIMEOUT_MS = 10_000;
 
+// ── Rate Limit Thresholds ──
+
+export const RATE_LIMIT_THROTTLE_THRESHOLD = 0.15;
+export const RATE_LIMIT_MAX_THROTTLE_MS = 1000;
+
 // ── BytePlus Seedance (video generation) ──
 
 export const BYTEPLUS_API_KEY = process.env.BYTEPLUS_API_KEY ?? "";

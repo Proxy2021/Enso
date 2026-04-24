@@ -792,7 +792,7 @@ export async function generateFullScript(
   // Each section gets outline context instead of previous section ending
   // (parallel sections can't have sequential continuity, but the outline
   // provides enough context for natural transitions)
-  const SCRIPT_CONCURRENCY = 4;
+  const SCRIPT_CONCURRENCY = 2;
   const sectionScripts: string[] = new Array(total).fill("");
   let completed = 0;
 

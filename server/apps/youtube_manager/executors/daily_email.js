@@ -9,10 +9,16 @@ var maxResults = p.maxResults || 10;
 var result = await ctx.callTool("enso_youtube_my_feed", { maxResults: maxResults }, { timeoutMs: 180000 });
 var videos = [];
 var usingFallback = false;
+var cachedAt = null;
 if (result && result.success && result.data) {
   videos = result.data.videos || [];
+  if (result.data.stale) { usingFallback = true; cachedAt = result.data.cachedAt || null; }
 } else if (result && typeof result === "string") {
-  try { videos = JSON.parse(result).videos || []; } catch(e) {}
+  try {
+    var parsed = JSON.parse(result);
+    videos = parsed.videos || [];
+    if (parsed.stale) { usingFallback = true; cachedAt = parsed.cachedAt || null; }
+  } catch(e) {}
 }
 
 // Fallback 1: try the persistent feed disk cache (survives server restarts & quota errors)
@@ -112,7 +118,15 @@ if (!emailTo && pageResult) emailTo = pageResult.notifyEmail || "";
 if (emailTo && pageResult && pageResult.shortUrl) {
   try {
     var topVideos = videoItems.slice(0, 4);
+    var staleWarning = "";
+    var subjectSuffix = "";
+    if (usingFallback) {
+      var ageLabel = cachedAt ? "cached " + cachedAt.slice(0, 10) : "cached";
+      staleWarning = "<div style='background:#78350f;color:#fcd34d;padding:8px 16px;font-size:12px;text-align:center'>⚠️ Using " + ageLabel + " data — YouTube auth expired. Re-authorize at /api/youtube/auth</div>";
+      subjectSuffix = " [STALE]";
+    }
     var emailHtml = "<div style='font-family:system-ui;max-width:600px;margin:0 auto;background:#0f0f23;color:#e2e8f0;border-radius:12px;overflow:hidden'>";
+    emailHtml += staleWarning;
     emailHtml += "<div style='padding:24px;text-align:center;background:linear-gradient(135deg,#831843,#be185d)'>";
     emailHtml += "<h1 style='color:white;font-size:22px;margin:0 0 4px'>\u25B6 Daily YouTube Picks</h1>";
     emailHtml += "<p style='color:#fda4af;font-size:13px;margin:4px 0'>" + todayStr + " \u2014 " + count + " new videos</p>";
@@ -125,7 +139,7 @@ if (emailTo && pageResult && pageResult.shortUrl) {
     });
     emailHtml += "<div style='text-align:center;margin:16px 0'><a href='" + pageResult.shortUrl + "' style='display:inline-block;background:#be185d;color:white;padding:12px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px'>View All " + count + " Videos \u2192</a></div>";
     emailHtml += "</div><div style='padding:12px 24px;text-align:center;border-top:1px solid #2a2a4a'><p style='color:#475569;font-size:11px;margin:0'>Enso AI</p></div></div>";
-    var emailResult = await ctx.callTool("enso_email_send", { to: emailTo, subject: "\u25B6 Daily YouTube Picks - " + todayShort, body: emailHtml, html: true });
+    var emailResult = await ctx.callTool("enso_email_send", { to: emailTo, subject: "\u25B6 Daily YouTube Picks - " + todayShort + subjectSuffix, body: emailHtml, html: true });
     emailSent = !!(emailResult && emailResult.success);
   } catch(e) { ctx.log("Email send failed: " + (e.message || e)); }
 }

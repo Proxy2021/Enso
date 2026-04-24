@@ -18,6 +18,7 @@ import {
   geminiUrl, GEMINI_API_BASE,
   DEFAULT_MAX_OUTPUT_TOKENS,
   LLM_DEFAULT_TIMEOUT_MS, LLM_FAST_TIMEOUT_MS, LLM_PRO_TIMEOUT_MS,
+  RATE_LIMIT_THROTTLE_THRESHOLD, RATE_LIMIT_MAX_THROTTLE_MS,
 } from "./config.js";
 import { logAction, logError } from "./action-log.js";
 import { llmError, llmRateLimited, llmTimeout } from "./errors.js";
@@ -260,32 +261,134 @@ export async function llmTTS(opts: {
   }
 }
 
-// ── Global concurrency semaphore ──
+// ── Per-model concurrency semaphore ──
 
-/**
- * Caps the number of concurrent Gemini API calls to reduce 429 exposure.
- * Background enrichment and batch operations share this pool with real-time
- * calls, so a burst of cortex enrichment work cannot crowd out the agent.
- */
-const MAX_CONCURRENT_GEMINI = 4;
-let _activeCalls = 0;
-const _waitQueue: Array<() => void> = [];
+const _activeByModel = new Map<string, number>();
+const _queueByModel = new Map<string, Array<() => void>>();
 
-function acquireSemaphore(): Promise<void> {
-  if (_activeCalls < MAX_CONCURRENT_GEMINI) {
-    _activeCalls++;
-    return Promise.resolve();
-  }
-  return new Promise((resolve) => _waitQueue.push(resolve));
+function getMaxConcurrency(model: string): number {
+  if (model.includes("pro")) return 3;
+  return 5;
 }
 
-function releaseSemaphore(): void {
-  const next = _waitQueue.shift();
-  if (next) {
-    next(); // pass the slot directly to the next waiter
-  } else {
-    _activeCalls--;
+function acquireSemaphore(model: string): Promise<void> {
+  const max = getMaxConcurrency(model);
+  const active = _activeByModel.get(model) ?? 0;
+  if (active < max) {
+    _activeByModel.set(model, active + 1);
+    return Promise.resolve();
   }
+  return new Promise((resolve) => {
+    const queue = _queueByModel.get(model) ?? [];
+    queue.push(resolve);
+    _queueByModel.set(model, queue);
+  });
+}
+
+function releaseSemaphore(model: string): void {
+  const queue = _queueByModel.get(model) ?? [];
+  const next = queue.shift();
+  if (next) {
+    next();
+  } else {
+    const active = _activeByModel.get(model) ?? 1;
+    _activeByModel.set(model, Math.max(0, active - 1));
+  }
+}
+
+function getTotalActiveCalls(): number {
+  let total = 0;
+  for (const count of _activeByModel.values()) total += count;
+  return total;
+}
+
+let _pipelineActive = false;
+
+/** Signal that a high-priority content pipeline is running — enrichment should defer. */
+export function setPipelineActive(active: boolean): void { _pipelineActive = active; }
+
+/** Check if a content pipeline is currently running (enrichment should back off). */
+export function isPipelineActive(): boolean { return _pipelineActive; }
+
+/** Check if the LLM semaphore is heavily loaded (≥3 of 4 slots in use). */
+export function isLLMBusy(): boolean { return getTotalActiveCalls() >= 3; }
+
+// ── Rate Limit State (proactive throttling) ──
+
+interface RateLimitState {
+  remaining: number;
+  limit: number;
+  resetAt: number;
+  lastUpdated: number;
+}
+
+const _rateLimitState = new Map<string, RateLimitState>();
+
+interface DailyCounter {
+  count: number;
+  dateKey: string;
+}
+const _dailyRequests: DailyCounter = { count: 0, dateKey: "" };
+
+function getPacificDateKey(): string {
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/Los_Angeles" });
+}
+
+function incrementDailyCounter(): void {
+  const today = getPacificDateKey();
+  if (_dailyRequests.dateKey !== today) {
+    _dailyRequests.count = 0;
+    _dailyRequests.dateKey = today;
+  }
+  _dailyRequests.count++;
+}
+
+function updateRateLimitState(model: string, headers: Headers): void {
+  const remaining = headers.get("x-ratelimit-remaining-requests") ?? headers.get("x-ratelimit-remaining");
+  const limit = headers.get("x-ratelimit-limit-requests") ?? headers.get("x-ratelimit-limit");
+  const reset = headers.get("x-ratelimit-reset") ?? headers.get("x-ratelimit-reset-requests");
+  if (remaining !== null && limit !== null) {
+    _rateLimitState.set(model, {
+      remaining: parseInt(remaining, 10),
+      limit: parseInt(limit, 10),
+      resetAt: reset ? parseInt(reset, 10) * 1000 : Date.now() + 60_000,
+      lastUpdated: Date.now(),
+    });
+  }
+}
+
+async function proactiveThrottle(model: string): Promise<void> {
+  const state = _rateLimitState.get(model);
+  if (!state || state.limit === 0) return;
+  if (Date.now() - state.lastUpdated > 120_000) return;
+
+  const ratio = state.remaining / state.limit;
+  if (ratio > RATE_LIMIT_THROTTLE_THRESHOLD) return;
+
+  const severity = 1 - (ratio / RATE_LIMIT_THROTTLE_THRESHOLD);
+  const delayMs = Math.floor(severity * RATE_LIMIT_MAX_THROTTLE_MS);
+  if (delayMs > 50) {
+    logAction({ ts: Date.now(), type: "action", category: "llm:throttle",
+      message: `Proactive throttle: ${delayMs}ms (${state.remaining}/${state.limit} remaining for ${model})` });
+    await new Promise(r => setTimeout(r, delayMs));
+  }
+}
+
+/** Expose rate-limit diagnostics for Team Leader and error_monitor. */
+export function getLLMRateState(): {
+  dailyRequests: number;
+  dailyDateKey: string;
+  models: Record<string, { remaining: number; limit: number; resetAt: number }>;
+} {
+  const models: Record<string, { remaining: number; limit: number; resetAt: number }> = {};
+  for (const [model, state] of _rateLimitState) {
+    models[model] = { remaining: state.remaining, limit: state.limit, resetAt: state.resetAt };
+  }
+  return {
+    dailyRequests: _dailyRequests.count,
+    dailyDateKey: _dailyRequests.dateKey,
+    models,
+  };
 }
 
 // ── Internal Helpers ──
@@ -315,7 +418,8 @@ async function callGeminiWithRetry(
   let lastError: Error | undefined;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    await acquireSemaphore();
+    await acquireSemaphore(model);
+    await proactiveThrottle(model);
     let retryDelayMs = 0;
     try {
       const result = await callGeminiOnce(prompt, apiKey, model, timeoutMs, maxOutputTokens, temperature, responseMimeType, systemPrompt, image, responseSchema);
@@ -324,31 +428,25 @@ async function callGeminiWithRetry(
       lastError = err instanceof Error ? err : new Error(String(err));
       const msg = lastError.message;
 
-      // Only retry on transient errors
       const isRetryable = msg.includes("timeout") || msg.includes("429") || msg.includes("500") || msg.includes("502") || msg.includes("503") || msg.includes("504") || msg.includes("AbortError") || msg.includes("fetch failed") || msg.includes("ECONNRESET") || msg.includes("ETIMEDOUT") || msg.includes("UND_ERR");
       if (!isRetryable || attempt === maxAttempts) break;
 
       const is429 = msg.includes("429");
 
-      // Honor Retry-After if the server told us how long to wait
       const retryAfterMatch = msg.match(/retry-after:(\d+)/i);
       const retryAfterSec = retryAfterMatch ? parseInt(retryAfterMatch[1], 10) : 0;
 
       if (retryAfterSec > 0) {
         retryDelayMs = retryAfterSec * 1000;
       } else if (is429) {
-        // 5s → 10s → 20s → 40s → 60s (capped) with jitter
         retryDelayMs = withJitter(Math.min(5000 * Math.pow(2, attempt - 1), 60000));
       } else {
-        // 500ms → 1s → 2s → 4s with jitter
         retryDelayMs = withJitter(Math.min(500 * Math.pow(2, attempt - 1), 4000));
       }
 
       logAction({ ts: Date.now(), type: "action", category: "llm", message: `Retrying LLM call (${attempt}/${maxAttempts}) in ${retryDelayMs}ms — model=${model}${is429 ? " [rate-limited]" : ""}` });
     } finally {
-      // Release the semaphore slot BEFORE sleeping so other callers aren't blocked
-      // during the backoff period.
-      releaseSemaphore();
+      releaseSemaphore(model);
     }
 
     if (retryDelayMs > 0) await new Promise((r) => setTimeout(r, retryDelayMs));
@@ -404,11 +502,28 @@ async function callGeminiOnce(
       const retryAfter = response.headers.get("Retry-After") ?? response.headers.get("retry-after");
       const retryHint = retryAfter ? ` retry-after:${retryAfter}` : "";
       const is429 = response.status === 429;
+
+      if (is429) {
+        updateRateLimitState(model, response.headers);
+        try {
+          const errJson = JSON.parse(errText);
+          const quotaDetail = errJson?.error?.details?.find(
+            (d: any) => d.metadata?.quota_limit
+          );
+          if (quotaDetail?.metadata?.quota_limit) {
+            logError("llm:rate-limit", `Rate limit dimension: ${quotaDetail.metadata.quota_limit} for ${model}`, errText);
+          }
+        } catch { /* non-JSON error body */ }
+      }
+
       const errFactory = is429 ? llmRateLimited : llmError;
       const structured = errFactory(`Gemini API error: ${response.status}${retryHint}`);
       logError("llm", `Gemini API error (${model}): ${response.status}`, errText);
       throw structured;
     }
+
+    updateRateLimitState(model, response.headers);
+    incrementDailyCounter();
 
     const result = (await response.json()) as {
       candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;

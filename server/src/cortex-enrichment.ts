@@ -458,6 +458,13 @@ export function buildEntityInventory(
  * Runs in small batches to stay within rate limits.
  */
 export async function reEnrichStaleEntities(maxEntities = 50): Promise<{ enriched: number; refsCreated: number }> {
+  // Defer if a content pipeline (book/content recommendation) is running
+  const { isPipelineActive } = await import("./llm.js");
+  if (isPipelineActive()) {
+    console.log("[enso:enrichment] Deferred — content pipeline is active");
+    return { enriched: 0, refsCreated: 0 };
+  }
+
   const index = getEntityIndex();
   const needsTags: string[] = [];
   const needsRefs: string[] = [];

@@ -1627,6 +1627,86 @@ export async function startEnsoServer(opts: {
     }
   });
 
+  // ── Pipeline retry + dead-letter queue ──
+  const PIPELINE_RETRY_DIR = join(homedir(), ".enso", "data");
+  const PIPELINE_RETRY_FILE = join(PIPELINE_RETRY_DIR, "pipeline-retry-queue.json");
+
+  type RetryEntry = { entityId: string; language?: string; failedAt: number; attempts: number; lastError: string };
+
+  function loadRetryQueue(): RetryEntry[] {
+    try { return existsSync(PIPELINE_RETRY_FILE) ? JSON.parse(readFileSync(PIPELINE_RETRY_FILE, "utf-8")) : []; }
+    catch { return []; }
+  }
+  function saveRetryQueue(q: RetryEntry[]): void {
+    if (!existsSync(PIPELINE_RETRY_DIR)) mkdirSync(PIPELINE_RETRY_DIR, { recursive: true });
+    writeFileSync(PIPELINE_RETRY_FILE, JSON.stringify(q, null, 2));
+  }
+  function enqueueRetry(entityId: string, language: string | undefined, error: string): void {
+    const q = loadRetryQueue();
+    const existing = q.find(e => e.entityId === entityId);
+    if (existing) { existing.attempts++; existing.failedAt = Date.now(); existing.lastError = error; }
+    else q.push({ entityId, language, failedAt: Date.now(), attempts: 1, lastError: error });
+    saveRetryQueue(q.filter(e => e.attempts <= 5));
+  }
+
+  async function generateDeepContentWithRetry(
+    generateFn: (p: { entityId: string; language?: string; onProgress?: (p: { phase: string; percentComplete: number }) => void }) => Promise<any>,
+    entityId: string, language: string | undefined,
+    onProgress?: (p: { phase: string; percentComplete: number }) => void,
+  ): Promise<any> {
+    const { setPipelineActive } = await import("./llm.js");
+    const maxAttempts = 3;
+    const delayBetweenMs = 120_000;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        setPipelineActive(true);
+        return await generateFn({ entityId, language, onProgress });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        const isRetryable = msg.includes("429") || msg.includes("timeout") || msg.includes("500") || msg.includes("503");
+        logError("book-recommendation", `Pipeline attempt ${attempt}/${maxAttempts} failed: ${msg}`, err);
+        if (!isRetryable || attempt === maxAttempts) {
+          enqueueRetry(entityId, language, msg);
+          throw err;
+        }
+        logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Retrying pipeline in ${delayBetweenMs / 1000}s (attempt ${attempt + 1}/${maxAttempts})` });
+        await new Promise(r => setTimeout(r, delayBetweenMs));
+      } finally {
+        setPipelineActive(false);
+      }
+    }
+  }
+
+  // Process dead-letter queue every 30 min
+  setInterval(async () => {
+    const q = loadRetryQueue();
+    if (!q.length) return;
+    const { isPipelineActive } = await import("./llm.js");
+    if (isPipelineActive()) return;
+    const oldest = q.sort((a, b) => a.failedAt - b.failedAt)[0];
+    if (Date.now() - oldest.failedAt < 30 * 60 * 1000) return;
+    try {
+      const { generateDeepContent: gen } = await import("./deep-content.js");
+      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Retrying dead-letter entity: ${oldest.entityId} (attempt ${oldest.attempts + 1})` });
+      const { setPipelineActive } = await import("./llm.js");
+      setPipelineActive(true);
+      await gen({ entityId: oldest.entityId, language: oldest.language });
+      setPipelineActive(false);
+      const updated = loadRetryQueue().filter(e => e.entityId !== oldest.entityId);
+      saveRetryQueue(updated);
+      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Dead-letter retry succeeded: ${oldest.entityId}` });
+    } catch (err) {
+      const { setPipelineActive } = await import("./llm.js");
+      setPipelineActive(false);
+      oldest.attempts++;
+      oldest.failedAt = Date.now();
+      oldest.lastError = err instanceof Error ? err.message : String(err);
+      saveRetryQueue(q.filter(e => e.attempts <= 5));
+      logError("book-recommendation", `Dead-letter retry failed for ${oldest.entityId}`, err);
+    }
+  }, 30 * 60 * 1000);
+
   // ── Daily Book Recommendation Pipeline API ──
   // Discovers a new book based on Cortex interests, generates deep podcast, sends email
   app.post("/api/book-recommendation/daily", async (req, res) => {
@@ -1669,15 +1749,12 @@ export async function startEnsoServer(opts: {
         whyRecommended: book.whyRecommended,
       });
 
-      // Steps 3+4: Generate deep content + send email in background
+      // Steps 3+4: Generate deep content (with pipeline-level retry) + send email
       try {
-        const processed = await generateDeepContent({
-          entityId: book.entityId,
-          language: reqLanguage,
-          onProgress: (p) => {
-            logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `${book.title}: ${p.phase} (${p.percentComplete}%)` });
-          },
-        });
+        const processed = await generateDeepContentWithRetry(
+          generateDeepContent, book.entityId, reqLanguage,
+          (p) => { logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `${book.title}: ${p.phase} (${p.percentComplete}%)` }); },
+        );
 
         logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Podcast generated: ${book.title} — ${processed.durationMinutes} min` });
 
@@ -1699,7 +1776,7 @@ export async function startEnsoServer(opts: {
           logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Email sent: ${emailResult.success ? "✅" : "❌"} ${emailResult.message}` });
         }
       } catch (bgErr) {
-        logError("book-recommendation", `Background pipeline failed for "${book.title}"`, bgErr);
+        logError("book-recommendation", `Background pipeline failed for "${book.title}" (queued for retry)`, bgErr);
       }
     } catch (err) {
       if (!res.headersSent) {
@@ -1837,12 +1914,12 @@ Return ONLY JSON.`;
       // Respond immediately
       res.json({ success: true, message: `Discovered "${picked.title}" — generating podcast + email`, entityId: result.entityId, title: picked.title, creator: picked.creator, type: entityType, whyRecommended: picked.whyRecommended });
 
-      // Generate deep content + email in background
+      // Generate deep content (with pipeline-level retry) + email in background
       try {
-        const processed = await generateDeepContent({
-          entityId: result.entityId, language: reqLanguage,
-          onProgress: (p) => { logAction({ ts: Date.now(), type: "action", category: "content-recommendation", message: `${picked.title}: ${p.phase} (${p.percentComplete}%)` }); },
-        });
+        const processed = await generateDeepContentWithRetry(
+          generateDeepContent, result.entityId, reqLanguage,
+          (p) => { logAction({ ts: Date.now(), type: "action", category: "content-recommendation", message: `${picked.title}: ${p.phase} (${p.percentComplete}%)` }); },
+        );
 
         const baseUrl = req.hostname === "localhost" ? getServerBaseUrl() : `https://${req.hostname}`;
         const { shortUrl } = buildEntityPage(processed, baseUrl);
@@ -1864,7 +1941,7 @@ Return ONLY JSON.`;
         }
         logAction({ ts: Date.now(), type: "action", category: "content-recommendation", message: `Page shared for ${entityType} "${picked.title}"` });
       } catch (err) {
-        logError("content-recommendation", `Pipeline failed for ${picked.title}`, err);
+        logError("content-recommendation", `Pipeline failed for ${picked.title} (queued for retry)`, err);
       }
     } catch (err) {
       logError("content-recommendation", `Daily ${contentType} pipeline failed`, err);
@@ -4463,6 +4540,11 @@ BEHAVIOR:
       try {
         import("./project-manager.js").then(m => m.ensureDefaultProject()).catch(() => {});
       } catch { /* best-effort */ }
+
+      // Check YouTube OAuth token health on startup
+      import("./youtube-tools.js").then(({ checkYouTubeOnStartup }) =>
+        checkYouTubeOnStartup().catch(() => {})
+      ).catch(() => {});
 
       // Prune stale card history files on startup
       try { pruneStaleJournals(); } catch { /* best-effort */ }

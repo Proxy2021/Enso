@@ -10,7 +10,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { EnsoAgentTool } from "./local-types.js";
-import { getAuthenticatedClient, isAuthorized, isAuthError, REAUTH_MESSAGE } from "./youtube-auth.js";
+import { getAuthenticatedClient, isAuthorized, isAuthError, REAUTH_MESSAGE, checkTokenHealth } from "./youtube-auth.js";
 import { logAction, logError } from "./action-log.js";
 
 // ── Helpers ──
@@ -113,20 +113,20 @@ function getCachedFeed(key: string): VideoInfo[] | null {
   return null;
 }
 
-function getDiskFeed(): VideoInfo[] | null {
+function getDiskFeed(): { videos: VideoInfo[]; savedAt?: string } | null {
   try {
     if (!existsSync(FEED_DISK_CACHE_PATH)) return null;
     const raw = JSON.parse(readFileSync(FEED_DISK_CACHE_PATH, "utf-8"));
-    return Array.isArray(raw.videos) && raw.videos.length > 0 ? raw.videos : null;
+    if (!Array.isArray(raw.videos) || raw.videos.length === 0) return null;
+    return { videos: raw.videos, savedAt: raw.savedAt };
   } catch {
     return null;
   }
 }
 
-function getStaleFeed(key: string): VideoInfo[] | null {
-  // Try in-memory first, then fall back to disk cache
+function getStaleFeed(key: string): { videos: VideoInfo[]; savedAt?: string } | null {
   const entry = feedCache.get(key);
-  if (entry) return entry.data;
+  if (entry) return { videos: entry.data, savedAt: new Date(entry.ts).toISOString() };
   return getDiskFeed();
 }
 
@@ -142,6 +142,43 @@ function setCachedFeed(key: string, data: VideoInfo[]): void {
 }
 
 let authExpiredNotified = false;
+
+async function notifyAuthExpired(): Promise<void> {
+  try {
+    const { sendHtmlEmail } = await import("./email.js");
+    const to = process.env.ENSO_NOTIFY_EMAIL || process.env.SMTP_EMAIL || "";
+    if (!to) return;
+    await sendHtmlEmail({
+      to,
+      subject: "⚠️ YouTube auth expired — Enso feeds using stale data",
+      html: `<div style="font-family:system-ui;max-width:500px;margin:0 auto;background:#0f0f23;color:#e2e8f0;border-radius:12px;overflow:hidden">
+<div style="padding:20px;text-align:center;background:#7f1d1d"><h2 style="color:#fca5a5;margin:0">YouTube Auth Expired</h2></div>
+<div style="padding:20px">
+<p>Your YouTube OAuth2 refresh token has expired. All YouTube feeds are currently serving <strong>stale cached data</strong>.</p>
+<p style="margin-top:16px"><strong>To fix:</strong></p>
+<ol><li>Open your Enso server URL + <code>/api/youtube/auth</code></li><li>Complete the Google consent flow</li><li>Feeds will resume immediately</li></ol>
+<p style="color:#94a3b8;font-size:12px;margin-top:16px">Tip: Publish your Google Cloud OAuth consent screen to Production to prevent 7-day token expiry.</p>
+</div></div>`,
+    });
+    logAction({ ts: Date.now(), type: "action", category: "youtube", message: "Sent auth-expired notification email" });
+  } catch (e) {
+    logError("youtube", "Failed to send auth-expired notification", e);
+  }
+}
+
+export async function checkYouTubeOnStartup(): Promise<void> {
+  if (!isAuthorized()) return;
+  const health = await checkTokenHealth();
+  if (!health.valid) {
+    logError("youtube", `Startup health check: YouTube token invalid — ${health.error || "unknown error"}. Re-authorize at /api/youtube/auth`, undefined);
+    if (!authExpiredNotified) {
+      authExpiredNotified = true;
+      await notifyAuthExpired();
+    }
+  } else {
+    logAction({ ts: Date.now(), type: "action", category: "youtube", message: "Startup health check: YouTube token valid" });
+  }
+}
 
 // ── Tool Implementations ──
 
@@ -470,13 +507,14 @@ export function createYouTubeTools(): EnsoAgentTool[] {
             const stale = getStaleFeed(cacheKey);
             if (stale) {
               const warning = isAuth ? REAUTH_MESSAGE : "YouTube API quota exceeded — showing cached results.";
-              logAction({ ts: Date.now(), type: "action", category: "youtube", message: `My feed (stale cache, ${isAuth ? "auth expired" : "quota exceeded"}): ${stale.length} videos` });
-              return jsonResult({ tool: "enso_youtube_my_feed", count: stale.length, videos: stale, stale: true, warning });
+              logAction({ ts: Date.now(), type: "action", category: "youtube", message: `My feed (stale cache, ${isAuth ? "auth expired" : "quota exceeded"}): ${stale.videos.length} videos` });
+              return jsonResult({ tool: "enso_youtube_my_feed", count: stale.videos.length, videos: stale.videos, stale: true, cachedAt: stale.savedAt, warning });
             }
           }
           if (isAuth && !authExpiredNotified) {
             authExpiredNotified = true;
             logError("youtube", "OAuth token expired — all YouTube tools will return stale/error until re-authorized at /api/youtube/auth", err);
+            notifyAuthExpired().catch(() => {});
           } else if (!isAuth) {
             logError("youtube", "my_feed failed", err);
           }
