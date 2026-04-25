@@ -1499,7 +1499,16 @@ Return valid JSON (no markdown fences):
 CRITICAL: Return ONLY valid JSON. Pick real, existing books with correct authors.`;
 
   try {
-    const raw = await llm({ prompt, tier: "utility", timeoutMs: 30000 });
+    // Try utility tier first; fall back to fast tier if rate-limited (429)
+    let raw: string;
+    try {
+      raw = await llm({ prompt, tier: "utility", timeoutMs: 30000 });
+    } catch (llmErr) {
+      const msg = llmErr instanceof Error ? llmErr.message : String(llmErr);
+      if (!msg.includes("429") && !msg.includes("RESOURCE_EXHAUSTED") && !msg.includes("rate")) throw llmErr;
+      logAction({ ts: Date.now(), type: "action", category: "book-discovery", message: "utility tier rate-limited — retrying with fast tier" });
+      raw = await llm({ prompt, tier: "fast", timeoutMs: 60000 });
+    }
     const cleaned = raw.replace(/^```(?:json)?\s*\n?/m, "").replace(/\n?```\s*$/m, "").trim();
     const parsed = JSON.parse(cleaned) as { books: Array<{ title: string; author: string; year?: string; description: string; whyRecommended: string }> };
 

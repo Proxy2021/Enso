@@ -1710,47 +1710,46 @@ export async function startEnsoServer(opts: {
   // ── Daily Book Recommendation Pipeline API ──
   // Discovers a new book based on Cortex interests, generates deep podcast, sends email
   app.post("/api/book-recommendation/daily", async (req, res) => {
-    try {
-      const { discoverNewBooks, generateDeepContent, buildEntityPage } = await import("./deep-content.js");
-      const { ingestDiscoveredEntity } = await import("./cortex-direct-ingest.js");
-      const { sendHtmlEmail } = await import("./email.js");
-      const { getNotifyEmail } = await import("./shareable-pages.js");
+    // Determine language from request or default
+    const reqLanguage = (req.query.language as string) || (req.body?.language as string) || undefined;
+    const baseUrl = req.hostname === "localhost" ? getServerBaseUrl() : `https://${req.hostname}`;
+    logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Daily book discovery pipeline started [lang=${reqLanguage || "auto"}]` });
 
-      // Determine language from request or default
-      const reqLanguage = (req.query.language as string) || (req.body?.language as string) || undefined;
-      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Daily book discovery pipeline started [lang=${reqLanguage || "auto"}]` });
+    // Respond immediately so the executor's ctx.fetch (60s timeout) doesn't time out
+    // while the LLM discovery call runs its 429-retry backoff cycle.
+    res.json({ success: true, message: "Book discovery pipeline running in background — email with podcast will follow" });
 
-      // Step 1: Discover a new book via web search + LLM
-      const discoveries = await discoverNewBooks(1, reqLanguage);
-      if (!discoveries.length) {
-        res.json({ success: false, message: "Could not discover a new book recommendation today — try again tomorrow" });
-        return;
-      }
-      const book = discoveries[0];
-      logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Discovered: "${book.title}" by ${book.author} — ${book.whyRecommended}` });
-
-      // Step 2: Create entity in Cortex (so deep content pipeline can resolve it)
-      await ingestDiscoveredEntity({
-        title: book.title,
-        type: "book",
-        source: "research",
-        creator: book.author,
-        year: book.year,
-        description: book.description,
-      });
-
-      // Send immediate response (pipeline takes 15-30 min)
-      res.json({
-        success: true,
-        message: `Discovered "${book.title}" by ${book.author} — generating podcast + email`,
-        entityId: book.entityId,
-        title: book.title,
-        author: book.author,
-        whyRecommended: book.whyRecommended,
-      });
-
-      // Steps 3+4: Generate deep content (with pipeline-level retry) + send email
+    // Run the full pipeline in the background (LLM call + Cortex ingest + deep content + email)
+    setImmediate(async () => {
       try {
+        const { discoverNewBooks, generateDeepContent, buildEntityPage } = await import("./deep-content.js");
+        const { ingestDiscoveredEntity } = await import("./cortex-direct-ingest.js");
+        const { sendHtmlEmail } = await import("./email.js");
+        const { getNotifyEmail } = await import("./shareable-pages.js");
+
+        // Step 1: Discover a new book via web search + LLM (may take >60s if Gemini 429 retries)
+        // Signal pipeline active so enrichment defers during this LLM-heavy pipeline
+        const { setPipelineActive: setPipelineActiveBook } = await import("./llm.js");
+        setPipelineActiveBook(true);
+        const discoveries = await discoverNewBooks(1, reqLanguage).finally(() => setPipelineActiveBook(false));
+        if (!discoveries.length) {
+          logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: "Could not discover a new book today — LLM returned no candidates" });
+          return;
+        }
+        const book = discoveries[0];
+        logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Discovered: "${book.title}" by ${book.author} — ${book.whyRecommended}` });
+
+        // Step 2: Create entity in Cortex
+        await ingestDiscoveredEntity({
+          title: book.title,
+          type: "book",
+          source: "research",
+          creator: book.author,
+          year: book.year,
+          description: book.description,
+        });
+
+        // Steps 3+4: Generate deep content + send email
         const processed = await generateDeepContentWithRetry(
           generateDeepContent, book.entityId, reqLanguage,
           (p) => { logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `${book.title}: ${p.phase} (${p.percentComplete}%)` }); },
@@ -1758,7 +1757,6 @@ export async function startEnsoServer(opts: {
 
         logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Podcast generated: ${book.title} — ${processed.durationMinutes} min` });
 
-        const baseUrl = req.hostname === "localhost" ? getServerBaseUrl() : `https://${req.hostname}`;
         const { shortUrl } = buildEntityPage(processed, baseUrl);
         const notifyTo = getNotifyEmail();
         if (notifyTo) {
@@ -1776,13 +1774,9 @@ export async function startEnsoServer(opts: {
           logAction({ ts: Date.now(), type: "action", category: "book-recommendation", message: `Email sent: ${emailResult.success ? "✅" : "❌"} ${emailResult.message}` });
         }
       } catch (bgErr) {
-        logError("book-recommendation", `Background pipeline failed for "${book.title}" (queued for retry)`, bgErr);
+        logError("book-recommendation", "Background book discovery pipeline failed", bgErr);
       }
-    } catch (err) {
-      if (!res.headersSent) {
-        errorResponse(res, 500, "book-recommendation", "Daily pipeline failed", err);
-      }
-    }
+    });
   });
 
   // ── Universal Content Recommendation Pipeline API ──

@@ -267,8 +267,8 @@ const _activeByModel = new Map<string, number>();
 const _queueByModel = new Map<string, Array<() => void>>();
 
 function getMaxConcurrency(model: string): number {
-  if (model.includes("pro")) return 3;
-  return 5;
+  if (model.includes("pro")) return 2;
+  return 3;
 }
 
 function acquireSemaphore(model: string): Promise<void> {
@@ -313,7 +313,7 @@ export function isPipelineActive(): boolean { return _pipelineActive; }
 /** Check if the LLM semaphore is heavily loaded (≥3 of 4 slots in use). */
 export function isLLMBusy(): boolean { return getTotalActiveCalls() >= 3; }
 
-// ── Rate Limit State (proactive throttling) ──
+// ── Rate Limit State (proactive throttling + global 429 backoff) ──
 
 interface RateLimitState {
   remaining: number;
@@ -323,6 +323,33 @@ interface RateLimitState {
 }
 
 const _rateLimitState = new Map<string, RateLimitState>();
+
+/** Per-model global 429 backoff: when set, all calls to that model must wait until this timestamp. */
+const _globalBackoffUntil = new Map<string, number>();
+
+/**
+ * Called whenever a 429 is received. Sets a global backoff for the model so
+ * concurrent callers don't pile on while we're already rate-limited.
+ */
+function setGlobalBackoff(model: string, retryAfterMs: number): void {
+  const until = Date.now() + retryAfterMs;
+  const existing = _globalBackoffUntil.get(model) ?? 0;
+  if (until > existing) {
+    _globalBackoffUntil.set(model, until);
+    logAction({ ts: Date.now(), type: "action", category: "llm:throttle",
+      message: `Global backoff set for ${model}: ${Math.round(retryAfterMs / 1000)}s until ${new Date(until).toISOString()}` });
+  }
+}
+
+async function waitForGlobalBackoff(model: string): Promise<void> {
+  const until = _globalBackoffUntil.get(model) ?? 0;
+  const waitMs = until - Date.now();
+  if (waitMs > 0) {
+    logAction({ ts: Date.now(), type: "action", category: "llm:throttle",
+      message: `Waiting ${Math.round(waitMs / 1000)}s for global backoff on ${model}` });
+    await new Promise(r => setTimeout(r, waitMs));
+  }
+}
 
 interface DailyCounter {
   count: number;
@@ -379,16 +406,33 @@ export function getLLMRateState(): {
   dailyRequests: number;
   dailyDateKey: string;
   models: Record<string, { remaining: number; limit: number; resetAt: number }>;
+  globalBackoffs: Record<string, number>;
 } {
   const models: Record<string, { remaining: number; limit: number; resetAt: number }> = {};
   for (const [model, state] of _rateLimitState) {
     models[model] = { remaining: state.remaining, limit: state.limit, resetAt: state.resetAt };
   }
+  const globalBackoffs: Record<string, number> = {};
+  for (const [model, until] of _globalBackoffUntil) {
+    if (until > Date.now()) globalBackoffs[model] = until;
+  }
   return {
     dailyRequests: _dailyRequests.count,
     dailyDateKey: _dailyRequests.dateKey,
     models,
+    globalBackoffs,
   };
+}
+
+/** Check if a specific model is currently in global 429 backoff. */
+export function isModelInBackoff(model: string): boolean {
+  const until = _globalBackoffUntil.get(model) ?? 0;
+  return Date.now() < until;
+}
+
+/** Resolve the model name for a given tier. */
+export function modelForTier(tier: LLMTier): string {
+  return TIER_MODELS[tier];
 }
 
 // ── Internal Helpers ──
@@ -418,6 +462,8 @@ async function callGeminiWithRetry(
   let lastError: Error | undefined;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // Wait for any global backoff before acquiring semaphore
+    await waitForGlobalBackoff(model);
     await acquireSemaphore(model);
     await proactiveThrottle(model);
     let retryDelayMs = 0;
@@ -443,6 +489,9 @@ async function callGeminiWithRetry(
       } else {
         retryDelayMs = withJitter(Math.min(500 * Math.pow(2, attempt - 1), 4000));
       }
+
+      // Set global backoff so all concurrent callers pause too
+      if (is429) setGlobalBackoff(model, retryDelayMs);
 
       logAction({ ts: Date.now(), type: "action", category: "llm", message: `Retrying LLM call (${attempt}/${maxAttempts}) in ${retryDelayMs}ms — model=${model}${is429 ? " [rate-limited]" : ""}` });
     } finally {

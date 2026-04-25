@@ -60,8 +60,8 @@ export const BRAVE_SEARCH_TIMEOUT_MS = 10_000;
 
 // ── Rate Limit Thresholds ──
 
-export const RATE_LIMIT_THROTTLE_THRESHOLD = 0.15;
-export const RATE_LIMIT_MAX_THROTTLE_MS = 1000;
+export const RATE_LIMIT_THROTTLE_THRESHOLD = 0.25;
+export const RATE_LIMIT_MAX_THROTTLE_MS = 3000;
 
 // ── BytePlus Seedance (video generation) ──
 

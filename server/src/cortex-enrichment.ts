@@ -14,7 +14,7 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
-import { llm } from "./llm.js";
+import { llm, isLLMBusy, isModelInBackoff, modelForTier } from "./llm.js";
 import {
   getEntityIndex, lookupEntity, upsertEntityIndex, saveEntityIndex,
   type EntityId, type EntityIndexEntry,
@@ -136,9 +136,9 @@ Return ONLY the JSON array, no markdown fences.`;
       logError("cortex-enrichment", "Semantic tagging batch failed", cortexError("Semantic tagging batch failed", "enrichment", err instanceof Error ? err : undefined));
     }
 
-    // Small inter-batch pause to ease rate-limit pressure between sequential batches
+    // Inter-batch pause to ease rate-limit pressure between sequential batches
     if (i + SEMANTIC_TAG_BATCH_SIZE < entityIds.length) {
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 3000));
     }
   }
 
