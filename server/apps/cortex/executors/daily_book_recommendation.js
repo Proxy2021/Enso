@@ -44,6 +44,7 @@ try {
   var response = await ctx.fetch("http://localhost:3001/api/book-recommendation/daily", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    timeoutMs: 180000,
   });
 
   if (response.ok) {

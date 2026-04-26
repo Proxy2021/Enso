@@ -40,6 +40,7 @@ import {
 } from "./memory-bridge.js";
 import { MAX_MEDIA_FILE_SIZE, WS_PING_INTERVAL_MS, WS_DISCONNECT_CLEANUP_MS } from "./config.js";
 import { handleWebSocketMessage, cleanupClientContextSubscriptions } from "./ws-handlers.js";
+import { globalErrorHandler } from "./error-middleware.js";
 
 export type ConnectedClient = {
   id: string;
@@ -760,7 +761,7 @@ export async function startEnsoServer(opts: {
         return { name, description: firstLine };
       });
       res.json(commands);
-    } catch { res.json([]); }
+    } catch (err) { logError("system", "Failed to load claude commands", err, { severity: "warning" }); res.json([]); }
   });
 
   // ── App Templates API (for Cortex tab — renders app UIs directly) ──
@@ -1235,7 +1236,7 @@ export async function startEnsoServer(opts: {
             if (fsM.default.existsSync(keysPath)) {
               tmdbKey = (JSON.parse(fsM.default.readFileSync(keysPath, "utf-8")) as Record<string, string>).tmdb || "";
             }
-          } catch {}
+          } catch (err) { logError("external", "Failed to read TMDB API key", err, { severity: "info" }); }
           const movieResults: Array<Record<string, unknown>> = [];
           if (tmdbKey) {
             try {
@@ -1257,7 +1258,7 @@ export async function startEnsoServer(opts: {
                   }
                 }
               }
-            } catch {}
+            } catch (err) { logError("external", "TMDB person/credits fetch failed", err, { severity: "warning" }); }
           }
           res.json({ tool: "enso_movies_tv_add", query, moreByCreator: query, totalResults: movieResults.length, results: movieResults });
         } else {
@@ -1273,7 +1274,7 @@ export async function startEnsoServer(opts: {
                 bookResults.push({ title: vol.title || "", author: ((vol.authors as string[]) || []).join(", "), description: String(vol.description || "").slice(0, 300), coverUrl: (vol.imageLinks as Record<string, string>)?.thumbnail || "", rating: vol.averageRating || 0, pageCount: vol.pageCount || 0, publisher: vol.publisher || "", publicationDate: vol.publishedDate || "", categories: vol.categories || [], source: "google" });
               }
             }
-          } catch {}
+          } catch (err) { logError("external", "Google Books author search failed", err, { severity: "warning" }); }
           // Also check local WeRead cache
           try {
             const osB = await import("os"); const fsB = await import("fs"); const pathB = await import("path");
@@ -1286,7 +1287,7 @@ export async function startEnsoServer(opts: {
                 }
               }
             }
-          } catch {}
+          } catch (err) { logError("system", "WeRead cache lookup failed", err, { severity: "info" }); }
           res.json({ tool: "enso_books_add", query, moreByCreator: query, totalResults: bookResults.length, results: bookResults });
         }
         return;
@@ -1491,6 +1492,12 @@ export async function startEnsoServer(opts: {
   app.get("/api/error-summary", (req, res) => {
     const hours = Math.min(Math.max(parseInt(req.query.hours as string) || 24, 1), 168);
     res.json(getErrorSummary(hours));
+  });
+
+  app.get("/api/circuit-breakers", (_req, res) => {
+    import("./circuit-breaker.js").then(({ getCircuitBreakerStates }) => {
+      res.json(getCircuitBreakerStates());
+    }).catch(() => res.json([]));
   });
 
   // ── Entity Index API ──
@@ -2252,7 +2259,8 @@ Return ONLY JSON.`;
       const data = { totalPages: index.length, categories, recentPages };
       _cortexStatsCache = { data, ts: Date.now() };
       res.json(data);
-    } catch {
+    } catch (err) {
+      logError("cortex", "Failed to load cortex stats", err, { severity: "warning" });
       res.json({ totalPages: 0, categories: {}, recentPages: [] });
     }
   });
@@ -2323,6 +2331,7 @@ Return ONLY JSON.`;
         topSemanticTags,
       });
     } catch (err) {
+      logError("cortex", "Failed to load cortex pulse", err, { severity: "warning" });
       res.json({
         totalEntities: 0,
         enriched: { withSemanticTags: 0, withCrossRefs: 0, withVideos: 0 },
@@ -2340,6 +2349,7 @@ Return ONLY JSON.`;
       const state = loadFocusState();
       res.json(state || { areas: [], lastInferredAt: "", lastRefreshedAt: "", version: 0 });
     } catch (err) {
+      logError("focus", "Failed to load focus areas", err, { severity: "warning" });
       res.json({ areas: [], lastInferredAt: "", lastRefreshedAt: "", version: 0 });
     }
   });
@@ -2775,6 +2785,7 @@ Only include connections explicitly discussed or strongly implied. Return [] if 
       submitReact({ channel: "email", context, text: action, action: action as any });
       res.send(`<html><body style='background:#0f172a;color:#f1f5f9;display:flex;justify-content:center;padding:60px;font-family:sans-serif;'><div style='text-align:center;'><h2 style='color:#10b981;'>${action === "approve" ? "Approved" : action === "defer" ? "Deferred" : "Noted"}</h2><p style='color:#9ca3af;'>Your response has been recorded. The Team Leader will process it.</p></div></body></html>`);
     } catch (err: any) {
+      logError("system", "Failed to process quick react", err, { severity: "warning" });
       res.status(500).send("Error processing react");
     }
   };
@@ -2937,6 +2948,7 @@ BEHAVIOR:
       }
       res.json({ agents });
     } catch (err: any) {
+      logError("agent", "Failed to load agents list", err, { severity: "warning" });
       res.json({ agents: [{ id: "tl", name: "Team Leader", type: "tl" }] });
     }
   });
@@ -2959,6 +2971,7 @@ BEHAVIOR:
       const { buildReactPage } = await import("./reacts.js");
       res.type("html").send(buildReactPage(req.params.notificationId));
     } catch (err: any) {
+      logError("system", "Failed to build react form page", err, { severity: "warning" });
       res.status(500).send("Error loading react form");
     }
   });
@@ -2970,6 +2983,7 @@ BEHAVIOR:
       const { buildBriefingPage } = await import("./reacts.js");
       res.type("html").send(buildBriefingPage(req.params.notificationId));
     } catch (err: any) {
+      logError("system", "Failed to build briefing page", err, { severity: "warning" });
       res.status(500).send("Error loading briefing page");
     }
   });
@@ -4271,6 +4285,9 @@ BEHAVIOR:
       res.sendFile(join(distDir, "index.html"));
     });
   }
+
+  // Global error handler — catches unhandled errors from async routes
+  app.use(globalErrorHandler);
 
   const server: Server = createServer(app);
   const wss = new WebSocketServer({ server, path: "/ws" });

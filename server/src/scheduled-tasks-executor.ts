@@ -131,6 +131,11 @@ async function executeToolTask(
       throw new Error(result.error || "Tool execution failed");
     }
 
+    const data = result.data as Record<string, unknown> | undefined;
+    if (data && data.ok === false) {
+      throw new Error(String(data.message || "Tool reported ok:false"));
+    }
+
     unregisterSession(runId);
 
     return {

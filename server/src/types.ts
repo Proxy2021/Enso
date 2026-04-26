@@ -499,8 +499,8 @@ export interface ExecutorContext {
   /** Convenience: search for files/dirs by name (wraps enso_fs_search_paths). */
   searchFiles(rootPath: string, name: string): Promise<{ success: boolean; data: unknown; error?: string }>;
 
-  /** Sandboxed HTTP fetch (timeout 10s, max 512KB response, HTTPS only). */
-  fetch(url: string, options?: { method?: string; headers?: Record<string, string>; body?: string }): Promise<{ ok: boolean; status: number; data: unknown }>;
+  /** Sandboxed HTTP fetch (HTTPS only, max 512KB). Pass timeoutMs to override the default 60s timeout (e.g. 180000 for long-running internal APIs). */
+  fetch(url: string, options?: { method?: string; headers?: Record<string, string>; body?: string; timeoutMs?: number }): Promise<{ ok: boolean; status: number; data: unknown }>;
 
   /** Web search via Brave Search API. Returns structured search results for discovery scenarios. */
   search(query: string, options?: { count?: number; country?: string }): Promise<{

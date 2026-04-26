@@ -4,7 +4,7 @@
   "spec": {
     "toolFamily": "error_monitor",
     "toolPrefix": "enso_error_monitor_",
-    "description": "Real-time error monitoring dashboard: error summary with severity breakdown, error trends over time, category analysis, recent error feed, fix tracking, and system health check. Reads from Enso's action log and error log.",
+    "description": "Real-time error monitoring dashboard: error summary with severity breakdown, error trends over time, category analysis, recent error feed, fix tracking, system health score, circuit breaker states, error code analysis, recurring error pattern detection, and actionable recommendations. Reads from Enso's action log, error log, circuit breakers, and error rate monitor.",
     "signatureId": "error_monitor_view",
     "tools": [
       {
@@ -201,6 +201,125 @@
           ]
         },
         "requiredDataKeys": ["tool", "entries"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "circuit_breakers",
+        "description": "Get circuit breaker states for all protected external services (LLM, Brave Search). Shows whether circuits are closed (healthy), open (failing), or half-open (recovering). Use when the user says: 'circuit breaker status', 'service health', 'are APIs working', 'external service status', 'circuit states'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_error_monitor_circuit_breakers",
+          "breakers": [
+            { "name": "llm", "state": "closed", "health": "healthy", "failures": 0, "lastFailureTime": 0, "timeSinceFailure": null },
+            { "name": "brave-search", "state": "open", "health": "failing", "failures": 3, "lastFailureTime": 1713510000000, "timeSinceFailure": 3600000 }
+          ],
+          "overallHealth": "degraded",
+          "recentErrorRate": 5,
+          "checkedAt": 1713513600000
+        },
+        "requiredDataKeys": ["tool", "breakers"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "health_check",
+        "description": "Comprehensive system health check with a 0-100 health score, circuit breaker status, error code analysis, recurring error clusters, and actionable recommendations. The Team Leader's primary tool for assessing platform health. Use when the user says: 'health check', 'system health', 'health score', 'platform status', 'how healthy is the system', 'TL health report'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hours": {
+              "type": "number",
+              "description": "Time window in hours (1-168, default: 24)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_error_monitor_health_check",
+          "hours": 24,
+          "score": 72,
+          "healthLevel": "good",
+          "summary": { "total": 15, "bySeverity": { "critical": 0, "error": 5, "warning": 8, "info": 2 }, "categoryCount": 4 },
+          "circuitBreakers": { "total": 2, "open": 0, "states": [{ "name": "llm", "state": "closed" }, { "name": "brave-search", "state": "closed" }] },
+          "errorCodes": [{ "code": "LLM_CALL_FAILED", "count": 3, "lastSeen": 1713510000000, "topCategories": [{ "category": "llm:call", "count": 3 }] }],
+          "clusters": [{ "fingerprint": "abc123", "count": 4, "message": "Tool call failed: timeout", "category": "standalone-agent", "severity": "error", "frequency": "2h" }],
+          "recommendations": ["2 recurring error patterns found"],
+          "fixes": { "total": 3, "unacknowledged": 1 },
+          "checkedAt": 1713513600000
+        },
+        "requiredDataKeys": ["tool", "score", "healthLevel"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "error_codes",
+        "description": "Analyze errors grouped by structured error code (LLM_CALL_FAILED, CORTEX_INGEST_FAILED, etc.). Shows which error types are most frequent and which subsystems they affect. Use when the user says: 'error codes', 'error types', 'what kind of errors', 'error classification', 'which errors are happening'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hours": {
+              "type": "number",
+              "description": "Time window in hours (1-168, default: 24)"
+            },
+            "code": {
+              "type": "string",
+              "description": "Filter by specific error code (e.g., 'LLM_CALL_FAILED')"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_error_monitor_error_codes",
+          "hours": 24,
+          "codeFilter": null,
+          "codes": [
+            { "code": "LLM_CALL_FAILED", "count": 5, "critical": 0, "error": 4, "warning": 1, "info": 0, "firstSeen": 1713480000000, "lastSeen": 1713510000000, "topCategories": [{ "category": "llm:call", "count": 5 }], "sampleMessages": ["LLM call timed out after 30s"] }
+          ],
+          "totalCodes": 1,
+          "totalErrors": 5
+        },
+        "requiredDataKeys": ["tool", "codes"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "recurring",
+        "description": "Detect recurring error patterns using fingerprint clustering. Groups identical errors, shows frequency and occurrence count. Helps identify persistent issues vs one-off failures. Use when the user says: 'recurring errors', 'repeated errors', 'error patterns', 'same error happening', 'persistent issues', 'error clusters'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hours": {
+              "type": "number",
+              "description": "Time window in hours (1-168, default: 24)"
+            },
+            "minOccurrences": {
+              "type": "number",
+              "description": "Minimum occurrences to be considered recurring (default: 2)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_error_monitor_recurring",
+          "hours": 24,
+          "minOccurrences": 2,
+          "patterns": [
+            { "fingerprint": "abc123def4", "count": 8, "message": "Tool call failed: timeout", "category": "standalone-agent", "severity": "error", "code": "AGENT_TOOL_FAILED", "firstSeen": 1713480000000, "lastSeen": 1713510000000, "frequency": "4h" }
+          ],
+          "totalPatterns": 1,
+          "totalErrors": 15,
+          "uniqueErrors": 8
+        },
+        "requiredDataKeys": ["tool", "patterns"],
         "isPrimary": false
       }
     ]

@@ -1419,12 +1419,10 @@ export async function discoverNewBooks(count = 1, language?: string): Promise<Di
     `new important books ${searchThemes[0]} thought-provoking`,
   ];
 
+  const searchResults = await Promise.allSettled(queries.map(q => braveWebSearch(q, 5)));
   const allResults: Array<{ title: string; description: string; url: string }> = [];
-  for (const q of queries) {
-    try {
-      const results = await braveWebSearch(q, 5);
-      allResults.push(...results);
-    } catch { /* ignore individual failures */ }
+  for (const r of searchResults) {
+    if (r.status === "fulfilled") allResults.push(...r.value);
   }
 
   const webSearchAvailable = allResults.length > 0;
@@ -1432,20 +1430,16 @@ export async function discoverNewBooks(count = 1, language?: string): Promise<Di
     logAction({ ts: Date.now(), type: "action", category: "book-discovery", message: "Web search returned no results — falling back to LLM-only mode" });
   }
 
-  // Fetch content from top results for richer context
-  const enriched: string[] = [];
-  for (const r of allResults.slice(0, 8)) {
-    try {
-      const content = await fetchPageContent(r.url);
-      if (content && content.length > 100) {
-        enriched.push(`[${r.title}]\n${content.slice(0, 1500)}`);
-      } else {
-        enriched.push(`[${r.title}] ${r.description}`);
-      }
-    } catch {
-      enriched.push(`[${r.title}] ${r.description}`);
+  // Fetch content from top results for richer context (parallel)
+  const topResults = allResults.slice(0, 8);
+  const fetchedPages = await Promise.allSettled(topResults.map(r => fetchPageContent(r.url)));
+  const enriched: string[] = topResults.map((r, i) => {
+    const page = fetchedPages[i];
+    if (page.status === "fulfilled" && page.value && page.value.length > 100) {
+      return `[${r.title}]\n${page.value.slice(0, 1500)}`;
     }
-  }
+    return `[${r.title}] ${r.description}`;
+  });
 
   // Step 4: LLM picks the best book
   // Also collect already-processed book titles for stronger exclusion

@@ -727,7 +727,7 @@ export async function handleOrchestration(params: OrchestrationStartParams): Pro
   try {
     const { buildUserContext } = await import("./team-leader.js");
     userContext = await buildUserContext({ profileChars: 600, themeChars: 800 });
-  } catch { /* non-critical */ }
+  } catch (err) { logError("orchestration", "Failed to build user context for planning", err, { severity: "warning" }); }
 
   // Note: planningPromptBuilder takes precedence over context-driven prompt — this lets
   // a caller (e.g., Focus Prepare) provide a custom planning prompt while still passing
@@ -922,7 +922,7 @@ export async function handleOrchestrationApprove(params: {
     if (focusId) focusContextBlock = await buildRichFocusContext(focusId);
     logAction({ ts: Date.now(), type: "action", category: "orchestrator",
       message: `Task context injected for ${orchestrationId}: user=${userContextBlock.length}ch, focus=${focusContextBlock.length}ch${focusId ? ` (${focusId})` : ""}` });
-  } catch { /* non-critical */ }
+  } catch (err) { logError("orchestration", "Failed to build user/focus context for task prompts", err, { severity: "warning" }); }
 
   try {
     // Execute tasks in parallel waves using the DAG executor
@@ -1124,7 +1124,7 @@ export async function handleOrchestrationResume(params: {
     userContextBlock = await buildUserContext({ profileChars: 400, themeChars: 600 });
     const focusId = orch.context?.type === "focus" ? orch.context?.focusId : undefined;
     if (focusId) focusContextBlock = await buildRichFocusContext(focusId);
-  } catch { /* non-critical */ }
+  } catch (err) { logError("orchestration", "Failed to build user/focus context for resume", err, { severity: "warning" }); }
 
   try {
     // Re-enter DAG executor — it skips completed tasks automatically
@@ -1321,8 +1321,8 @@ export function buildAppInventoryContext(): string {
     lines.push(`design an EXTENSION (new tools added to that app), not a new standalone app.`);
     lines.push(`Only create a new app when no existing app covers the domain.`);
     lines.push(``);
-  } catch {
-    // Non-fatal — proceed without inventory
+  } catch (err) {
+    logError("orchestration", "Failed to build app inventory context", err, { severity: "info" });
   }
   return lines.join("\n");
 }
@@ -1342,7 +1342,7 @@ function getCortexPlanningContext(userMessage: string): string {
     }).slice(0, 5);
     if (relevant.length === 0) return "";
     return `## Domain Knowledge (from Knowledge Cortex)\n${relevant.map(e => `- **${e.title}**: ${e.summary}`).join("\n")}\nUse this knowledge to inform task design and agent assignments.\n`;
-  } catch { return ""; }
+  } catch (err) { logError("orchestration", "Failed to build Cortex planning context", err, { severity: "info" }); return ""; }
 }
 
 function buildPlanningPrompt(
@@ -2216,7 +2216,7 @@ function finalizeOrchestration(orch: { plan: OrchestrationPlan; bootstrapCardId:
     updateOrchestrationProgress(orchId, "completed");
     logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Orchestration completed: ${orchId}` });
     updateOrchestrationStatus(orchId, "completed");
-    try { orch.onComplete?.(orchId, "completed"); } catch { /* best effort */ }
+    try { orch.onComplete?.(orchId, "completed"); } catch (err) { logError("orchestration", `onComplete callback failed for ${orchId}`, err, { severity: "warning" }); }
     sendOrchestrationCompletionEmail(orch.plan, "completed").catch(() => {});
     unregisterOrchestration(orchId);
   } else if (allDone && anyFailed) {
@@ -2228,7 +2228,7 @@ function finalizeOrchestration(orch: { plan: OrchestrationPlan; bootstrapCardId:
     updateOrchestrationProgress(orchId, status);
     logAction({ ts: Date.now(), type: "action", category: "orchestrator", message: `Orchestration finished: ${completed} completed, ${failed} failed` });
     updateOrchestrationStatus(orchId, status);
-    try { orch.onComplete?.(orchId, status as "completed" | "failed"); } catch { /* best effort */ }
+    try { orch.onComplete?.(orchId, status as "completed" | "failed"); } catch (err) { logError("orchestration", `onComplete callback failed for ${orchId}`, err, { severity: "warning" }); }
     sendOrchestrationCompletionEmail(orch.plan, status as "completed" | "failed").catch(() => {});
     unregisterOrchestration(orchId);
   }
@@ -2482,7 +2482,8 @@ export function loadOrchestration(orchestrationId: string): OrchestrationPlan | 
     const filePath = join(ORCHESTRATIONS_DIR, `${orchestrationId}.json`);
     if (!existsSync(filePath)) return null;
     return JSON.parse(readFileSync(filePath, "utf-8"));
-  } catch {
+  } catch (err) {
+    logError("orchestration", `Failed to load orchestration ${orchestrationId} from disk`, err, { severity: "warning" });
     return null;
   }
 }

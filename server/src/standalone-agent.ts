@@ -102,8 +102,8 @@ function flushOlderEntriesToMemory(history: ConversationEntry[]): void {
       category: "memory-flush",
       message: `Flushed ${userMessages.length} conversation turns to daily memory`,
     });
-  } catch {
-    // Best effort — never fail the main flow
+  } catch (err) {
+    logError("agent", "Failed to flush conversation to daily memory", err, { severity: "info" });
   }
 }
 
@@ -211,7 +211,8 @@ function hydrateFromJournal(clientId: string, conversationId: string): number {
       }
     }
     return count;
-  } catch {
+  } catch (err) {
+    logError("agent", "Failed to hydrate history from journal", err, { severity: "warning" });
     return 0;
   }
 }
@@ -1000,7 +1001,8 @@ export async function handleStandaloneInbound(params: {
     try {
       const compacted = await maybeCompactHistory(history, account.geminiApiKey, `${clientId}|${conversationId}`);
       if (!compacted) trimHistory(history);
-    } catch {
+    } catch (err) {
+      logError("agent", "History compaction failed, falling back to trim", err, { severity: "info" });
       trimHistory(history);
     }
 

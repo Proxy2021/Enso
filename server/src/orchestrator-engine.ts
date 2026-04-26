@@ -183,7 +183,7 @@ export async function executeDAG(params: DAGExecutorParams): Promise<void> {
               if (existsSync(fullPath)) {
                 (task as any).fullOutput = readFileSync(fullPath, "utf-8");
               }
-            } catch { /* best effort */ }
+            } catch (err) { logError("orchestration", `Failed to read full task output for ${task.taskId}`, err, { severity: "info" }); }
           }
 
           completedSet.add(task.taskId);
@@ -388,8 +388,8 @@ function readTaskSummary(taskId: string, workspace?: OrchestrationWorkspace): Ta
             if (Array.isArray(parsed.technicalDebt)) structured.technicalDebt = parsed.technicalDebt;
 
             return { text, structured };
-          } catch {
-            // JSON parse failed — fall through to plain text extraction
+          } catch (err) {
+            logError("orchestration", "STRUCTURED_SUMMARY JSON parse failed, using plain text", err, { severity: "warning" });
           }
         }
 
@@ -400,7 +400,8 @@ function readTaskSummary(taskId: string, workspace?: OrchestrationWorkspace): Ta
         const text = lines.slice(0, 5).join(" ").trim().slice(0, 500)
           || `Output written to ${filePath}`;
         return { text };
-      } catch {
+      } catch (err) {
+        logError("orchestration", `Failed to read task output file: ${filePath}`, err, { severity: "warning" });
         return { text: `Output written to ${filePath}` };
       }
     }
@@ -434,14 +435,14 @@ function extractVerdict(taskId: string, workspace?: OrchestrationWorkspace): "PA
             if (parsed.verdict === "PASS" || parsed.verdict === "FAIL") {
               return parsed.verdict;
             }
-          } catch { /* fall through */ }
+          } catch (err) { logError("orchestration", "Verdict JSON parse failed", err, { severity: "warning" }); }
         }
         // Check for explicit VERDICT line
         const verdictMatch = content.match(/VERDICT:\s*(PASS|FAIL)/i);
         if (verdictMatch) {
           return verdictMatch[1].toUpperCase() as "PASS" | "FAIL";
         }
-      } catch { /* skip */ }
+      } catch (err) { logError("orchestration", `Failed to read verdict file: ${filePath}`, err, { severity: "warning" }); }
     }
   }
   return null;

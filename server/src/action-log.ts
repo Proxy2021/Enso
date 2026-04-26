@@ -159,6 +159,7 @@ const VALID_PREFIXES = new Set([
   "card-release", "action-api", "content-enrich", "error-rate-monitor",
   "wechat", "onboarding", "tunnel", "shell", "researcher",
   "data-source", "email", "mission", "task-router", "ui-gen",
+  "circuit-breaker", "external",
 ]);
 
 function validateCategory(category: string): void {

@@ -218,7 +218,8 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
       });
     },
 
-    async fetch(url: string, options?: { method?: string; headers?: Record<string, string>; body?: string }) {
+    async fetch(url: string, options?: { method?: string; headers?: Record<string, string>; body?: string; timeoutMs?: number }) {
+      const fetchTimeout = options?.timeoutMs ?? EXECUTOR_CTX_TIMEOUT_MS;
       return withTimeout(`fetch("${url}")`, async () => {
         // Enforce HTTPS only (allow localhost for internal API calls)
         if (!url.startsWith("https://") && !url.startsWith("http://localhost") && !url.startsWith("http://127.0.0.1")) {
@@ -226,7 +227,7 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
         }
 
         const ac = new AbortController();
-        const timer = setTimeout(() => ac.abort(), EXECUTOR_CTX_TIMEOUT_MS);
+        const timer = setTimeout(() => ac.abort(), fetchTimeout);
         try {
           const resp = await globalThis.fetch(url, {
             method: options?.method ?? "GET",
@@ -253,7 +254,7 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
         } finally {
           clearTimeout(timer);
         }
-      });
+      }, false, fetchTimeout);
     },
 
     async search(query: string, options?: { count?: number; country?: string }) {

@@ -4,6 +4,7 @@
  */
 
 import { BRAVE_WEB_SEARCH, BRAVE_IMAGE_SEARCH, BRAVE_VIDEO_SEARCH, BRAVE_SEARCH_TIMEOUT_MS } from "../config.js";
+import { braveSearchCircuit } from "../circuit-breaker.js";
 
 export type BraveSearchType = "web" | "images" | "videos";
 
@@ -40,22 +41,25 @@ export async function braveSearchFetch<T = unknown>(
   url.searchParams.set("count", String(Math.min(Math.max(count, 1), maxCount)));
   if (country) url.searchParams.set("country", country);
 
-  const ac = new AbortController();
-  const timer = setTimeout(() => ac.abort(), timeoutMs);
-  try {
-    const resp = await globalThis.fetch(url.toString(), {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        "X-Subscription-Token": apiKey,
-      },
-      signal: ac.signal,
-    });
-    if (!resp.ok) return null;
-    return (await resp.json()) as T;
-  } catch {
-    return null;
-  } finally {
-    clearTimeout(timer);
-  }
+  return braveSearchCircuit.execute(
+    async () => {
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(), timeoutMs);
+      try {
+        const resp = await globalThis.fetch(url.toString(), {
+          method: "GET",
+          headers: {
+            Accept: "application/json",
+            "X-Subscription-Token": apiKey,
+          },
+          signal: ac.signal,
+        });
+        if (!resp.ok) throw new Error(`Brave Search HTTP ${resp.status}`);
+        return (await resp.json()) as T;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    () => null as T,
+  );
 }

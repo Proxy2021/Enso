@@ -25,6 +25,16 @@ export type ErrorCode =
   | "AGENT_ROUTING_ERROR"
   | "CLIENT_RENDER_ERROR"
   | "CLIENT_SANDBOX_ERROR"
+  | "DATA_SOURCE_SCAN_FAILED"
+  | "DATA_SOURCE_INGEST_FAILED"
+  | "TOOL_EXECUTION_FAILED"
+  | "TOOL_VALIDATION_FAILED"
+  | "EXTERNAL_SERVICE_FAILED"
+  | "EXTERNAL_SERVICE_TIMEOUT"
+  | "WS_SEND_FAILED"
+  | "VALIDATION_FAILED"
+  | "FILESYSTEM_ACCESS_FAILED"
+  | "SCHEDULED_TASK_FAILED"
   | "UNKNOWN_ERROR";
 
 export class EnsoError extends Error {
@@ -71,4 +81,24 @@ export function orchestrationError(message: string, subpath: string, cause?: Err
 
 export function buildError(message: string, cause?: Error): EnsoError {
   return new EnsoError(message, "BUILD_APP_FAILED", "build:app", "error", { cause });
+}
+
+export function dataSourceError(source: string, message: string, cause?: Error): EnsoError {
+  return new EnsoError(message, "DATA_SOURCE_SCAN_FAILED", `data-source:${source}`, "error", { cause, metadata: { source } });
+}
+
+export function toolExecutionError(toolId: string, message: string, cause?: Error): EnsoError {
+  return new EnsoError(message, "TOOL_EXECUTION_FAILED", `agent:tool`, "error", { cause, metadata: { toolId } });
+}
+
+export function externalServiceError(service: string, message: string, cause?: Error): EnsoError {
+  return new EnsoError(message, "EXTERNAL_SERVICE_FAILED", `external:${service}`, "error", { cause, metadata: { service } });
+}
+
+export function validationError(field: string, message: string): EnsoError {
+  return new EnsoError(message, "VALIDATION_FAILED", "system:validation", "warning", { metadata: { field } });
+}
+
+export function wsError(message: string, cause?: Error): EnsoError {
+  return new EnsoError(message, "WS_SEND_FAILED", "ws:send", "warning", { cause });
 }

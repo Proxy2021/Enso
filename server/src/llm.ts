@@ -22,6 +22,7 @@ import {
 } from "./config.js";
 import { logAction, logError } from "./action-log.js";
 import { llmError, llmRateLimited, llmTimeout } from "./errors.js";
+import { llmCircuit } from "./circuit-breaker.js";
 
 // Re-export model constants for convenience
 export { GEMINI_MODEL_FAST, GEMINI_MODEL_PRO, GEMINI_MODEL_UTILITY };
@@ -163,7 +164,9 @@ export async function llm(opts: LLMCallOptions): Promise<string> {
 
   // If we have a Gemini key AND the model is a Gemini model, use direct Gemini API with retry
   if (geminiKey && isGeminiModel(model)) {
-    return callGeminiWithRetry(opts.prompt, geminiKey, model, timeoutMs, maxOutputTokens, opts.temperature, opts.responseMimeType, opts.systemPrompt, undefined, undefined, opts.responseSchema);
+    return llmCircuit.execute(
+      () => callGeminiWithRetry(opts.prompt, geminiKey, model, timeoutMs, maxOutputTokens, opts.temperature, opts.responseMimeType, opts.systemPrompt, undefined, undefined, opts.responseSchema),
+    );
   }
 
   // Multi-provider fallback via callChatLLM
@@ -173,13 +176,15 @@ export async function llm(opts: LLMCallOptions): Promise<string> {
   }
 
   try {
-    const { callChatLLM } = await import("./llm-provider.js");
-    return await callChatLLM({
-      prompt: opts.prompt,
-      systemPrompt: opts.systemPrompt,
-      model,
-      providerKeys,
-      timeoutMs,
+    return await llmCircuit.execute(async () => {
+      const { callChatLLM } = await import("./llm-provider.js");
+      return callChatLLM({
+        prompt: opts.prompt,
+        systemPrompt: opts.systemPrompt,
+        model,
+        providerKeys,
+        timeoutMs,
+      });
     });
   } catch (err) {
     throw llmError(`LLM call failed: ${err instanceof Error ? err.message : String(err)}`, err instanceof Error ? err : undefined);
