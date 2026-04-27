@@ -178,10 +178,12 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
           ac.signal.addEventListener("abort", () => reject(new Error(`ctx.${label} timed out after ${effectiveTimeout}ms`)));
         }),
       ]);
-      logAction({ ts: Date.now(), type: "action", category: "persistence", message: `executor-ctx ${tag} → ${label} [${Date.now() - t0}ms]` });
+      const cat = label.startsWith("search(") ? "search-api" : label.startsWith("fetch(") ? "fetch" : label.startsWith("ask(") ? "llm" : "persistence";
+      logAction({ ts: Date.now(), type: "action", category: cat, message: `executor-ctx ${tag} → ${label} [${Date.now() - t0}ms]` });
       return result;
     } catch (err) {
-      logError("persistence", `executor-ctx ${tag} → ${label} FAILED [${Date.now() - t0}ms]`, err);
+      const errCat = label.startsWith("search(") ? "search-api" : label.startsWith("fetch(") ? "fetch" : label.startsWith("ask(") ? "llm" : "persistence";
+      logError(errCat, `executor-ctx ${tag} → ${label} FAILED [${Date.now() - t0}ms]`, err);
       throw err;
     } finally {
       if (trackDepth) callDepth--;
@@ -268,7 +270,7 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
           } catch { /* ignore */ }
         }
         if (!apiKey) {
-          logAction({ ts: Date.now(), type: "action", category: "persistence", message: `executor-ctx ${tag} → search: no BRAVE_API_KEY, returning empty` });
+          logAction({ ts: Date.now(), type: "action", category: "search-api", message: `executor-ctx ${tag} → search: no BRAVE_API_KEY, returning empty` });
           return { ok: false as const, results: [] };
         }
 

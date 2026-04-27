@@ -53,8 +53,9 @@ var topicsSearched = 0;
 
 for (var ri = 0; ri < ranked.length; ri++) {
   var topic = ranked[ri].title;
+  var searchTopic = topic.length > 80 ? topic.slice(0, 80).replace(/\s+\S*$/, "") : topic;
   try {
-    var webResult = await ctx.search(topic + " latest news developments 2026", { count: 5 });
+    var webResult = await ctx.search(searchTopic + " latest news 2026", { count: 5 });
     topicsSearched++;
     if (webResult.ok && webResult.results && webResult.results.length > 0) {
       for (var si = 0; si < Math.min(webResult.results.length, 3); si++) {
