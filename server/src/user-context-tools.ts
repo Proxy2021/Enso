@@ -649,7 +649,7 @@ async function scanKindleLibrary(): Promise<KindleBook[]> {
   // Overall timeout — 60 seconds max
   const SCAN_TIMEOUT = 60_000;
   const timeoutPromise = new Promise<never>((_, reject) =>
-    setTimeout(() => reject(new Error("Kindle scan timed out after 60s. Amazon may require login — try /browser → read.amazon.com first.")), SCAN_TIMEOUT)
+    setTimeout(() => reject(new Error("Kindle scan timed out after 60s. Amazon may require login — run enso_context_kindle_login to open a login window.")), SCAN_TIMEOUT)
   );
 
   return Promise.race([timeoutPromise, (async () => {
@@ -679,11 +679,9 @@ async function scanKindleLibrary(): Promise<KindleBook[]> {
       const url = page.url();
       if (url.includes("signin") || url.includes("ap/signin") || url.includes("auth") || url.includes("ap/mfa") || url.includes("/landing") || !url.includes("kindle-library")) {
         throw new Error(
-          "Amazon login required. Please log in first:\n" +
-          "1. In Enso, type: /browser\n" +
-          "2. Navigate to https://read.amazon.com\n" +
-          "3. Log in to your Amazon account\n" +
-          "4. Then come back to Settings > Data Sources and scan again.\n\n" +
+          "Amazon login required. Run the Kindle Login tool to open a login window:\n" +
+          "  enso_context_kindle_login\n" +
+          "A browser window will open — log in to your Amazon account, then retry the scan.\n\n" +
           "(Landed on: " + url + ")"
         );
       }
@@ -741,6 +739,55 @@ async function scanKindleLibrary(): Promise<KindleBook[]> {
       await browser.close();
     }
   })()]);
+}
+
+// ── Kindle Login (headed browser for authentication) ───────────────────────
+
+async function kindleLogin(): Promise<{ success: boolean; message: string }> {
+  mkdirSync(KINDLE_BROWSER_DIR, { recursive: true });
+
+  const LOGIN_TIMEOUT = 3 * 60_000; // 3 minutes for user to log in
+
+  const puppeteer = await import("puppeteer");
+  const browser = await puppeteer.default.launch({
+    headless: false, // Visible so the user can interact
+    userDataDir: KINDLE_BROWSER_DIR,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--window-size=1280,900",
+    ],
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setViewport({ width: 1280, height: 900 });
+    await page.goto("https://read.amazon.com", { waitUntil: "domcontentloaded", timeout: 20000 });
+
+    // Poll until user successfully logs in (URL contains kindle-library) or timeout
+    const deadline = Date.now() + LOGIN_TIMEOUT;
+    while (Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 2000));
+      const url = page.url();
+      if (url.includes("kindle-library") || url.includes("read.amazon.com") && !url.includes("signin") && !url.includes("landing") && !url.includes("ap/")) {
+        // Navigate explicitly to kindle-library to confirm session
+        try {
+          await page.goto("https://read.amazon.com/kindle-library", { waitUntil: "domcontentloaded", timeout: 15000 });
+          await new Promise(r => setTimeout(r, 2000));
+          const finalUrl = page.url();
+          if (finalUrl.includes("kindle-library")) {
+            logAction({ ts: Date.now(), type: "action", category: "user-context", message: "Kindle login successful — session saved to kindle-browser profile" });
+            return { success: true, message: "Amazon login successful. You can now run the Kindle scan." };
+          }
+        } catch { /* continue polling */ }
+      }
+    }
+
+    return { success: false, message: "Login timed out after 3 minutes. Please try again and complete the Amazon login within 3 minutes." };
+  } finally {
+    await browser.close();
+  }
 }
 
 // ── Kindle Metadata Enrichment (background) ────────────────────────────────
@@ -1668,6 +1715,32 @@ try {
           return jsonResult(result);
         } catch (err) {
           logError("user-context", "Kindle library scan failed", err);
+          return errorResult(err instanceof Error ? err.message : String(err));
+        }
+      },
+    } as EnsoAgentTool,
+
+    // ── Kindle Login (headed browser for Amazon auth) ──────────────────────────
+    {
+      name: "enso_context_kindle_login",
+      label: "Kindle Login",
+      description: "Open a visible browser window to log in to your Amazon account. Required when the Kindle library scan reports an authentication error. After logging in, run the Kindle scan again.",
+      parameters: {
+        type: "object",
+        additionalProperties: false,
+        properties: {},
+        required: [],
+      },
+      async execute(_callId: string, _params: Record<string, unknown>): Promise<AgentToolResult> {
+        try {
+          const result = await kindleLogin();
+          return jsonResult({
+            tool: "enso_context_kindle_login",
+            success: result.success,
+            message: result.message,
+          });
+        } catch (err) {
+          logError("user-context", "Kindle login failed", err);
           return errorResult(err instanceof Error ? err.message : String(err));
         }
       },

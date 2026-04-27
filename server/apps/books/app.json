@@ -71,9 +71,19 @@
         }
       },
       {
+        "suffix": "kindle_login",
+        "label": "Kindle Login",
+        "description": "Open a visible browser window to log in to Amazon. Run this when Kindle scan fails with an authentication error.",
+        "parameters": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        }
+      },
+      {
         "suffix": "scan_kindle",
         "label": "Scan Kindle",
-        "description": "Scan your Amazon Kindle library via read.amazon.com. Requires Amazon login session.",
+        "description": "Scan your Amazon Kindle library via read.amazon.com. Requires Amazon login session. If it fails with an auth error, run Kindle Login first.",
         "parameters": {
           "type": "object",
           "properties": {},

@@ -141,7 +141,35 @@ function setCachedFeed(key: string, data: VideoInfo[]): void {
   }
 }
 
+const AUTH_NOTIFY_STATE_PATH = join(homedir(), ".enso", "data", "youtube-auth-notify.json");
+const AUTH_NOTIFY_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours between notifications
+
 let authExpiredNotified = false;
+
+function wasRecentlyNotified(): boolean {
+  try {
+    if (!existsSync(AUTH_NOTIFY_STATE_PATH)) return false;
+    const { ts } = JSON.parse(readFileSync(AUTH_NOTIFY_STATE_PATH, "utf-8"));
+    return typeof ts === "number" && Date.now() - ts < AUTH_NOTIFY_COOLDOWN_MS;
+  } catch {
+    return false;
+  }
+}
+
+function persistNotifyState(): void {
+  try {
+    mkdirSync(join(homedir(), ".enso", "data"), { recursive: true });
+    writeFileSync(AUTH_NOTIFY_STATE_PATH, JSON.stringify({ ts: Date.now() }));
+  } catch { /* non-fatal */ }
+}
+
+function clearNotifyState(): void {
+  try {
+    if (existsSync(AUTH_NOTIFY_STATE_PATH)) {
+      writeFileSync(AUTH_NOTIFY_STATE_PATH, JSON.stringify({ ts: 0 }));
+    }
+  } catch { /* non-fatal */ }
+}
 
 async function notifyAuthExpired(): Promise<void> {
   try {
@@ -160,6 +188,7 @@ async function notifyAuthExpired(): Promise<void> {
 <p style="color:#94a3b8;font-size:12px;margin-top:16px">Tip: Publish your Google Cloud OAuth consent screen to Production to prevent 7-day token expiry.</p>
 </div></div>`,
     });
+    persistNotifyState();
     logAction({ ts: Date.now(), type: "action", category: "youtube", message: "Sent auth-expired notification email" });
   } catch (e) {
     logError("youtube", "Failed to send auth-expired notification", e);
@@ -171,11 +200,15 @@ export async function checkYouTubeOnStartup(): Promise<void> {
   const health = await checkTokenHealth();
   if (!health.valid) {
     logError("youtube", `Startup health check: YouTube token invalid — ${health.error || "unknown error"}. Re-authorize at /api/youtube/auth`, undefined);
-    if (!authExpiredNotified) {
+    if (!authExpiredNotified && !wasRecentlyNotified()) {
       authExpiredNotified = true;
       await notifyAuthExpired();
+    } else {
+      authExpiredNotified = true; // suppress in-memory flag even if we skip the email
     }
   } else {
+    authExpiredNotified = false;
+    clearNotifyState();
     logAction({ ts: Date.now(), type: "action", category: "youtube", message: "Startup health check: YouTube token valid" });
   }
 }
@@ -497,6 +530,7 @@ export function createYouTubeTools(): EnsoAgentTool[] {
         try {
           const videos = await myFeed(params);
           authExpiredNotified = false;
+          clearNotifyState();
           logAction({ ts: Date.now(), type: "action", category: "youtube", message: `My feed: ${videos.length} videos` });
           return jsonResult({ tool: "enso_youtube_my_feed", count: videos.length, videos });
         } catch (err) {
@@ -511,10 +545,12 @@ export function createYouTubeTools(): EnsoAgentTool[] {
               return jsonResult({ tool: "enso_youtube_my_feed", count: stale.videos.length, videos: stale.videos, stale: true, cachedAt: stale.savedAt, warning });
             }
           }
-          if (isAuth && !authExpiredNotified) {
+          if (isAuth && !authExpiredNotified && !wasRecentlyNotified()) {
             authExpiredNotified = true;
             logError("youtube", "OAuth token expired — all YouTube tools will return stale/error until re-authorized at /api/youtube/auth", err);
             notifyAuthExpired().catch(() => {});
+          } else if (isAuth) {
+            authExpiredNotified = true;
           } else if (!isAuth) {
             logError("youtube", "my_feed failed", err);
           }

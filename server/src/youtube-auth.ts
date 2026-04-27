@@ -7,6 +7,9 @@
  */
 
 import { google } from "googleapis";
+import { existsSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { homedir } from "node:os";
 import { saveApiKey } from "./api-keys.js";
 import { logAction, logError } from "./action-log.js";
 
@@ -64,6 +67,12 @@ export async function handleCallback(code: string, baseUrl?: string): Promise<{ 
 
     // Store refresh token persistently
     saveApiKey("youtubeRefreshToken", "YOUTUBE_REFRESH_TOKEN", tokens.refresh_token);
+
+    // Clear auth-expired notification state so next startup/scan is clean
+    try {
+      const notifyPath = join(homedir(), ".enso", "data", "youtube-auth-notify.json");
+      if (existsSync(notifyPath)) writeFileSync(notifyPath, JSON.stringify({ ts: 0 }));
+    } catch { /* non-fatal */ }
 
     logAction({
       ts: Date.now(),
