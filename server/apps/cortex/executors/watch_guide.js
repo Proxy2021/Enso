@@ -84,10 +84,16 @@ var curationPrompt = "You are curating a personalized weekend watch guide. The u
 
 var picks = [];
 try {
-  var aiResult = await ctx.ask(curationPrompt, { maxTokens: 2000 });
+  var aiResult = await ctx.ask(curationPrompt, { maxTokens: 3000 });
   var rawText = (aiResult && aiResult.text) ? aiResult.text : String(aiResult || "");
-  var jsonStr = rawText.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
+  var jsonStr = rawText.replace(/^```(?:json)?\s*/m, "").replace(/\s*```\s*$/m, "").trim();
+  // Fallback: extract JSON array from response if LLM added surrounding text
+  if (!jsonStr.startsWith("[")) {
+    var arrMatch = rawText.match(/\[[\s\S]*\]/);
+    if (arrMatch) jsonStr = arrMatch[0];
+  }
   picks = JSON.parse(jsonStr);
+  if (!Array.isArray(picks)) picks = [];
 } catch(e) { ctx.log("LLM curation failed: " + (e.message || e)); }
 
 if (picks.length === 0) {
