@@ -280,34 +280,43 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
         searchUrl.searchParams.set("count", String(count));
         if (options?.country) searchUrl.searchParams.set("country", options.country);
 
-        const ac = new AbortController();
-        const timer = setTimeout(() => ac.abort(), BRAVE_SEARCH_TIMEOUT_MS);
-        try {
-          const resp = await globalThis.fetch(searchUrl.toString(), {
-            method: "GET",
-            headers: {
-              Accept: "application/json",
-              "X-Subscription-Token": apiKey,
-            },
-            signal: ac.signal,
-          });
+        let lastFetchErr: unknown;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          if (attempt > 0) await new Promise(r => setTimeout(r, 1500));
+          const ac = new AbortController();
+          const timer = setTimeout(() => ac.abort(), BRAVE_SEARCH_TIMEOUT_MS);
+          try {
+            const resp = await globalThis.fetch(searchUrl.toString(), {
+              method: "GET",
+              headers: {
+                Accept: "application/json",
+                "X-Subscription-Token": apiKey,
+              },
+              signal: ac.signal,
+            });
 
-          if (!resp.ok) {
-            return { ok: false as const, results: [] };
+            if (!resp.ok) {
+              return { ok: false as const, results: [] };
+            }
+
+            const data = await resp.json() as { web?: { results?: Array<{ title?: string; url?: string; description?: string }> } };
+            const rawResults = data?.web?.results ?? [];
+            const results = rawResults.slice(0, count).map((r) => ({
+              title: r.title ?? "",
+              url: r.url ?? "",
+              description: r.description ?? "",
+            }));
+
+            return { ok: true as const, results };
+          } catch (err) {
+            // Don't retry on explicit abort (timeout exceeded)
+            if (err instanceof Error && err.name === "AbortError") throw err;
+            lastFetchErr = err;
+          } finally {
+            clearTimeout(timer);
           }
-
-          const data = await resp.json() as { web?: { results?: Array<{ title?: string; url?: string; description?: string }> } };
-          const rawResults = data?.web?.results ?? [];
-          const results = rawResults.slice(0, count).map((r) => ({
-            title: r.title ?? "",
-            url: r.url ?? "",
-            description: r.description ?? "",
-          }));
-
-          return { ok: true as const, results };
-        } finally {
-          clearTimeout(timer);
         }
+        throw lastFetchErr;
       });
     },
 
