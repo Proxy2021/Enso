@@ -55,10 +55,12 @@ var allSubs = [];
 
 if (subsResult && subsResult.success === false) {
   var errMsg = (subsResult.data && subsResult.data.error) || subsResult.error || "YouTube API call failed";
+  var isAuthErr = /authorization expired|invalid_grant|token.*revoked|unauthorized/i.test(errMsg);
   return { content: [{ type: "text", text: JSON.stringify({
     tool: "enso_youtube_manager_manage",
     channels: [],
     error: errMsg,
+    authError: isAuthErr,
   }) }] };
 }
 

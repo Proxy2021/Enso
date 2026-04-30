@@ -29,6 +29,16 @@ var result = await ctx.callTool("enso_youtube_my_feed", { maxResults: fetchCount
 
 var videos = [];
 var feedWarning = null;
+if (result && result.success === false) {
+  var feedErrMsg = (result.data && result.data.error) || result.error || "YouTube feed unavailable";
+  var feedIsAuth = /authorization expired|invalid_grant|re-authorize/i.test(feedErrMsg);
+  return { content: [{ type: "text", text: JSON.stringify({
+    tool: "enso_youtube_manager_feed",
+    videos: [],
+    error: feedErrMsg,
+    authError: feedIsAuth,
+  }) }] };
+}
 if (result && result.success && result.data) {
   videos = result.data.videos || [];
   if (result.data.warning) feedWarning = result.data.warning;

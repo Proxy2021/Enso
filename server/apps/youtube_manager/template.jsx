@@ -410,10 +410,33 @@ var SubscriptionsView = function() {
   );
 };
 
+// ── Auth Error Banner (reusable) ──
+var AuthErrorBanner = function() {
+  return (
+    <div className="rounded-xl border border-red-500/30 bg-red-500/10 p-5 text-center">
+      <AlertCircle className="w-6 h-6 text-red-400 mx-auto mb-2" />
+      <p className="text-sm text-red-300 font-medium mb-1">YouTube Authorization Expired</p>
+      <p className="text-xs text-gray-400 mb-3">Re-authorize Enso with your Google account to restore access.</p>
+      <a
+        href={window.location.origin + "/api/youtube/auth"}
+        target="_blank"
+        rel="noopener noreferrer"
+        className="inline-flex items-center gap-1.5 px-4 py-2 bg-red-600 hover:bg-red-500 text-white text-xs font-medium rounded-lg transition-colors"
+      >
+        <Youtube className="w-3.5 h-3.5" />
+        Re-authorize YouTube
+      </a>
+    </div>
+  );
+};
+
 // ── Feed Tab ──
 var FeedView = function() {
   var videos = data?.videos || [];
   var activeFeedCategory = data?.category || null;
+  if (data?.authError || /authorization expired|re-authorize/i.test(data?.error || "")) {
+    return <AuthErrorBanner />;
+  }
 
   // Build category options from manage cache (if available)
   var feedCatOptions = useMemo(function() {
@@ -847,17 +870,46 @@ var UnsubscribeResultView = function() {
 
 // ── Main Render ──
 if (data?.error) {
+  var isAuthExpiredErr = data.authError || /authorization expired|invalid_grant|re-authorize/i.test(data.error || "");
   return (
     <div className="bg-gray-900 rounded-2xl p-5 border border-gray-800">
-      <EmptyState
-        icon={<AlertCircle className="w-8 h-8 text-rose-400" />}
-        title="Something went wrong"
-        description={data.error}
-        action={<Button onClick={function() { onAction("manage", {}); }}>Retry</Button>}
-      />
+      {isAuthExpiredErr ? (
+        <div className="text-center">
+          <div className="w-14 h-14 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+            <AlertCircle className="w-7 h-7 text-red-400" />
+          </div>
+          <h3 className="text-white font-semibold text-base mb-2">YouTube Authorization Expired</h3>
+          <p className="text-gray-400 text-sm mb-5 max-w-sm mx-auto">Your YouTube access token has expired. Click below to re-authorize Enso with your Google account.</p>
+          <div className="flex flex-col items-center gap-3">
+            <a
+              href={window.location.origin + "/api/youtube/auth"}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 px-5 py-2.5 bg-red-600 hover:bg-red-500 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              <Youtube className="w-4 h-4" />
+              Re-authorize YouTube
+            </a>
+            <p className="text-[11px] text-gray-600">Opens Google sign-in. After authorizing, refresh this card.</p>
+            <Button variant="ghost" onClick={function() { onAction("manage", {}); }} className="text-xs text-gray-500">
+              <RefreshCw className="w-3 h-3 mr-1" /> Retry after authorizing
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <EmptyState
+          icon={<AlertCircle className="w-8 h-8 text-rose-400" />}
+          title="Something went wrong"
+          description={data.error}
+          action={<Button onClick={function() { onAction("manage", {}); }}>Retry</Button>}
+        />
+      )}
     </div>
   );
 }
+
+// Auth error may also come without top-level error if feed/manage still returned partial data
+var globalAuthError = data?.authError || /authorization expired|re-authorize/i.test(data?.error || "");
 
 // Determine which view to show — activeTab is primary, data tool confirms data is ready
 var content;
@@ -886,6 +938,21 @@ return (
         <h2 className="text-base font-semibold text-white">YouTube Manager</h2>
         <span className="text-xs text-gray-500 ml-auto">{data?.totalChannels || "—"} subscriptions</span>
       </div>
+
+      {globalAuthError && (
+        <div className="flex items-center gap-2 mb-3 px-3 py-2 bg-red-500/10 border border-red-500/30 rounded-lg">
+          <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+          <span className="text-xs text-red-300 flex-1">YouTube auth expired — showing cached data</span>
+          <a
+            href={window.location.origin + "/api/youtube/auth"}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-xs text-red-400 hover:text-red-300 underline underline-offset-2 whitespace-nowrap"
+          >
+            Re-authorize →
+          </a>
+        </div>
+      )}
 
       <TabBar />
     </div>
