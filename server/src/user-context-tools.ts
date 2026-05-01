@@ -1714,8 +1714,23 @@ try {
 
           return jsonResult(result);
         } catch (err) {
+          const errMsg = err instanceof Error ? err.message : String(err);
+          const isAuthError = errMsg.includes("Amazon login required") || errMsg.includes("kindle_login") || errMsg.includes("enso_context_kindle_login");
+          if (isAuthError) {
+            // Auth expiry is expected — warn, not error, so TL treats it as a user action item
+            logError("user-context", "Kindle library scan requires re-authentication", err, { severity: "warning" });
+            return {
+              success: false,
+              data: {
+                tool: "enso_context_scan_kindle_library",
+                authRequired: true,
+                action: "enso_context_kindle_login",
+                message: "Amazon session expired. Run enso_context_kindle_login to re-authenticate, then retry the scan.",
+              },
+            };
+          }
           logError("user-context", "Kindle library scan failed", err);
-          return errorResult(err instanceof Error ? err.message : String(err));
+          return errorResult(errMsg);
         }
       },
     } as EnsoAgentTool,
