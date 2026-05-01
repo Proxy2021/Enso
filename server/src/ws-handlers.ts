@@ -2237,7 +2237,7 @@ async function _handleWebSocketMessage(
 
     const userFacingTypes = new Set([
       "chat.send", "card.action", "card.enhance", "apps.run",
-      "apps.refine", "shell.start", "image_search",
+      "shell.create", "image_search",
     ]);
 
     if (userFacingTypes.has(msg.type)) {

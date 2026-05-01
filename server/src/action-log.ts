@@ -10,7 +10,7 @@
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { randomUUID, createHash } from "crypto";
 import { getEnsoPath, ENSO_HOME } from "./utils/home.js";
-import { getRequestId } from "./request-context.js";
+import { getRequestId, getBreadcrumbs } from "./request-context.js";
 import type { Response } from "express";
 import * as errorRateMonitor from "./error-rate-monitor.js";
 
@@ -209,7 +209,6 @@ export function logError(category: string, message: string, error?: unknown, ext
       ? "critical"
       : baseSeverity;
 
-  const { getBreadcrumbs } = require("./request-context.js") as { getBreadcrumbs: () => Array<{ ts: number; cat: string; msg: string }> };
   const breadcrumbs = getBreadcrumbs();
 
   const fp = errorFingerprint(category, message);
@@ -256,7 +255,7 @@ export function errorResponse(
   severity?: ErrorSeverity,
 ): void {
   const requestId = getRequestId();
-  const errMsg = err instanceof Error ? err.message : err != null ? String(err) : message;
+  const errMsg = message || (err instanceof Error ? err.message : err != null ? String(err) : "Unknown error");
 
   logError(category, message, err, { requestId, severity });
 
