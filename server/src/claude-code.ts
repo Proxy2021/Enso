@@ -7,6 +7,7 @@ import type { ServerMessage, ToolQuestion } from "./types.js";
 import { logAction, logError } from "./action-log.js";
 import {
   CLAUDE_HEARTBEAT_TIMEOUT_MS,
+  CLAUDE_HEARTBEAT_MAX_RETRIES,
   DEFAULT_CLAUDE_MODEL,
   OLLAMA_BASE_URL,
 } from "./config.js";
@@ -106,6 +107,7 @@ export async function runClaudeCode(params: {
   model?: string;
   thinking?: "adaptive" | "disabled";
   skipPersist?: boolean;
+  heartbeatTimeoutMs?: number;
 }): Promise<{ sessionId: string }> {
   const { prompt: rawPrompt, cwd, toolSessionId, client, runId, targetCardId } = params;
   // Capture conversationId at invocation time — client.conversationId may change

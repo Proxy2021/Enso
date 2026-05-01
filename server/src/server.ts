@@ -3802,9 +3802,9 @@ BEHAVIOR:
 
   // ── YouTube OAuth API ──
 
-  app.get("/api/youtube/auth", async (_req, res) => {
+  app.get("/api/youtube/auth", async (req, res) => {
     const { getAuthUrl } = await import("./youtube-auth.js");
-    const baseUrl = `http://localhost:${port}`;
+    const baseUrl = req.hostname === "localhost" ? `http://localhost:${port}` : `https://${req.hostname}`;
     const url = getAuthUrl(baseUrl);
     if (!url) {
       res.status(400).json({ error: "YouTube Client ID and Secret must be configured first in Settings > Service Keys" });
@@ -3818,7 +3818,7 @@ BEHAVIOR:
     if (!code) { res.status(400).send("Missing authorization code"); return; }
 
     const { handleCallback } = await import("./youtube-auth.js");
-    const baseUrl = `http://localhost:${port}`;
+    const baseUrl = req.hostname === "localhost" ? `http://localhost:${port}` : `https://${req.hostname}`;
     const result = await handleCallback(code, baseUrl);
 
     if (result.success) {
