@@ -20,6 +20,8 @@ const DEFAULT_OPTS: Omit<CircuitBreakerOpts, "name"> = {
   halfOpenMaxProbes: 2,
 };
 
+const registry = new Map<string, CircuitBreaker>();
+
 export class CircuitBreaker {
   private state: CircuitState = "closed";
   private failures = 0;
@@ -29,6 +31,7 @@ export class CircuitBreaker {
 
   constructor(opts: Partial<CircuitBreakerOpts> & { name: string }) {
     this.opts = { ...DEFAULT_OPTS, ...opts };
+    registry.set(opts.name, this);
   }
 
   getState(): { state: CircuitState; failures: number; lastFailureTime: number } {
@@ -88,8 +91,9 @@ export const llmCircuit = new CircuitBreaker({ name: "llm", failureThreshold: 5,
 export const braveSearchCircuit = new CircuitBreaker({ name: "brave-search", failureThreshold: 3, resetTimeoutMs: 60_000, halfOpenMaxProbes: 2 });
 
 export function getCircuitBreakerStates(): Array<{ name: string; state: string; failures: number; lastFailureTime: number }> {
-  return [
-    { name: "llm", ...llmCircuit.getState() },
-    { name: "brave-search", ...braveSearchCircuit.getState() },
-  ];
+  const result: Array<{ name: string; state: string; failures: number; lastFailureTime: number }> = [];
+  for (const [name, cb] of registry) {
+    result.push({ name, ...cb.getState() });
+  }
+  return result;
 }

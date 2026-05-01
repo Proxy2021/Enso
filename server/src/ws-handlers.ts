@@ -19,7 +19,9 @@ import { handleCardEnhance, handlePluginCardAction } from "./outbound.js";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { toProxiedImageUrl } from "./utils/proxy-url.js";
 import { logError, logFix } from "./action-log.js";
-import { runWithRequestId } from "./request-context.js";
+import type { ErrorSeverity } from "./action-log.js";
+import { runWithRequestId, addBreadcrumb, getBreadcrumbs } from "./request-context.js";
+import { EnsoError } from "./errors.js";
 import { setActiveClientId } from "./runtime.js";
 import {
   persistCard,
@@ -322,6 +324,9 @@ async function _handleWebSocketMessage(
   const connectionId = client.id;
   const clientId = client.id;
 
+  addBreadcrumb("ws", `${msg.type} from ${clientId}`);
+
+  try {
   switch (msg.type) {
     case "chat.send": {
       // Guard: reject empty/whitespace-only messages with no media
@@ -2212,6 +2217,41 @@ async function _handleWebSocketMessage(
         timestamp: Date.now(),
       });
       break;
+    }
+  }
+  } catch (err) {
+    const isEnso = err instanceof EnsoError;
+    const isOperational = isEnso && err.isOperational;
+    const severity: ErrorSeverity = isEnso ? err.severity
+      : (err instanceof SyntaxError ? "warning" : "critical");
+    const category = isEnso ? err.category : "ws:unhandled";
+
+    logError(category, `WS handler error on ${msg.type}`, err, {
+      severity,
+      metadata: {
+        messageType: msg.type,
+        breadcrumbs: getBreadcrumbs(),
+        ...(isEnso ? err.metadata : {}),
+      },
+    });
+
+    const userFacingTypes = new Set([
+      "chat.send", "card.action", "card.enhance", "apps.run",
+      "apps.refine", "shell.start", "image_search",
+    ]);
+
+    if (userFacingTypes.has(msg.type)) {
+      send({
+        id: randomUUID(),
+        runId: randomUUID(),
+        sessionKey,
+        seq: 0,
+        state: "error",
+        text: isOperational
+          ? (err as EnsoError).message
+          : "Something went wrong. Please try again.",
+        timestamp: Date.now(),
+      });
     }
   }
 }

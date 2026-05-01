@@ -25,6 +25,11 @@ export function globalErrorHandler(
   if (res.headersSent) return;
 
   const ensoErr = err instanceof EnsoError ? err : undefined;
+  const isOperational = ensoErr?.isOperational ?? false;
+
+  const severity = ensoErr
+    ? (isOperational ? ensoErr.severity : "critical")
+    : "critical";
 
   const status = ensoErr?.code?.includes("NOT_FOUND")
     ? 404
@@ -34,12 +39,16 @@ export function globalErrorHandler(
         ? 429
         : 500;
 
+  const clientMessage = isOperational
+    ? err.message
+    : "Internal server error";
+
   errorResponse(
     res,
     status,
     ensoErr?.category ?? "system:unhandled",
-    err.message || "Internal server error",
+    clientMessage,
     err,
-    ensoErr?.severity ?? "error",
+    severity,
   );
 }

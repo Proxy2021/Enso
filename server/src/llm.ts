@@ -23,6 +23,7 @@ import {
 import { logAction, logError } from "./action-log.js";
 import { llmError, llmRateLimited, llmTimeout } from "./errors.js";
 import { llmCircuit } from "./circuit-breaker.js";
+import { addBreadcrumb } from "./request-context.js";
 
 // Re-export model constants for convenience
 export { GEMINI_MODEL_FAST, GEMINI_MODEL_PRO, GEMINI_MODEL_UTILITY };
@@ -157,6 +158,7 @@ export async function llm(opts: LLMCallOptions): Promise<string> {
   const tier = opts.tier ?? "fast";
   const model = opts.model ?? TIER_MODELS[tier];
   const timeoutMs = opts.timeoutMs ?? TIER_TIMEOUTS[tier];
+  addBreadcrumb("llm", `${model} tier=${tier} prompt=${opts.prompt.length}ch`);
   const maxOutputTokens = opts.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS;
 
   // Resolve API key
@@ -200,6 +202,7 @@ export async function llmVision(opts: LLMVisionOptions): Promise<string> {
   const tier = opts.tier ?? "fast";
   const model = opts.model ?? TIER_MODELS[tier];
   const timeoutMs = opts.timeoutMs ?? TIER_TIMEOUTS[tier];
+  addBreadcrumb("llm", `vision ${model} tier=${tier}`);
   const maxOutputTokens = opts.maxOutputTokens ?? 1024;
   const apiKey = resolveApiKey(opts);
 

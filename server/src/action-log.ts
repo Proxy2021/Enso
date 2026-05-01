@@ -37,6 +37,8 @@ export interface LogEntry {
   toolFamily?: string;
   sessionId?: string;
   metadata?: Record<string, unknown>;
+  breadcrumbs?: Array<{ ts: number; cat: string; msg: string }>;
+  isOperational?: boolean;
   [key: string]: unknown;
 }
 
@@ -195,11 +197,20 @@ export function logError(category: string, message: string, error?: unknown, ext
   const err = error instanceof Error ? error : error != null ? new Error(String(error)) : undefined;
   const errStr = err?.message;
   const stack = truncateStack(err?.stack);
-  const severity: ErrorSeverity = (extra?.severity as ErrorSeverity) ?? "error";
+  const baseSeverity: ErrorSeverity = (extra?.severity as ErrorSeverity) ?? "error";
   const requestId = extra?.requestId ?? getRequestId();
 
   const isEnsoError = err && err.name === "EnsoError";
   const code = isEnsoError ? (err as any).code as string : extra?.code as string | undefined;
+  const isOperational = isEnsoError ? (err as any).isOperational as boolean : undefined;
+
+  const severity: ErrorSeverity =
+    isEnsoError && isOperational === false && baseSeverity !== "critical"
+      ? "critical"
+      : baseSeverity;
+
+  const { getBreadcrumbs } = require("./request-context.js") as { getBreadcrumbs: () => Array<{ ts: number; cat: string; msg: string }> };
+  const breadcrumbs = getBreadcrumbs();
 
   const fp = errorFingerprint(category, message);
   const { write, dedupCount } = dedupGate(fp);
@@ -217,6 +228,8 @@ export function logError(category: string, message: string, error?: unknown, ext
       fingerprint: fp,
       dedupCount,
       requestId,
+      isOperational,
+      breadcrumbs: breadcrumbs.length > 0 ? breadcrumbs : undefined,
       ...extra,
     });
   }

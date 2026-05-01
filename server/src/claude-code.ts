@@ -176,7 +176,7 @@ export async function runClaudeCode(params: {
     logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:command", message: `/compact → triggering context summary for session ${toolSessionId}` });
   }
 
-  const abortController = new AbortController();
+  let abortController = new AbortController();
   activeAbortControllers.set(runId, abortController);
 
   // Register with session registry for dashboard visibility
@@ -370,20 +370,34 @@ export async function runClaudeCode(params: {
   const prevStreamTimeout = process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT;
   process.env.CLAUDE_CODE_STREAM_CLOSE_TIMEOUT = "300000"; // 5 minutes
 
-  // Heartbeat: abort if no message arrives for 10 minutes (hung stream protection).
-  // Needs to be generous — Claude Code can go silent for extended periods during
-  // context compaction on /resume, long-running bash tools (ffmpeg, sleep), and
-  // API-side processing. 180s was too aggressive and caused false aborts.
+  // Heartbeat: abort if no message arrives within the timeout (hung stream protection).
+  // Two-tier: orchestration tasks use a shorter timeout (10min) with auto-resume;
+  // interactive sessions keep 30min since users can observe and decide.
+  const effectiveHeartbeatTimeout = params.heartbeatTimeoutMs ?? CLAUDE_HEARTBEAT_TIMEOUT_MS;
   let heartbeatTimer: ReturnType<typeof setTimeout> | null = null;
+  let silenceWarningTimer: ReturnType<typeof setTimeout> | null = null;
+  let heartbeatFired = false;
   const resetHeartbeat = () => {
     if (heartbeatTimer) clearTimeout(heartbeatTimer);
+    if (silenceWarningTimer) clearTimeout(silenceWarningTimer);
+    heartbeatFired = false;
+    silenceWarningTimer = setTimeout(() => {
+      logAction({
+        ts: Date.now(), type: "claude-code", category: "claude-code:heartbeat",
+        message: `Stream silent for ${effectiveHeartbeatTimeout / 2000}s — still waiting`,
+        sessionId,
+      });
+    }, effectiveHeartbeatTimeout / 2);
     heartbeatTimer = setTimeout(() => {
-      logError("claude-code:heartbeat", `Stream heartbeat timeout after ${CLAUDE_HEARTBEAT_TIMEOUT_MS / 1000}s`, undefined, { sessionId });
+      heartbeatFired = true;
+      heartbeatTimer = null;
+      logError("claude-code:heartbeat", `Stream heartbeat timeout after ${effectiveHeartbeatTimeout / 1000}s`, undefined, { sessionId });
       abortController.abort();
-    }, CLAUDE_HEARTBEAT_TIMEOUT_MS);
+    }, effectiveHeartbeatTimeout);
   };
   const clearHeartbeat = () => {
     if (heartbeatTimer) { clearTimeout(heartbeatTimer); heartbeatTimer = null; }
+    if (silenceWarningTimer) { clearTimeout(silenceWarningTimer); silenceWarningTimer = null; }
   };
 
   /** Run the SDK query and process all streamed messages. */
@@ -890,61 +904,82 @@ export async function runClaudeCode(params: {
     }
   };
 
-  try {
-    await runQuery();
-  } catch (err: unknown) {
-    // Always clear heartbeat on error — the for-await clearHeartbeat() at
-    // the end of runQuery() is skipped when the loop throws (e.g. abort).
-    clearHeartbeat();
+  // Auto-resume retry: only for orchestration tasks (shorter heartbeat timeout).
+  // Interactive sessions keep the existing abort + suggest /resume behavior.
+  let heartbeatRetries = 0;
+  const maxHeartbeatRetries = params.heartbeatTimeoutMs ? CLAUDE_HEARTBEAT_MAX_RETRIES : 0;
 
-    // If we already received a success result but the process exited with
-    // a non-zero code (e.g. exit code 1 after cleanup), flush the pending
-    // final instead of treating it as an error — the work completed fine.
-    if (pendingFinalReady && !resultSent) {
-      const msg = err instanceof Error ? err.message : String(err);
-      logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:session", message: "Process threw after success, flushing final", sessionId, metadata: { error: msg } });
-      flushPendingFinal();
-    } else if (!resultSent) {
-      const isAbort = err instanceof Error && (err.name === "AbortError" || abortController.signal.aborted);
-      if (isAbort) {
-        logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:session", message: "Session cancelled", sessionId });
-        sendError("Claude Code run cancelled.", true);
-      } else if (resumeId && totalTextSent === 0 && !retried) {
-        // Resume failed before any output — likely stale/crashed session.
-        // Retry once with a fresh session so the user isn't stuck.
-        retried = true;
-        resumeId = undefined;
-        sessionId = "";
-        logError("claude-code:resume", "Session resume failed, retrying fresh", undefined, { sessionId: resumeId });
-        sendDelta("Session expired — starting fresh...\n");
-        try {
-          await runQuery();
-        } catch (retryErr: unknown) {
-          // Same pattern: flush pending final if we got a success before the throw
-          if (pendingFinalReady && !resultSent) {
-            flushPendingFinal();
-          } else if (!resultSent) {
-            const msg = retryErr instanceof Error ? retryErr.message : String(retryErr);
-            logError("claude-code:retry", `Retry also failed: ${msg}`, retryErr, { sessionId });
-            sendDelta(`\n*${msg}*\n`);
-            sendDelta(`\u200B[suggest:Try again]\n`);
-            sendFinal();
-          }
-        }
-      } else {
+  let lastRunError: unknown = null;
+  let shouldBreak = false;
+  while (!shouldBreak) {
+    shouldBreak = true; // default: exit after one iteration
+    try {
+      await runQuery();
+    } catch (err: unknown) {
+      clearHeartbeat();
+      lastRunError = err;
+
+      if (pendingFinalReady && !resultSent) {
         const msg = err instanceof Error ? err.message : String(err);
-        logError("claude-code:fatal", `Fatal error: ${msg}`, err, { sessionId });
-        sendError(`Claude Code error: ${msg}`);
+        logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:session", message: "Process threw after success, flushing final", sessionId, metadata: { error: msg } });
+        flushPendingFinal();
+      } else if (!resultSent) {
+        const isAbort = err instanceof Error && (err.name === "AbortError" || abortController.signal.aborted);
+        const isHeartbeatAbort = isAbort && heartbeatFired;
+
+        if (isHeartbeatAbort && sessionId && heartbeatRetries < maxHeartbeatRetries) {
+          heartbeatRetries++;
+          logAction({
+            ts: Date.now(), type: "claude-code", category: "claude-code:heartbeat",
+            message: `Heartbeat timeout — auto-resuming (attempt ${heartbeatRetries}/${maxHeartbeatRetries})`,
+            sessionId,
+          });
+          sendDelta(`\n\u23F3 Stream stalled — resuming session (attempt ${heartbeatRetries})...\n`);
+          abortController = new AbortController();
+          activeAbortControllers.set(runId, abortController);
+          resumeId = sessionId;
+          resetHeartbeat();
+          shouldBreak = false; // retry
+          continue;
+        }
+
+        if (isAbort) {
+          logAction({ ts: Date.now(), type: "claude-code", category: "claude-code:session", message: "Session cancelled", sessionId });
+          sendError("Claude Code run cancelled.", true);
+        } else if (resumeId && totalTextSent === 0 && !retried) {
+          retried = true;
+          resumeId = undefined;
+          sessionId = "";
+          logError("claude-code:resume", "Session resume failed, retrying fresh", undefined, { sessionId: resumeId });
+          sendDelta("Session expired — starting fresh...\n");
+          try {
+            await runQuery();
+          } catch (retryErr: unknown) {
+            if (pendingFinalReady && !resultSent) {
+              flushPendingFinal();
+            } else if (!resultSent) {
+              const msg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+              logError("claude-code:retry", `Retry also failed: ${msg}`, retryErr, { sessionId });
+              sendDelta(`\n*${msg}*\n`);
+              sendDelta(`\u200B[suggest:Try again]\n`);
+              sendFinal();
+            }
+          }
+        } else {
+          const msg = err instanceof Error ? err.message : String(err);
+          logError("claude-code:fatal", `Fatal error: ${msg}`, err, { sessionId });
+          sendError(`Claude Code error: ${msg}`);
+        }
       }
     }
-  } finally {
-    clearHeartbeat();
-    activeAbortControllers.delete(runId);
-    unregisterSession(runId);
-    // Clean up any lingering task entries from this session
-    for (const taskId of sessionTaskIds) {
-      activeTasks.delete(taskId);
-    }
+  }
+
+  // Cleanup — always runs after the retry loop
+  clearHeartbeat();
+  activeAbortControllers.delete(runId);
+  unregisterSession(runId);
+  for (const taskId of sessionTaskIds) {
+    activeTasks.delete(taskId);
   }
 
   return { sessionId };

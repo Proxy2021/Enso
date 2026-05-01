@@ -14,6 +14,7 @@ import type { ConnectedClient } from "./server.js";
 import { deliverEnsoReply } from "./outbound.js";
 import { isAudioFile, transcribeAudio } from "./transcribe.js";
 import { logAction, logError } from "./action-log.js";
+import { addBreadcrumb } from "./request-context.js";
 import { setLastUserMessage } from "./researcher-tools.js";
 import { setTopicHint } from "./memory-bridge.js";
 import { GEMINI_MODEL_FAST } from "./ui-generator.js";
@@ -972,6 +973,7 @@ export async function handleStandaloneInbound(params: {
 
         let toolResult: unknown;
         try {
+          addBreadcrumb("agent", `tool call: ${name}`);
           const result = await executeLocalTool(name, args, { clientId: client.id, getClient: () => client });
           toolResult = result ?? { success: true };
           // Record the tool call so auto-enhance can render the app UI

@@ -11,9 +11,10 @@ import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import type { OrchestrationPlan, OrchestrationTask, TaskStructuredResult } from "@shared/types.js";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
+import { CLAUDE_HEARTBEAT_TIMEOUT_ORCH_MS } from "./config.js";
 import { logAction, logError } from "./action-log.js";
 import { orchestrationError } from "./errors.js";
-import { runWithOrchestrationContext } from "./request-context.js";
+import { runWithOrchestrationContext, addBreadcrumb } from "./request-context.js";
 import type { ConnectedClient } from "./server.js";
 import type { ServerMessage } from "./types.js";
 import type { OrchestrationWorkspace } from "./orchestration-workspace.js";
@@ -138,6 +139,7 @@ export async function executeDAG(params: DAGExecutorParams): Promise<void> {
       // Mark as running
       task.status = "running";
       onTaskStart(task.taskId);
+      addBreadcrumb("orch", `task ${task.taskId} started (${task.agentRole})`);
 
       logAction({
         ts: Date.now(),
@@ -163,6 +165,7 @@ export async function executeDAG(params: DAGExecutorParams): Promise<void> {
             runId,
             targetCardId: virtualCardId,
             skipPersist: true,
+            heartbeatTimeoutMs: CLAUDE_HEARTBEAT_TIMEOUT_ORCH_MS,
           }));
 
           orch.taskSessionIds.set(task.taskId, sessionId);

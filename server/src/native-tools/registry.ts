@@ -11,6 +11,7 @@ import { getClawHubTemplateCode, isClawHubSignature } from "./templates/clawhub.
 // Wiki native template replaced by shipped Cortex app (server/apps/cortex/)
 import { APP_CATALOG, getApp } from "../app-catalog.js";
 import { logAction, logError } from "../action-log.js";
+import { addBreadcrumb } from "../request-context.js";
 
 import { getLocalTool, isLocalTool, getAllLocalToolNames } from "../tool-registry-local.js";
 
@@ -1106,6 +1107,8 @@ export async function executeToolDirect(
   if (!tool) {
     return { success: false, data: null, error: `Tool "${toolName}" not found in registry` };
   }
+
+  addBreadcrumb("tool", `${toolName} ${JSON.stringify(params).slice(0, 80)}`);
 
   try {
     const callId = randomUUID();

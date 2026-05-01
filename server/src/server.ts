@@ -1500,6 +1500,37 @@ export async function startEnsoServer(opts: {
     }).catch(() => res.json([]));
   });
 
+  app.get("/api/health", async (_req, res) => {
+    try {
+      const { getErrorRate } = await import("./error-rate-monitor.js");
+      const { getCircuitBreakerStates } = await import("./circuit-breaker.js");
+
+      const errorRate = getErrorRate();
+      const circuits = getCircuitBreakerStates();
+      const uptime = process.uptime();
+
+      const allCircuitsClosed = circuits.every((c: { state: string }) => c.state === "closed");
+      const anyCircuitOpen = circuits.some((c: { state: string }) => c.state === "open");
+
+      const isHealthy = errorRate.count < errorRate.threshold && allCircuitsClosed;
+      const isDegraded = !isHealthy && !anyCircuitOpen;
+
+      res.json({
+        status: isHealthy ? "healthy" : isDegraded ? "degraded" : "unhealthy",
+        uptime: Math.floor(uptime),
+        errorRate: {
+          count: errorRate.count,
+          window: "5m",
+          threshold: errorRate.threshold,
+        },
+        circuits,
+        timestamp: Date.now(),
+      });
+    } catch (err) {
+      res.status(500).json({ status: "unknown", error: String(err) });
+    }
+  });
+
   // ── Entity Index API ──
   app.get("/api/entities", async (req, res) => {
     try {
