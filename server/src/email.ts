@@ -81,7 +81,7 @@ export async function sendHtmlEmail(params: SendHtmlEmailParams): Promise<SendEm
       return { success: true, message: `Email sent to ${to}` };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      const isTransient = /socket close|ECONN|ETIMEDOUT|ECONNRESET/i.test(msg);
+      const isTransient = /socket close|ECONN|ETIMEDOUT|ECONNRESET|socket disconnected|TLS connection|before secure/i.test(msg);
       if (isTransient && attempt < maxRetries) {
         transporter = null;
         await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));

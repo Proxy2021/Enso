@@ -33,6 +33,10 @@ function getTransporter(): { transporter: nodemailer.Transporter; senderEmail: s
       port: 587,
       secure: false, // STARTTLS
       auth: { user: email, pass: password },
+      pool: true,
+      maxConnections: 3,
+      socketTimeout: 30_000,
+      greetingTimeout: 15_000,
     });
   }
 
@@ -121,59 +125,72 @@ export function createEmailTools(): EnsoAgentTool[] {
           return { content: [{ type: "text", text: "[ERROR] No subject specified" }] };
         }
 
-        try {
-          const { transporter: smtp, senderEmail } = getTransporter();
+        const maxRetries = 2;
+        let lastErr: unknown;
+        for (let attempt = 0; attempt <= maxRetries; attempt++) {
+          try {
+            const { transporter: smtp, senderEmail } = getTransporter();
 
-          const mailOptions: nodemailer.SendMailOptions = {
-            from: `Enso AI <${senderEmail}>`,
-            to,
-            subject,
-            replyTo: replyTo || senderEmail,
-          };
+            const mailOptions: nodemailer.SendMailOptions = {
+              from: `Enso AI <${senderEmail}>`,
+              to,
+              subject,
+              replyTo: replyTo || senderEmail,
+            };
 
-          if (isHtml) {
-            mailOptions.html = body;
-          } else {
-            mailOptions.text = body;
+            if (isHtml) {
+              mailOptions.html = body;
+            } else {
+              mailOptions.text = body;
+            }
+
+            if (cc) mailOptions.cc = cc;
+            if (bcc) mailOptions.bcc = bcc;
+
+            if (attachments && attachments.length > 0) {
+              mailOptions.attachments = attachments.map((a) => ({
+                filename: a.filename || a.path.split(/[/\\]/).pop() || "attachment",
+                path: a.path,
+              }));
+            }
+
+            const info = await smtp.sendMail(mailOptions);
+
+            logAction({
+              ts: Date.now(),
+              type: "action",
+              category: "email",
+              message: `Email sent to ${to} — subject: "${subject}" (messageId: ${info.messageId})`,
+            });
+
+            const result = {
+              tool: "enso_email_send",
+              success: true,
+              messageId: info.messageId,
+              to,
+              cc: cc || undefined,
+              bcc: bcc || undefined,
+              subject,
+              attachmentCount: attachments?.length ?? 0,
+              from: senderEmail,
+            };
+
+            return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+          } catch (err) {
+            lastErr = err;
+            const msg = err instanceof Error ? err.message : String(err);
+            const isTransient = /socket close|ECONN|ETIMEDOUT|ECONNRESET|socket disconnected|TLS connection|before secure/i.test(msg);
+            if (isTransient && attempt < maxRetries) {
+              transporter = null;
+              await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+              continue;
+            }
+            break;
           }
-
-          if (cc) mailOptions.cc = cc;
-          if (bcc) mailOptions.bcc = bcc;
-
-          if (attachments && attachments.length > 0) {
-            mailOptions.attachments = attachments.map((a) => ({
-              filename: a.filename || a.path.split(/[/\\]/).pop() || "attachment",
-              path: a.path,
-            }));
-          }
-
-          const info = await smtp.sendMail(mailOptions);
-
-          logAction({
-            ts: Date.now(),
-            type: "action",
-            category: "email",
-            message: `Email sent to ${to} — subject: "${subject}" (messageId: ${info.messageId})`,
-          });
-
-          const result = {
-            tool: "enso_email_send",
-            success: true,
-            messageId: info.messageId,
-            to,
-            cc: cc || undefined,
-            bcc: bcc || undefined,
-            subject,
-            attachmentCount: attachments?.length ?? 0,
-            from: senderEmail,
-          };
-
-          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          logError("email", `Failed to send email to ${to}`, err);
-          return { content: [{ type: "text", text: `[ERROR] Failed to send email: ${message}` }] };
         }
+        const message = lastErr instanceof Error ? lastErr.message : String(lastErr);
+        logError("email", `Failed to send email to ${to}`, lastErr);
+        return { content: [{ type: "text", text: `[ERROR] Failed to send email: ${message}` }] };
       },
     } as EnsoAgentTool,
 
