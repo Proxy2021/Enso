@@ -60,6 +60,20 @@ export interface SystemSignals {
     staleAccounts: number;
     line: string;
   } | null;
+  /** YouTube OAuth token health. Undefined when YouTube not configured. */
+  youtubeAuth?: {
+    status: "valid" | "expired" | "unknown";
+    lastChecked: number;
+    consecutiveFailures: number;
+    lastError?: string;
+  };
+  /** Kindle auth session state — proactive detection of expired Amazon sessions */
+  kindleAuth?: {
+    valid: boolean;
+    lastValidated: number | null;
+    daysSinceValidation: number | null;
+    message: string;
+  };
 }
 
 export interface TeamLeaderAction {
@@ -1084,10 +1098,41 @@ export async function gatherSignals(): Promise<SystemSignals> {
     }
   } catch { /* finances module not available — non-fatal */ }
 
+  // YouTube auth health
+  let youtubeAuth: SystemSignals["youtubeAuth"] = undefined;
+  try {
+    const { getAuthState } = await import("./youtube-auth-state.js");
+    const { isAuthorized, checkTokenHealth } = await import("./youtube-auth.js");
+    const { setAuthValid, setAuthExpired } = await import("./youtube-auth-state.js");
+    if (isAuthorized()) {
+      const state = getAuthState();
+      const staleThreshold = 3 * 60 * 60 * 1000; // 3 hours
+      if (state.status === "unknown" || Date.now() - state.lastChecked > staleThreshold) {
+        const health = await checkTokenHealth();
+        if (health.valid) setAuthValid();
+        else setAuthExpired(health.error || "unknown");
+      }
+      const fresh = getAuthState();
+      youtubeAuth = {
+        status: fresh.status,
+        lastChecked: fresh.lastChecked,
+        consecutiveFailures: fresh.consecutiveFailures,
+        lastError: fresh.lastError,
+      };
+    }
+  } catch { /* youtube module not available */ }
+
+  // Kindle auth health (lightweight — uses cached state, only launches browser if stale)
+  let kindleAuth: SystemSignals["kindleAuth"] = undefined;
+  try {
+    const { validateKindleSession } = await import("./user-context-tools.js");
+    kindleAuth = await validateKindleSession();
+  } catch { /* kindle validation not available */ }
+
   return {
     recentErrors, recentActions, focusAnalyses, cortexStats, taskResults,
     platformHealth: { errorRate, failedTasks, uptimeHours: Math.round(process.uptime() / 3600) },
-    pendingReacts, pendingTasks, finances,
+    pendingReacts, pendingTasks, finances, youtubeAuth, kindleAuth,
   };
 }
 
@@ -1146,6 +1191,20 @@ export async function assessAndPrioritize(signals: SystemSignals): Promise<TeamL
     "",
     `## Wealth`,
     signals.finances ? signals.finances.line : "No financial accounts indexed yet.",
+    "",
+    `## YouTube Auth`,
+    signals.youtubeAuth
+      ? signals.youtubeAuth.status === "valid"
+        ? `Status: VALID (checked ${new Date(signals.youtubeAuth.lastChecked).toISOString()})`
+        : `Status: EXPIRED since ${new Date(signals.youtubeAuth.lastChecked).toISOString()} — failures: ${signals.youtubeAuth.consecutiveFailures}. Error: ${signals.youtubeAuth.lastError || "unknown"}. Action needed: send re-auth notification with priority critical.`
+      : "YouTube not configured.",
+    "",
+    `## Kindle Auth`,
+    signals.kindleAuth
+      ? signals.kindleAuth.valid
+        ? `Status: VALID — ${signals.kindleAuth.message}`
+        : `Status: EXPIRED — ${signals.kindleAuth.message}. Action needed: notify user to run Kindle Login (enso_context_kindle_login) to re-authenticate.`
+      : "Kindle auth state not available.",
   ].join("\n");
 
   const prompt = `You are the Team Leader of Enso, a personal AI assistant platform.

@@ -3853,9 +3853,21 @@ BEHAVIOR:
     const result = await handleCallback(code, baseUrl);
 
     if (result.success) {
-      res.send("<html><body style='background:#0a0a0a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0'><div style='text-align:center'><h1>YouTube Authorized</h1><p style='color:#4ade80'>You can close this tab and return to Enso.</p></div></body></html>");
+      res.send(`<html><body style="background:#0f0f23;color:#e2e8f0;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<div style="text-align:center">
+<div style="font-size:48px;margin-bottom:16px">✓</div>
+<h1 style="color:#4ade80;margin:0 0 8px">YouTube Re-Authorized</h1>
+<p style="color:#94a3b8">Token saved successfully. You can close this tab.</p>
+<script>setTimeout(()=>window.close(),3000)</script>
+</div></body></html>`);
     } else {
-      res.status(400).send(`<html><body style='background:#0a0a0a;color:#fff;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0'><div style='text-align:center'><h1>Authorization Failed</h1><p style='color:#f87171'>${result.error}</p></div></body></html>`);
+      const retryUrl = `${baseUrl}/api/youtube/auth`;
+      res.status(400).send(`<html><body style="background:#0f0f23;color:#e2e8f0;font-family:system-ui;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<div style="text-align:center">
+<h1 style="color:#f87171">Authorization Failed</h1>
+<p>${result.error}</p>
+<a href="${retryUrl}" style="display:inline-block;margin-top:16px;padding:10px 20px;background:#3b82f6;color:white;border-radius:8px;text-decoration:none">Try Again</a>
+</div></body></html>`);
     }
   });
 

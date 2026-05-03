@@ -642,6 +642,135 @@ function scanSystem(include: string[]): SystemInfo {
 
 const KINDLE_BROWSER_DIR = join(homedir(), ".enso", "data", "kindle-browser");
 const KINDLE_LIBRARY_URL = "https://read.amazon.com/kindle-library";
+const KINDLE_COOKIE_FILE = join(homedir(), ".enso", "data", "kindle-cookies.json");
+const KINDLE_AUTH_STATE = join(homedir(), ".enso", "data", "kindle-auth-state.json");
+
+const KINDLE_COOKIE_DOMAINS = [
+  "https://read.amazon.com",
+  "https://www.amazon.com",
+];
+
+async function saveKindleCookies(page: any): Promise<void> {
+  try {
+    const cookies = await page.cookies(...KINDLE_COOKIE_DOMAINS);
+    mkdirSync(join(homedir(), ".enso", "data"), { recursive: true });
+    writeFileSync(KINDLE_COOKIE_FILE, JSON.stringify(cookies, null, 2));
+    updateKindleAuthState("valid");
+  } catch (err) {
+    logError("user-context", "Failed to save Kindle cookies", err);
+  }
+}
+
+async function loadKindleCookies(page: any): Promise<boolean> {
+  try {
+    if (!existsSync(KINDLE_COOKIE_FILE)) return false;
+    const cookies = JSON.parse(readFileSync(KINDLE_COOKIE_FILE, "utf-8"));
+    if (!Array.isArray(cookies) || cookies.length === 0) return false;
+    await page.setCookie(...cookies);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function updateKindleAuthState(status: "valid" | "expired" | "error"): void {
+  const state = {
+    lastValidated: Date.now(),
+    status,
+    ...(status === "expired" ? { expiredAt: Date.now() } : {}),
+  };
+  mkdirSync(join(homedir(), ".enso", "data"), { recursive: true });
+  writeFileSync(KINDLE_AUTH_STATE, JSON.stringify(state));
+}
+
+function getKindleAuthState(): { lastValidated: number; status: string; expiredAt?: number } | null {
+  try {
+    if (!existsSync(KINDLE_AUTH_STATE)) return null;
+    return JSON.parse(readFileSync(KINDLE_AUTH_STATE, "utf-8"));
+  } catch { return null; }
+}
+
+export async function validateKindleSession(): Promise<{
+  valid: boolean;
+  lastValidated: number | null;
+  daysSinceValidation: number | null;
+  message: string;
+}> {
+  const state = getKindleAuthState();
+  if (state && state.status === "valid") {
+    const hoursSince = (Date.now() - state.lastValidated) / (1000 * 60 * 60);
+    if (hoursSince < 24) {
+      return {
+        valid: true,
+        lastValidated: state.lastValidated,
+        daysSinceValidation: hoursSince / 24,
+        message: `Session validated ${Math.round(hoursSince)}h ago`,
+      };
+    }
+  }
+
+  if (state && state.status === "expired") {
+    const hoursSince = (Date.now() - state.lastValidated) / (1000 * 60 * 60);
+    if (hoursSince < 1) {
+      return {
+        valid: false,
+        lastValidated: state.lastValidated,
+        daysSinceValidation: hoursSince / 24,
+        message: "Session expired (checked recently)",
+      };
+    }
+  }
+
+  try {
+    const puppeteer = await import("puppeteer");
+    const browser = await puppeteer.default.launch({
+      headless: true,
+      userDataDir: KINDLE_BROWSER_DIR,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+    });
+
+    try {
+      const page = await browser.newPage();
+      await loadKindleCookies(page);
+      await page.goto(KINDLE_LIBRARY_URL, { waitUntil: "domcontentloaded", timeout: 15000 });
+      await new Promise(r => setTimeout(r, 3000));
+      const url = page.url();
+
+      const isValid = url.includes("kindle-library") &&
+        !url.includes("signin") && !url.includes("ap/signin") &&
+        !url.includes("auth") && !url.includes("landing");
+
+      if (isValid) {
+        await saveKindleCookies(page);
+        return {
+          valid: true,
+          lastValidated: Date.now(),
+          daysSinceValidation: 0,
+          message: "Session is valid",
+        };
+      } else {
+        updateKindleAuthState("expired");
+        return {
+          valid: false,
+          lastValidated: Date.now(),
+          daysSinceValidation: null,
+          message: "Session expired — re-authentication needed",
+        };
+      }
+    } finally {
+      await new Promise(r => setTimeout(r, 2000));
+      await browser.close();
+    }
+  } catch (err) {
+    updateKindleAuthState("error");
+    return {
+      valid: false,
+      lastValidated: Date.now(),
+      daysSinceValidation: null,
+      message: `Validation failed: ${err instanceof Error ? err.message : String(err)}`,
+    };
+  }
+}
 
 async function scanKindleLibrary(): Promise<KindleBook[]> {
   mkdirSync(KINDLE_BROWSER_DIR, { recursive: true });
@@ -669,6 +798,9 @@ async function scanKindleLibrary(): Promise<KindleBook[]> {
     try {
       const page = await browser.newPage();
       await page.setViewport({ width: 1280, height: 900 });
+
+      // Restore saved cookies before navigating (supplements userDataDir)
+      await loadKindleCookies(page);
 
       // Use domcontentloaded instead of networkidle2 (Amazon pages do continuous network activity)
       await page.goto(KINDLE_LIBRARY_URL, { waitUntil: "domcontentloaded", timeout: 20000 });
@@ -734,8 +866,13 @@ async function scanKindleLibrary(): Promise<KindleBook[]> {
       // Log what page we ended up on for debugging
       logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Kindle scan: landed on ${url}, found ${books.length} books` });
 
+      // Save fresh cookies — Amazon may have renewed them
+      await saveKindleCookies(page);
+
       return books;
     } finally {
+      // Wait for Chrome to flush cookies to disk (prevents race condition)
+      await new Promise(r => setTimeout(r, 2000));
       await browser.close();
     }
   })()]);
@@ -777,7 +914,8 @@ async function kindleLogin(): Promise<{ success: boolean; message: string }> {
           await new Promise(r => setTimeout(r, 2000));
           const finalUrl = page.url();
           if (finalUrl.includes("kindle-library")) {
-            logAction({ ts: Date.now(), type: "action", category: "user-context", message: "Kindle login successful — session saved to kindle-browser profile" });
+            await saveKindleCookies(page);
+            logAction({ ts: Date.now(), type: "action", category: "user-context", message: "Kindle login successful — session saved to kindle-browser profile + cookie file" });
             return { success: true, message: "Amazon login successful. You can now run the Kindle scan." };
           }
         } catch { /* continue polling */ }
@@ -786,6 +924,7 @@ async function kindleLogin(): Promise<{ success: boolean; message: string }> {
 
     return { success: false, message: "Login timed out after 3 minutes. Please try again and complete the Amazon login within 3 minutes." };
   } finally {
+    await new Promise(r => setTimeout(r, 2000));
     await browser.close();
   }
 }
@@ -833,6 +972,7 @@ export async function enrichKindleMetadata(): Promise<{ enriched: number; total:
   try {
     const page = await browser.newPage();
     await page.setViewport({ width: 1280, height: 900 });
+    await loadKindleCookies(page);
 
     for (const book of unenriched) {
       try {
@@ -912,6 +1052,7 @@ export async function enrichKindleMetadata(): Promise<{ enriched: number; total:
       }
     }
   } finally {
+    await new Promise(r => setTimeout(r, 2000));
     await browser.close();
     // Final save
     writeFileSync(cachePath, JSON.stringify(cacheData, null, 2));
@@ -1717,7 +1858,7 @@ try {
           const errMsg = err instanceof Error ? err.message : String(err);
           const isAuthError = errMsg.includes("Amazon login required") || errMsg.includes("kindle_login") || errMsg.includes("enso_context_kindle_login");
           if (isAuthError) {
-            // Auth expiry is expected — warn, not error, so TL treats it as a user action item
+            updateKindleAuthState("expired");
             logError("user-context", "Kindle library scan requires re-authentication", err, { severity: "warning" });
             return {
               success: false,
@@ -1749,6 +1890,54 @@ try {
       async execute(_callId: string, _params: Record<string, unknown>): Promise<AgentToolResult> {
         try {
           const result = await kindleLogin();
+          if (result.success) {
+            // Auto-retry scan after successful login
+            try {
+              const books = await scanKindleLibrary();
+              const cachePath = join(CACHE_DIR, "kindle-library.json");
+              let existingBooks: KindleBook[] = [];
+              try {
+                const existing = JSON.parse(readFileSync(cachePath, "utf-8"));
+                existingBooks = existing.books || [];
+              } catch { /* no existing cache */ }
+              const enrichedByAsin = new Map<string, KindleBook>();
+              for (const b of existingBooks) {
+                if (b.asin && b.enrichedAt) enrichedByAsin.set(b.asin, b);
+              }
+              for (const book of books) {
+                const prev = book.asin ? enrichedByAsin.get(book.asin) : undefined;
+                if (prev) {
+                  book.description = prev.description;
+                  book.publisher = prev.publisher;
+                  book.publicationDate = prev.publicationDate;
+                  book.pageCount = prev.pageCount;
+                  book.rating = prev.rating;
+                  book.reviewCount = prev.reviewCount;
+                  book.categories = prev.categories;
+                  book.language = prev.language;
+                  book.isbn = prev.isbn;
+                  book.enrichedAt = prev.enrichedAt;
+                }
+              }
+              const scanResult = {
+                source: "kindle-library",
+                totalBooks: books.length,
+                books,
+                scannedAt: new Date().toISOString(),
+              };
+              writeFileSync(cachePath, JSON.stringify(scanResult, null, 2));
+              updateScanLog("kindleLibrary");
+              logAction({ ts: Date.now(), type: "action", category: "user-context", message: `Kindle auto-scan after login: ${books.length} books` });
+              return jsonResult({
+                tool: "enso_context_kindle_login",
+                loginSuccess: true,
+                autoScanResult: { totalBooks: books.length },
+                message: `Login successful. Auto-scanned ${books.length} books.`,
+              });
+            } catch {
+              // Scan failed even after login — return login success only
+            }
+          }
           return jsonResult({
             tool: "enso_context_kindle_login",
             success: result.success,

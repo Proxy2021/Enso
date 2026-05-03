@@ -10,7 +10,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import type { EnsoAgentTool } from "./local-types.js";
-import { getAuthenticatedClient, isAuthorized, isAuthError, REAUTH_MESSAGE, checkTokenHealth } from "./youtube-auth.js";
+import { getAuthenticatedClient, isAuthorized, isAuthError, REAUTH_MESSAGE, checkTokenHealth, callWithAuthGuard } from "./youtube-auth.js";
 import { logAction, logError } from "./action-log.js";
 
 // ── Helpers ──
@@ -141,75 +141,18 @@ function setCachedFeed(key: string, data: VideoInfo[]): void {
   }
 }
 
-const AUTH_NOTIFY_STATE_PATH = join(homedir(), ".enso", "data", "youtube-auth-notify.json");
-const AUTH_NOTIFY_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24 hours between notifications
-
-let authExpiredNotified = false;
-
-function wasRecentlyNotified(): boolean {
-  try {
-    if (!existsSync(AUTH_NOTIFY_STATE_PATH)) return false;
-    const { ts } = JSON.parse(readFileSync(AUTH_NOTIFY_STATE_PATH, "utf-8"));
-    return typeof ts === "number" && Date.now() - ts < AUTH_NOTIFY_COOLDOWN_MS;
-  } catch {
-    return false;
-  }
-}
-
-function persistNotifyState(): void {
-  try {
-    mkdirSync(join(homedir(), ".enso", "data"), { recursive: true });
-    writeFileSync(AUTH_NOTIFY_STATE_PATH, JSON.stringify({ ts: Date.now() }));
-  } catch { /* non-fatal */ }
-}
-
-function clearNotifyState(): void {
-  try {
-    if (existsSync(AUTH_NOTIFY_STATE_PATH)) {
-      writeFileSync(AUTH_NOTIFY_STATE_PATH, JSON.stringify({ ts: 0 }));
-    }
-  } catch { /* non-fatal */ }
-}
-
-async function notifyAuthExpired(): Promise<void> {
-  try {
-    const { sendHtmlEmail } = await import("./email.js");
-    const to = process.env.ENSO_NOTIFY_EMAIL || process.env.SMTP_EMAIL || "";
-    if (!to) return;
-    await sendHtmlEmail({
-      to,
-      subject: "⚠️ YouTube auth expired — Enso feeds using stale data",
-      html: `<div style="font-family:system-ui;max-width:500px;margin:0 auto;background:#0f0f23;color:#e2e8f0;border-radius:12px;overflow:hidden">
-<div style="padding:20px;text-align:center;background:#7f1d1d"><h2 style="color:#fca5a5;margin:0">YouTube Auth Expired</h2></div>
-<div style="padding:20px">
-<p>Your YouTube OAuth2 refresh token has expired. All YouTube feeds are currently serving <strong>stale cached data</strong>.</p>
-<p style="margin-top:16px"><strong>To fix:</strong></p>
-<ol><li>Open your Enso server URL + <code>/api/youtube/auth</code></li><li>Complete the Google consent flow</li><li>Feeds will resume immediately</li></ol>
-<p style="color:#94a3b8;font-size:12px;margin-top:16px">Tip: Publish your Google Cloud OAuth consent screen to Production to prevent 7-day token expiry.</p>
-</div></div>`,
-    });
-    persistNotifyState();
-    logAction({ ts: Date.now(), type: "action", category: "youtube", message: "Sent auth-expired notification email" });
-  } catch (e) {
-    logError("youtube", "Failed to send auth-expired notification", e);
-  }
-}
+// Auth notification state is now managed by youtube-auth-state.ts + callWithAuthGuard in youtube-auth.ts
 
 export async function checkYouTubeOnStartup(): Promise<void> {
   if (!isAuthorized()) return;
-  const health = await checkTokenHealth();
-  if (!health.valid) {
-    logError("youtube", `Startup health check: YouTube token invalid — ${health.error || "unknown error"}. Re-authorize at /api/youtube/auth`, undefined);
-    if (!authExpiredNotified && !wasRecentlyNotified()) {
-      authExpiredNotified = true;
-      await notifyAuthExpired();
-    } else {
-      authExpiredNotified = true; // suppress in-memory flag even if we skip the email
-    }
-  } else {
-    authExpiredNotified = false;
-    clearNotifyState();
-    logAction({ ts: Date.now(), type: "action", category: "youtube", message: "Startup health check: YouTube token valid" });
+  try {
+    await callWithAuthGuard(async () => {
+      const health = await checkTokenHealth();
+      if (!health.valid) throw new Error(health.error || "Token validation failed");
+      logAction({ ts: Date.now(), type: "action", category: "youtube", message: "Startup health check: YouTube token valid" });
+    });
+  } catch {
+    // callWithAuthGuard already handled state update + notification
   }
 }
 
@@ -528,34 +471,31 @@ export function createYouTubeTools(): EnsoAgentTool[] {
         const publishedAfter = params.publishedAfter as string | undefined;
         const cacheKey = `${maxResults}:${publishedAfter || ""}`;
         try {
-          const videos = await myFeed(params);
-          authExpiredNotified = false;
-          clearNotifyState();
-          logAction({ ts: Date.now(), type: "action", category: "youtube", message: `My feed: ${videos.length} videos` });
+          const videos = await callWithAuthGuard(
+            () => myFeed(params),
+            () => {
+              const stale = getStaleFeed(cacheKey);
+              if (stale) return stale.videos;
+              return [] as VideoInfo[];
+            },
+          );
+          if (videos.length > 0) {
+            logAction({ ts: Date.now(), type: "action", category: "youtube", message: `My feed: ${videos.length} videos` });
+          }
           return jsonResult({ tool: "enso_youtube_my_feed", count: videos.length, videos });
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
           const isQuota = msg.includes("quota");
-          const isAuth = isAuthError(err);
-          if (isQuota || isAuth) {
+          if (isQuota) {
             const stale = getStaleFeed(cacheKey);
             if (stale) {
-              const warning = isAuth ? REAUTH_MESSAGE : "YouTube API quota exceeded — showing cached results.";
-              logAction({ ts: Date.now(), type: "action", category: "youtube", message: `My feed (stale cache, ${isAuth ? "auth expired" : "quota exceeded"}): ${stale.videos.length} videos` });
-              return jsonResult({ tool: "enso_youtube_my_feed", count: stale.videos.length, videos: stale.videos, stale: true, cachedAt: stale.savedAt, warning });
+              logAction({ ts: Date.now(), type: "action", category: "youtube", message: `My feed (stale cache, quota exceeded): ${stale.videos.length} videos` });
+              return jsonResult({ tool: "enso_youtube_my_feed", count: stale.videos.length, videos: stale.videos, stale: true, cachedAt: stale.savedAt, warning: "YouTube API quota exceeded — showing cached results." });
             }
+            return errorResult("YouTube API quota exceeded for today. Feed will be available again after midnight Pacific time.");
           }
-          if (isAuth && !authExpiredNotified && !wasRecentlyNotified()) {
-            authExpiredNotified = true;
-            logError("youtube", "OAuth token expired — all YouTube tools will return stale/error until re-authorized at /api/youtube/auth", err);
-            notifyAuthExpired().catch(() => {});
-          } else if (isAuth) {
-            authExpiredNotified = true;
-          } else if (!isAuth) {
-            logError("youtube", "my_feed failed", err);
-          }
-          if (isAuth) return errorResult(REAUTH_MESSAGE);
-          return errorResult(isQuota ? "YouTube API quota exceeded for today. Feed will be available again after midnight Pacific time." : msg);
+          logError("youtube", "my_feed failed", err);
+          return errorResult(msg);
         }
       },
     } as EnsoAgentTool,
@@ -576,14 +516,11 @@ export function createYouTubeTools(): EnsoAgentTool[] {
       },
       execute: async (_callId, params) => {
         try {
-          const videos = await trending(params);
+          const videos = await callWithAuthGuard(() => trending(params));
           logAction({ ts: Date.now(), type: "action", category: "youtube", message: `Trending: ${videos.length} videos (${params.regionCode || "US"})` });
           return jsonResult({ tool: "enso_youtube_trending", count: videos.length, videos });
         } catch (err) {
-          if (isAuthError(err)) {
-            logError("youtube", "trending auth expired", err);
-            return errorResult(REAUTH_MESSAGE);
-          }
+          if (isAuthError(err)) return errorResult(REAUTH_MESSAGE);
           logError("youtube", "trending failed", err);
           return errorResult(err instanceof Error ? err.message : String(err));
         }
@@ -606,14 +543,11 @@ export function createYouTubeTools(): EnsoAgentTool[] {
       },
       execute: async (_callId, params) => {
         try {
-          const videos = await search(params);
+          const videos = await callWithAuthGuard(() => search(params));
           logAction({ ts: Date.now(), type: "action", category: "youtube", message: `Search "${params.query}": ${videos.length} results` });
           return jsonResult({ tool: "enso_youtube_search", query: params.query, count: videos.length, videos });
         } catch (err) {
-          if (isAuthError(err)) {
-            logError("youtube", "search auth expired", err);
-            return errorResult(REAUTH_MESSAGE);
-          }
+          if (isAuthError(err)) return errorResult(REAUTH_MESSAGE);
           logError("youtube", "search failed", err);
           return errorResult(err instanceof Error ? err.message : String(err));
         }
@@ -635,14 +569,11 @@ export function createYouTubeTools(): EnsoAgentTool[] {
       },
       execute: async (_callId, params) => {
         try {
-          const videos = await channelVideos(params);
+          const videos = await callWithAuthGuard(() => channelVideos(params));
           logAction({ ts: Date.now(), type: "action", category: "youtube", message: `Channel ${params.channelId}: ${videos.length} videos` });
           return jsonResult({ tool: "enso_youtube_channel_videos", channelId: params.channelId, count: videos.length, videos });
         } catch (err) {
-          if (isAuthError(err)) {
-            logError("youtube", "channel_videos auth expired", err);
-            return errorResult(REAUTH_MESSAGE);
-          }
+          if (isAuthError(err)) return errorResult(REAUTH_MESSAGE);
           logError("youtube", "channel_videos failed", err);
           return errorResult(err instanceof Error ? err.message : String(err));
         }
@@ -667,28 +598,26 @@ export function createYouTubeTools(): EnsoAgentTool[] {
       },
       execute: async (_callId, params) => {
         try {
-          const yt = getYouTubePublic();
-          const ids = (params.channelIds as string[]) || [];
-          const stats: Record<string, { subscriberCount: number; videoCount: number }> = {};
-
-          for (let i = 0; i < ids.length; i += 50) {
-            const batch = ids.slice(i, i + 50);
-            const res = await yt.channels.list({ part: ["statistics"], id: batch });
-            for (const ch of res.data.items || []) {
-              stats[ch.id!] = {
-                subscriberCount: parseInt(ch.statistics?.subscriberCount || "0"),
-                videoCount: parseInt(ch.statistics?.videoCount || "0"),
-              };
+          const stats = await callWithAuthGuard(async () => {
+            const yt = getYouTubePublic();
+            const ids = (params.channelIds as string[]) || [];
+            const result: Record<string, { subscriberCount: number; videoCount: number }> = {};
+            for (let i = 0; i < ids.length; i += 50) {
+              const batch = ids.slice(i, i + 50);
+              const res = await yt.channels.list({ part: ["statistics"], id: batch });
+              for (const ch of res.data.items || []) {
+                result[ch.id!] = {
+                  subscriberCount: parseInt(ch.statistics?.subscriberCount || "0"),
+                  videoCount: parseInt(ch.statistics?.videoCount || "0"),
+                };
+              }
             }
-          }
-
+            return result;
+          });
           logAction({ ts: Date.now(), type: "action", category: "youtube", message: `Channel stats: ${Object.keys(stats).length} channels` });
           return jsonResult({ tool: "enso_youtube_channel_stats", count: Object.keys(stats).length, stats });
         } catch (err) {
-          if (isAuthError(err)) {
-            logError("youtube", "channel_stats auth expired", err);
-            return errorResult(REAUTH_MESSAGE);
-          }
+          if (isAuthError(err)) return errorResult(REAUTH_MESSAGE);
           logError("youtube", "channel_stats failed", err);
           return errorResult(err instanceof Error ? err.message : String(err));
         }
@@ -709,14 +638,11 @@ export function createYouTubeTools(): EnsoAgentTool[] {
       },
       execute: async (_callId, params) => {
         try {
-          const videos = await likedVideos(params);
+          const videos = await callWithAuthGuard(() => likedVideos(params));
           logAction({ ts: Date.now(), type: "action", category: "youtube", message: `Liked videos: ${videos.length}` });
           return jsonResult({ tool: "enso_youtube_liked_videos", count: videos.length, videos });
         } catch (err) {
-          if (isAuthError(err)) {
-            logError("youtube", "liked_videos auth expired", err);
-            return errorResult(REAUTH_MESSAGE);
-          }
+          if (isAuthError(err)) return errorResult(REAUTH_MESSAGE);
           logError("youtube", "liked_videos failed", err);
           return errorResult(err instanceof Error ? err.message : String(err));
         }
@@ -737,14 +663,11 @@ export function createYouTubeTools(): EnsoAgentTool[] {
       },
       execute: async (_callId, params) => {
         try {
-          const channels = await subscriptions(params);
+          const channels = await callWithAuthGuard(() => subscriptions(params));
           logAction({ ts: Date.now(), type: "action", category: "youtube", message: `Subscriptions: ${channels.length} channels` });
           return jsonResult({ tool: "enso_youtube_subscriptions", count: channels.length, channels });
         } catch (err) {
-          if (isAuthError(err)) {
-            logError("youtube", "subscriptions auth expired", err);
-            return errorResult(REAUTH_MESSAGE);
-          }
+          if (isAuthError(err)) return errorResult(REAUTH_MESSAGE);
           logError("youtube", "subscriptions failed", err);
           return errorResult(err instanceof Error ? err.message : String(err));
         }
@@ -774,14 +697,11 @@ export function createYouTubeTools(): EnsoAgentTool[] {
       },
       execute: async (_callId, params) => {
         try {
-          const result = await unsubscribe(params);
+          const result = await callWithAuthGuard(() => unsubscribe(params));
           logAction({ ts: Date.now(), type: "action", category: "youtube", message: `Unsubscribed from ${result.unsubscribed.length} channels` });
           return jsonResult({ tool: "enso_youtube_unsubscribe", ...result });
         } catch (err) {
-          if (isAuthError(err)) {
-            logError("youtube", "unsubscribe auth expired", err);
-            return errorResult(REAUTH_MESSAGE);
-          }
+          if (isAuthError(err)) return errorResult(REAUTH_MESSAGE);
           logError("youtube", "unsubscribe failed", err);
           return errorResult(err instanceof Error ? err.message : String(err));
         }

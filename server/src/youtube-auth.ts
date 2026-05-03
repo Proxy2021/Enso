@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { saveApiKey } from "./api-keys.js";
 import { logAction, logError } from "./action-log.js";
+import { getAuthState, setAuthValid, setAuthExpired, shouldNotify, markNotified, clearAuthState } from "./youtube-auth-state.js";
 
 const SCOPES = ["https://www.googleapis.com/auth/youtube"];
 const REDIRECT_PATH = "/api/youtube/callback";
@@ -69,6 +70,7 @@ export async function handleCallback(code: string, baseUrl?: string): Promise<{ 
     saveApiKey("youtubeRefreshToken", "YOUTUBE_REFRESH_TOKEN", tokens.refresh_token);
 
     // Clear auth-expired notification state so next startup/scan is clean
+    clearAuthState();
     try {
       const notifyPath = join(homedir(), ".enso", "data", "youtube-auth-notify.json");
       if (existsSync(notifyPath)) writeFileSync(notifyPath, JSON.stringify({ ts: 0 }));
@@ -124,3 +126,74 @@ export function getYouTubeAPI() {
   if (!auth) return null;
   return google.youtube({ version: "v3", auth });
 }
+
+// ── Auth Guard ──
+
+let lastHealthyMark = 0;
+const HEALTHY_DEBOUNCE_MS = 30 * 60 * 1000; // 30 min
+
+function markHealthyDebounced(): void {
+  if (Date.now() - lastHealthyMark > HEALTHY_DEBOUNCE_MS) {
+    lastHealthyMark = Date.now();
+    setAuthValid();
+  }
+}
+
+async function handleAuthFailure(err: unknown): Promise<void> {
+  const msg = err instanceof Error ? err.message : String(err);
+  const state = setAuthExpired(msg);
+  logError("youtube", `Auth failure (consecutive: ${state.consecutiveFailures}): ${msg}`, err);
+
+  if (shouldNotify()) {
+    markNotified();
+    try {
+      const { sendHtmlEmail } = await import("./email.js");
+      const to = process.env.ENSO_NOTIFY_EMAIL || process.env.SMTP_EMAIL || "";
+      if (!to) return;
+      const baseUrl = process.env.ENSO_PUBLIC_URL || process.env.CLOUDFLARE_TUNNEL_URL || "http://localhost:3001";
+      const reauthLink = `${baseUrl}/api/youtube/auth`;
+      await sendHtmlEmail({
+        to,
+        subject: `⚠️ YouTube auth expired — re-authorize now`,
+        html: `<div style="font-family:system-ui;max-width:500px;margin:0 auto;background:#0f0f23;color:#e2e8f0;border-radius:12px;overflow:hidden">
+<div style="padding:20px;text-align:center;background:#7f1d1d"><h2 style="color:#fca5a5;margin:0">YouTube Auth Expired</h2></div>
+<div style="padding:20px">
+<p>Your YouTube OAuth2 refresh token has expired (failure #${state.consecutiveFailures}). Feeds are serving <strong>stale cached data</strong>.</p>
+<p style="margin-top:16px;text-align:center">
+  <a href="${reauthLink}" style="display:inline-block;padding:12px 24px;background:#3b82f6;color:white;border-radius:8px;text-decoration:none;font-weight:bold">Re-Authorize YouTube →</a>
+</p>
+<p style="color:#94a3b8;font-size:12px;margin-top:16px">Tip: Publish your Google Cloud OAuth consent screen to Production to prevent 7-day token expiry.</p>
+</div></div>`,
+      });
+      logAction({ ts: Date.now(), type: "action", category: "youtube", message: "Sent auth-expired notification (auth guard)" });
+    } catch (e) {
+      logError("youtube", "Failed to send auth-expired notification", e);
+    }
+  }
+}
+
+/**
+ * Wrap any YouTube API call with automatic auth failure detection.
+ * On success, debounce-marks the token as healthy.
+ * On auth error, updates state, notifies user (with cooldown), and optionally returns fallback.
+ */
+export async function callWithAuthGuard<T>(
+  fn: () => Promise<T>,
+  fallback?: () => T | Promise<T>,
+): Promise<T> {
+  try {
+    const result = await fn();
+    markHealthyDebounced();
+    return result;
+  } catch (err) {
+    if (isAuthError(err)) {
+      await handleAuthFailure(err);
+      if (fallback) return fallback();
+      throw err;
+    }
+    throw err;
+  }
+}
+
+/** Re-export state accessors for use by other modules */
+export { getAuthState, setAuthValid as markTokenValid, clearAuthState } from "./youtube-auth-state.js";
