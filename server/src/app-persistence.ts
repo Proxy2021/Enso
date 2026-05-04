@@ -260,7 +260,12 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
     },
 
     async search(query: string, options?: { count?: number; country?: string }) {
-      return withTimeout(`search("${query}")`, async () => {
+      const sanitized = query
+        .replace(/[:\(\)\[\]"']/g, " ")
+        .replace(/\s+/g, " ")
+        .trim()
+        .slice(0, 80);
+      return withTimeout(`search("${sanitized}")`, async () => {
         let apiKey = process.env.BRAVE_API_KEY;
         if (!apiKey) {
           try {
@@ -276,7 +281,7 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
 
         const count = Math.min(Math.max(options?.count ?? 3, 1), 10);
         const searchUrl = new URL(BRAVE_WEB_SEARCH);
-        searchUrl.searchParams.set("q", query);
+        searchUrl.searchParams.set("q", sanitized);
         searchUrl.searchParams.set("count", String(count));
         if (options?.country) searchUrl.searchParams.set("country", options.country);
 
@@ -309,8 +314,10 @@ export function buildExecutorContext(toolFamily?: string, toolSuffix?: string, a
 
             return { ok: true as const, results };
           } catch (err) {
-            // Don't retry on explicit abort (timeout exceeded)
-            if (err instanceof Error && err.name === "AbortError") throw err;
+            if (err instanceof Error && err.name === "AbortError") {
+              logAction({ ts: Date.now(), type: "action", category: "search-api", message: `executor-ctx ${tag} → search timeout for "${sanitized.slice(0, 50)}"` });
+              return { ok: false as const, results: [] };
+            }
             lastFetchErr = err;
           } finally {
             clearTimeout(timer);

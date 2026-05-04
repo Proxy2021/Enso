@@ -26,6 +26,7 @@ import type { ConnectedClient } from "./server.js";
 import type { ResolvedEnsoAccount } from "./accounts.js";
 import type { ServerMessage, ToolBuildSummary, EnhanceResult } from "./types.js";
 import { logAction, logError, logFix } from "./action-log.js";
+import { CLAUDE_HEARTBEAT_TIMEOUT_ORCH_MS } from "./config.js";
 import { buildError } from "./errors.js";
 import { getEnsoPath } from "./utils/home.js";
 import { persistCard, DEFAULT_CONVERSATION_ID } from "./memory-bridge.js";
@@ -90,6 +91,7 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
       runId,
       targetCardId: cardId,
       skipPersist: true,
+      heartbeatTimeoutMs: CLAUDE_HEARTBEAT_TIMEOUT_ORCH_MS,
     });
     sessionId = result.sessionId;
   } catch (err) {
@@ -133,6 +135,7 @@ export async function handleBuildAppViaClaude(params: BuildViaClaude): Promise<v
           runId: randomUUID(),
           targetCardId: cardId,
           skipPersist: true,
+          heartbeatTimeoutMs: CLAUDE_HEARTBEAT_TIMEOUT_ORCH_MS,
         });
         // Re-scan and re-deliver after fix
         await postBuildRegistration(params, send, preExistingFamilies, buildStartTime);
@@ -391,6 +394,7 @@ export async function handleDeepResearchBuild(params: DeepResearchBuild): Promis
       runId,
       targetCardId: cardId,
       skipPersist: true, // Deep research results persisted by card-actions completion handler
+      heartbeatTimeoutMs: CLAUDE_HEARTBEAT_TIMEOUT_ORCH_MS,
     });
     sessionId = result.sessionId;
   } catch (err) {
@@ -448,6 +452,7 @@ export async function handleDeepResearchBuild(params: DeepResearchBuild): Promis
           runId: randomUUID(),
           targetCardId: cardId,
           skipPersist: true,
+          heartbeatTimeoutMs: CLAUDE_HEARTBEAT_TIMEOUT_ORCH_MS,
         });
 
         if (existsSync(outputFile)) {

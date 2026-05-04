@@ -10,6 +10,7 @@ import { randomUUID } from "node:crypto";
 import type { ScheduledTaskDef, ScheduledTaskRun } from "@shared/types.js";
 import { logAction, logError } from "./action-log.js";
 import { registerSession, unregisterSession } from "./session-registry.js";
+import { CLAUDE_HEARTBEAT_TIMEOUT_ORCH_MS } from "./config.js";
 
 // ── Types ──
 
@@ -95,6 +96,7 @@ async function executePromptTask(
       targetCardId,
       model: task.model,
       skipPersist: true,
+      heartbeatTimeoutMs: CLAUDE_HEARTBEAT_TIMEOUT_ORCH_MS,
     });
 
     unregisterSession(runId);

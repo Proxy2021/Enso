@@ -14,6 +14,7 @@ import { join, dirname } from "node:path";
 import { homedir, hostname } from "node:os";
 import { randomUUID } from "node:crypto";
 import { logAction, logError } from "./action-log.js";
+import { CLAUDE_HEARTBEAT_TIMEOUT_ORCH_MS } from "./config.js";
 
 // ── Types ──
 
@@ -592,7 +593,7 @@ Return JSON: {
             const { runClaudeCode } = await import("./claude-code.js");
             const account = getActiveAccount();
             if (account) {
-              runClaudeCode({ prompt, client: headlessClient, account, model: "sonnet" });
+              runClaudeCode({ prompt, client: headlessClient, account, model: "sonnet", heartbeatTimeoutMs: CLAUDE_HEARTBEAT_TIMEOUT_ORCH_MS });
               logAction({ ts: Date.now(), type: "action", category: "agent-event",
                 message: `Expert ${expert.name} launched Claude Code: ${act.message.slice(0, 80)}` });
             }
@@ -2424,6 +2425,7 @@ Be thorough but focused. When done, summarize what you changed.`;
       runId,
       targetCardId: `tl-${action.id.slice(0, 8)}`,
       model: "sonnet",
+      heartbeatTimeoutMs: CLAUDE_HEARTBEAT_TIMEOUT_ORCH_MS,
     }).then(async () => {
       action.status = "completed";
       updateActionStatus(action.id, "completed");

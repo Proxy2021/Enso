@@ -58,7 +58,7 @@ export const LLM_DEFAULT_TIMEOUT_MS = 60_000;
 export const LLM_FAST_TIMEOUT_MS = 30_000;
 export const LLM_RESEARCH_TIMEOUT_MS = 45_000;
 export const LLM_PRO_TIMEOUT_MS = 90_000;
-export const BRAVE_SEARCH_TIMEOUT_MS = 10_000;
+export const BRAVE_SEARCH_TIMEOUT_MS = 15_000;
 
 // ── Rate Limit Thresholds ──
 
