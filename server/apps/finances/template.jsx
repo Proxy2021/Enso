@@ -363,6 +363,360 @@ export default function GeneratedUI({ data, onAction }) {
     );
   }
 
+  // ── WEALTH_STATUS dashboard ──
+  if (tool === "enso_finances_wealth_status") {
+    var accts = data.accounts || [];
+    var alerts = data.alerts || [];
+    var refreshes = data.recentRefreshes || [];
+    var spark = (data.sparkline || []).filter(function(p) { return p.value > 0; });
+    var cfg = data.config || {};
+    var rs = data.refreshStatus || {};
+    var sevColors = { ok: "#10b981", warn: "#fbbf24", alert: "#f97316", critical: "#ef4444" };
+    var sevBg = { ok: "#064e3b", warn: "#713f12", alert: "#7c2d12", critical: "#7f1d1d" };
+    var alertIcons = { "daily-swing": "↕", "milestone-crossed": "⬆", "concentration": "⚖", "staleness": "⏰", "refresh-failure": "✗" };
+
+    return (
+      <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+          <button onClick={function() { onAction("list_accounts", {}); }} style={{ padding: "6px 12px", background: "#1e293b", border: "1px solid #334155", borderRadius: "6px", color: "#e2e8f0", fontSize: "12px", cursor: "pointer" }}>← Accounts</button>
+          <div style={{ display: "flex", gap: 6 }}>
+            <button onClick={function() { onAction("refresh_log", {}); }} style={{ padding: "6px 12px", background: "#1e293b", border: "1px solid #334155", borderRadius: "6px", color: "#e2e8f0", fontSize: "12px", cursor: "pointer" }}>Refresh Log</button>
+            <button onClick={function() { onAction("wealth_config", {}); }} style={{ padding: "6px 12px", background: "#1e293b", border: "1px solid #334155", borderRadius: "6px", color: "#e2e8f0", fontSize: "12px", cursor: "pointer" }}>Settings</button>
+          </div>
+        </div>
+
+        {/* Net worth hero */}
+        <div style={{ background: "linear-gradient(135deg,#0f172a,#1e1b4b)", borderRadius: "14px", padding: "20px 24px", border: "1px solid #1e293b" }}>
+          <div style={{ color: "#a5b4fc", fontSize: "11px", textTransform: "uppercase", letterSpacing: "1.5px", fontWeight: 700 }}>Wealth Monitor</div>
+          <div style={{ color: "#f8fafc", fontSize: "28px", fontWeight: 800, marginTop: "4px", fontFamily: "monospace" }}>{fmtMoney(data.primaryTotal, data.primaryCurrency)}</div>
+          {data.delta != null && (
+            <div style={{ marginTop: 4, fontSize: 13, fontFamily: "monospace" }}>
+              <span style={{ color: data.delta >= 0 ? "#10b981" : "#fca5a5", fontWeight: 700 }}>{data.delta >= 0 ? "▲" : "▼"} {fmtMoney(Math.abs(data.delta), data.primaryCurrency)}{data.deltaPct != null ? " (" + (data.delta >= 0 ? "+" : "") + data.deltaPct + "%)" : ""}</span>
+              <span style={{ color: "#64748b", marginLeft: 8 }}>vs. {data.deltaPeriod}</span>
+            </div>
+          )}
+          <div style={{ color: "#94a3b8", fontSize: "12px", marginTop: "6px" }}>
+            {data.totalAccounts} account{data.totalAccounts === 1 ? "" : "s"}
+            {" · "}{accts.filter(function(a) { return a.severity === "ok"; }).length} fresh
+            {" · "}{accts.filter(function(a) { return a.severity !== "ok"; }).length} stale
+          </div>
+
+          {/* Sparkline */}
+          {spark.length >= 2 && (function() {
+            var maxV = spark.reduce(function(m, p) { return p.value > m ? p.value : m; }, 0) || 1;
+            var minV = spark.reduce(function(m, p) { return p.value < m ? p.value : m; }, maxV);
+            var rng = Math.max(1, maxV - minV);
+            return (
+              <div style={{ marginTop: 14 }}>
+                <svg width="100%" height="40" viewBox={"0 0 " + (spark.length * 36) + " 40"} preserveAspectRatio="none" style={{ width: "100%", height: 40 }}>
+                  <polyline fill="none" stroke="#a5b4fc" strokeWidth="2"
+                    points={spark.map(function(p, i) { return (i * 36 + 18) + "," + (36 - ((p.value - minV) / rng) * 32); }).join(" ")} />
+                  {spark.map(function(p, i) { return <circle key={i} cx={i * 36 + 18} cy={36 - ((p.value - minV) / rng) * 32} r="2" fill="#c4b5fd" />; })}
+                </svg>
+                <div style={{ display: "flex", justifyContent: "space-between", color: "#475569", fontSize: 9, fontFamily: "monospace" }}>
+                  <span>{spark[0].date}</span><span>{spark[spark.length - 1].date}</span>
+                </div>
+              </div>
+            );
+          })()}
+
+          <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
+            <button onClick={function() { onAction("refresh_kk_live", {}); }} style={{ padding: "7px 14px", background: "#312e81", color: "#e0e7ff", border: "1px solid #4c1d95", borderRadius: "8px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>↻ KK_Live</button>
+            <button onClick={function() { onAction("refresh_rm_emails", {}); }} style={{ padding: "7px 14px", background: "#1e1b4b", color: "#c4b5fd", border: "1px solid #4c1d95", borderRadius: "8px", fontSize: "12px", fontWeight: 600, cursor: "pointer" }}>↻ RM Emails</button>
+          </div>
+        </div>
+
+        {/* Alerts */}
+        {alerts.length > 0 && (
+          <div style={{ background: "#0f172a", borderRadius: "10px", border: "1px solid #7f1d1d" }}>
+            <div style={{ padding: "10px 16px", borderBottom: "1px solid #1e293b", color: "#fca5a5", fontSize: "11px", textTransform: "uppercase", letterSpacing: "1.5px", fontWeight: 700 }}>
+              Active Alerts · {alerts.length}
+            </div>
+            {alerts.map(function(a, i) {
+              return (
+                <div key={i} style={{ display: "flex", alignItems: "center", padding: "10px 16px", borderTop: i === 0 ? "none" : "1px solid #1e293b", gap: "10px" }}>
+                  <span style={{ width: 24, height: 24, borderRadius: "50%", background: sevBg[a.severity] || "#1e293b", color: sevColors[a.severity] || "#94a3b8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12, fontWeight: 700, flexShrink: 0 }}>{alertIcons[a.type] || "!"}</span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: "#f1f5f9", fontSize: "13px", fontWeight: 600 }}>{a.title}</div>
+                    <div style={{ color: "#64748b", fontSize: "11px", marginTop: 1 }}>{a.type} · {a.severity}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {alerts.length === 0 && (
+          <div style={{ background: "#0f172a", borderRadius: "10px", padding: "16px 20px", border: "1px solid #064e3b", display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ color: "#10b981", fontSize: 18 }}>✓</span>
+            <span style={{ color: "#a7f3d0", fontSize: 13, fontWeight: 600 }}>No active alerts — all accounts healthy</span>
+          </div>
+        )}
+
+        {/* Account health matrix */}
+        <div style={{ background: "#0f172a", borderRadius: "10px", border: "1px solid #1e293b" }}>
+          <div style={{ padding: "10px 16px", borderBottom: "1px solid #1e293b", color: "#94a3b8", fontSize: "11px", textTransform: "uppercase", letterSpacing: "1.5px", fontWeight: 700 }}>
+            Account Health · {accts.length}
+          </div>
+          {accts.map(function(a, i) {
+            return (
+              <div key={a.accountId} onClick={function() { onAction("account_detail", { accountId: a.accountId }); }} style={{ display: "flex", alignItems: "center", padding: "10px 16px", borderTop: i === 0 ? "none" : "1px solid #1e293b", gap: "10px", cursor: "pointer" }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: sevColors[a.severity] || "#64748b", flexShrink: 0 }}></span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ color: "#f1f5f9", fontSize: "13px", fontWeight: 600 }}>{a.displayName}</div>
+                  <div style={{ color: "#64748b", fontSize: "11px" }}>
+                    {a.institution ? a.institution.toUpperCase() + " · " : ""}{a.accountType}
+                    {a.lastUpdated ? " · updated " + fmtDate(a.lastUpdated) : " · never updated"}
+                  </div>
+                </div>
+                <div style={{ textAlign: "right" }}>
+                  <div style={{ color: "#10b981", fontSize: "13px", fontWeight: 700, fontFamily: "monospace" }}>{fmtMoney(a.currentValue, a.baseCurrency)}</div>
+                  <div style={{ color: sevColors[a.severity] || "#64748b", fontSize: "10px", fontFamily: "monospace" }}>
+                    {a.severity === "ok" ? (Math.round(a.daysSinceUpdate) + "d ago") : (Math.round(a.daysSinceUpdate) + "d stale")}
+                  </div>
+                </div>
+                <div style={{ color: "#64748b", fontSize: 14 }}>›</div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Refresh schedule */}
+        <div style={{ background: "#0f172a", borderRadius: "10px", border: "1px solid #1e293b" }}>
+          <div style={{ padding: "10px 16px", borderBottom: "1px solid #1e293b", color: "#94a3b8", fontSize: "11px", textTransform: "uppercase", letterSpacing: "1.5px", fontWeight: 700 }}>Refresh Schedule</div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+            {[
+              { label: "KK Live", info: rs.kkLive || {} },
+              { label: "RM Emails", info: rs.rmEmails || {} }
+            ].map(function(r, i) {
+              return (
+                <div key={r.label} style={{ display: "flex", alignItems: "center", padding: "10px 16px", borderTop: i === 0 ? "none" : "1px solid #1e293b", gap: 10 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: r.info.enabled ? "#10b981" : "#64748b", flexShrink: 0 }}></span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: "#f1f5f9", fontSize: 13, fontWeight: 600 }}>{r.label}</div>
+                    <div style={{ color: "#64748b", fontSize: 11, fontFamily: "monospace" }}>{r.info.cron || "—"}</div>
+                  </div>
+                  <div style={{ textAlign: "right", fontSize: 11, color: "#94a3b8" }}>
+                    {r.info.lastRefresh ? fmtTime(r.info.lastRefresh) : "Never"}
+                    {r.info.lastSuccess === false && <span style={{ color: "#fca5a5", marginLeft: 4 }}>FAILED</span>}
+                    {r.info.lastSuccess === true && <span style={{ color: "#10b981", marginLeft: 4 }}>OK</span>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Notification channels */}
+        {cfg.channels && (
+          <div style={{ background: "#0f172a", borderRadius: "10px", padding: "12px 16px", border: "1px solid #1e293b", display: "flex", gap: 16, flexWrap: "wrap" }}>
+            {[
+              { label: "Email", on: cfg.channels.email },
+              { label: "WeChat", on: cfg.channels.wechat },
+              { label: "In-App", on: cfg.channels.inApp }
+            ].map(function(ch) {
+              return (
+                <div key={ch.label} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
+                  <span style={{ width: 8, height: 8, borderRadius: "50%", background: ch.on ? "#10b981" : "#475569" }}></span>
+                  <span style={{ color: ch.on ? "#cbd5e1" : "#64748b" }}>{ch.label}</span>
+                </div>
+              );
+            })}
+            <button onClick={function() { onAction("wealth_config", {}); }} style={{ marginLeft: "auto", padding: "4px 10px", background: "#1e293b", border: "1px solid #334155", borderRadius: "5px", color: "#94a3b8", fontSize: "11px", cursor: "pointer" }}>Configure →</button>
+          </div>
+        )}
+
+        {/* Recent refreshes */}
+        {refreshes.length > 0 && (
+          <div style={{ background: "#0f172a", borderRadius: "10px", border: "1px solid #1e293b" }}>
+            <div style={{ padding: "10px 16px", borderBottom: "1px solid #1e293b", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ color: "#94a3b8", fontSize: "11px", textTransform: "uppercase", letterSpacing: "1.5px", fontWeight: 700 }}>Recent Refreshes</span>
+              <button onClick={function() { onAction("refresh_log", {}); }} style={{ padding: "3px 8px", background: "#1e293b", border: "1px solid #334155", borderRadius: "4px", color: "#94a3b8", fontSize: "10px", cursor: "pointer" }}>View all →</button>
+            </div>
+            {refreshes.slice(0, 5).map(function(r, i) {
+              return (
+                <div key={i} style={{ display: "flex", padding: "8px 16px", borderTop: i === 0 ? "none" : "1px solid #1e293b", gap: 10, fontSize: 11, fontFamily: "monospace", alignItems: "center" }}>
+                  <span style={{ color: r.success ? "#10b981" : "#fca5a5", fontWeight: 700 }}>{r.success ? "✓" : "✗"}</span>
+                  <span style={{ color: "#94a3b8", width: 120 }}>{fmtTime(r.ts)}</span>
+                  <span style={{ color: "#cbd5e1" }}>{r.source}</span>
+                  <span style={{ color: "#64748b", marginLeft: "auto" }}>{(r.duration / 1000).toFixed(1)}s · {r.trigger}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── REFRESH_LOG view ──
+  if (tool === "enso_finances_refresh_log") {
+    var entries = data.entries || [];
+    return (
+      <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <button onClick={function() { onAction("wealth_status", {}); }} style={{ padding: "6px 12px", background: "#1e293b", border: "1px solid #334155", borderRadius: "6px", color: "#e2e8f0", fontSize: "12px", cursor: "pointer" }}>← Monitor</button>
+        </div>
+
+        {/* Stats header */}
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          <div style={{ flex: 1, minWidth: 100, background: "#0f172a", borderRadius: 10, padding: "12px 16px", border: "1px solid #1e293b" }}>
+            <div style={{ color: "#64748b", fontSize: 10, textTransform: "uppercase", letterSpacing: "1px" }}>Total</div>
+            <div style={{ color: "#f8fafc", fontSize: 20, fontWeight: 700, fontFamily: "monospace" }}>{data.totalRefreshes}</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 100, background: "#0f172a", borderRadius: 10, padding: "12px 16px", border: "1px solid #064e3b" }}>
+            <div style={{ color: "#64748b", fontSize: 10, textTransform: "uppercase", letterSpacing: "1px" }}>Success Rate</div>
+            <div style={{ color: "#10b981", fontSize: 20, fontWeight: 700, fontFamily: "monospace" }}>{data.successRate}%</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 100, background: "#0f172a", borderRadius: 10, padding: "12px 16px", border: "1px solid #1e293b" }}>
+            <div style={{ color: "#64748b", fontSize: 10, textTransform: "uppercase", letterSpacing: "1px" }}>Avg Duration</div>
+            <div style={{ color: "#cbd5e1", fontSize: 20, fontWeight: 700, fontFamily: "monospace" }}>{(data.avgDurationMs / 1000).toFixed(1)}s</div>
+          </div>
+          <div style={{ flex: 1, minWidth: 100, background: "#0f172a", borderRadius: 10, padding: "12px 16px", border: "1px solid #1e293b" }}>
+            <div style={{ color: "#64748b", fontSize: 10, textTransform: "uppercase", letterSpacing: "1px" }}>Last 7 Days</div>
+            <div style={{ color: "#a5b4fc", fontSize: 16, fontWeight: 700, fontFamily: "monospace" }}>
+              {data.last7Days ? data.last7Days.success : 0}<span style={{ color: "#10b981" }}>✓</span> {data.last7Days ? data.last7Days.failures : 0}<span style={{ color: "#fca5a5" }}>✗</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Entries table */}
+        <div style={{ background: "#0f172a", borderRadius: "10px", border: "1px solid #1e293b" }}>
+          <div style={{ padding: "10px 16px", borderBottom: "1px solid #1e293b", color: "#94a3b8", fontSize: "11px", textTransform: "uppercase", letterSpacing: "1.5px", fontWeight: 700 }}>
+            Refresh History · {entries.length} entries
+          </div>
+          {entries.length === 0 ? (
+            <div style={{ padding: "20px", textAlign: "center", color: "#64748b", fontSize: 13 }}>No refresh history yet.</div>
+          ) : entries.map(function(e, i) {
+            return (
+              <div key={i} style={{ display: "flex", alignItems: "center", padding: "10px 16px", borderTop: i === 0 ? "none" : "1px solid #1e293b", gap: 8, fontSize: 12 }}>
+                <span style={{ color: e.success ? "#10b981" : "#ef4444", fontWeight: 700, fontSize: 14, width: 20, textAlign: "center" }}>{e.success ? "✓" : "✗"}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <span style={{ color: "#f1f5f9", fontWeight: 600, fontFamily: "monospace" }}>{e.source}</span>
+                    <span style={{ color: "#64748b", fontFamily: "monospace" }}>{fmtTime(e.ts)}</span>
+                    <span style={{ background: "#1e293b", color: "#94a3b8", padding: "1px 6px", borderRadius: 3, fontSize: 10 }}>{e.trigger}</span>
+                  </div>
+                  <div style={{ color: "#94a3b8", fontSize: 11, marginTop: 2, fontFamily: "monospace" }}>
+                    {e.success ? (
+                      <span>{e.accountsUpdated} account{e.accountsUpdated === 1 ? "" : "s"} · {e.newStatements || 0} statements · {(e.duration / 1000).toFixed(1)}s
+                        {e.netWorthDelta != null ? " · Δ " + (e.netWorthDelta >= 0 ? "+" : "") + Math.round(e.netWorthDelta).toLocaleString() : ""}
+                      </span>
+                    ) : (
+                      <span style={{ color: "#fca5a5" }}>{e.error || "Unknown error"}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
+  // ── WEALTH_CONFIG view ──
+  if (tool === "enso_finances_wealth_config") {
+    var c = data.config || {};
+    var sched = c.refreshSchedule || {};
+    var stale = c.staleness || {};
+    var thresh = c.thresholds || {};
+    var chan = c.channels || {};
+    return (
+      <div style={{ padding: "4px 0", display: "flex", flexDirection: "column", gap: "12px" }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <button onClick={function() { onAction("wealth_status", {}); }} style={{ padding: "6px 12px", background: "#1e293b", border: "1px solid #334155", borderRadius: "6px", color: "#e2e8f0", fontSize: "12px", cursor: "pointer" }}>← Monitor</button>
+          {data.updated && <span style={{ color: "#10b981", fontSize: 12, fontWeight: 600 }}>✓ Settings saved</span>}
+        </div>
+
+        {/* Refresh schedule */}
+        <div style={{ background: "#0f172a", borderRadius: "10px", border: "1px solid #1e293b" }}>
+          <div style={{ padding: "10px 16px", borderBottom: "1px solid #1e293b", color: "#94a3b8", fontSize: "11px", textTransform: "uppercase", letterSpacing: "1.5px", fontWeight: 700 }}>Refresh Schedule</div>
+          {[
+            { label: "KK Live", info: sched.kkLive || {}, enableKey: "kkLiveEnabled", cronKey: "kkLiveCron" },
+            { label: "RM Emails", info: sched.rmEmails || {}, enableKey: "rmEmailsEnabled", cronKey: "rmEmailsCron" }
+          ].map(function(r, i) {
+            return (
+              <div key={r.label} style={{ display: "flex", alignItems: "center", padding: "12px 16px", borderTop: i === 0 ? "none" : "1px solid #1e293b", gap: 12 }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: r.info.enabled ? "#10b981" : "#475569", flexShrink: 0 }}></span>
+                <div style={{ flex: 1 }}>
+                  <div style={{ color: "#f1f5f9", fontSize: 13, fontWeight: 600 }}>{r.label}</div>
+                  <div style={{ color: "#64748b", fontSize: 11, fontFamily: "monospace" }}>cron: {r.info.cron || "—"}</div>
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button onClick={function() {
+                    var p = { action: "update" };
+                    p[r.enableKey] = !r.info.enabled;
+                    onAction("wealth_config", p);
+                  }} style={{ padding: "4px 10px", background: r.info.enabled ? "#064e3b" : "#1e293b", border: "1px solid " + (r.info.enabled ? "#10b981" : "#334155"), borderRadius: 5, color: r.info.enabled ? "#a7f3d0" : "#94a3b8", fontSize: 11, cursor: "pointer", fontWeight: 600 }}>
+                    {r.info.enabled ? "Enabled" : "Disabled"}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Staleness thresholds */}
+        <div style={{ background: "#0f172a", borderRadius: "10px", border: "1px solid #1e293b" }}>
+          <div style={{ padding: "10px 16px", borderBottom: "1px solid #1e293b", color: "#94a3b8", fontSize: "11px", textTransform: "uppercase", letterSpacing: "1.5px", fontWeight: 700 }}>Staleness Thresholds</div>
+          <div style={{ padding: "12px 16px", display: "flex", gap: 20, flexWrap: "wrap", fontSize: 12 }}>
+            <div>
+              <div style={{ color: "#fbbf24", fontSize: 10, textTransform: "uppercase", letterSpacing: "1px" }}>Warn</div>
+              <div style={{ color: "#f1f5f9", fontSize: 18, fontWeight: 700, fontFamily: "monospace" }}>{stale.warnDays || 7}d</div>
+            </div>
+            <div>
+              <div style={{ color: "#f97316", fontSize: 10, textTransform: "uppercase", letterSpacing: "1px" }}>Alert</div>
+              <div style={{ color: "#f1f5f9", fontSize: 18, fontWeight: 700, fontFamily: "monospace" }}>{stale.alertDays || 14}d</div>
+            </div>
+            <div>
+              <div style={{ color: "#ef4444", fontSize: 10, textTransform: "uppercase", letterSpacing: "1px" }}>Critical</div>
+              <div style={{ color: "#f1f5f9", fontSize: 18, fontWeight: 700, fontFamily: "monospace" }}>{stale.criticalDays || 30}d</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Alert thresholds */}
+        <div style={{ background: "#0f172a", borderRadius: "10px", border: "1px solid #1e293b" }}>
+          <div style={{ padding: "10px 16px", borderBottom: "1px solid #1e293b", color: "#94a3b8", fontSize: "11px", textTransform: "uppercase", letterSpacing: "1.5px", fontWeight: 700 }}>Alert Thresholds</div>
+          <div style={{ padding: "12px 16px", display: "flex", gap: 20, flexWrap: "wrap", fontSize: 12 }}>
+            <div>
+              <div style={{ color: "#64748b", fontSize: 10, textTransform: "uppercase", letterSpacing: "1px" }}>Daily Swing</div>
+              <div style={{ color: "#f1f5f9", fontSize: 18, fontWeight: 700, fontFamily: "monospace" }}>{thresh.dailyChangePct || 3}%</div>
+            </div>
+            <div>
+              <div style={{ color: "#64748b", fontSize: 10, textTransform: "uppercase", letterSpacing: "1px" }}>Concentration</div>
+              <div style={{ color: "#f1f5f9", fontSize: 18, fontWeight: 700, fontFamily: "monospace" }}>{thresh.concentrationPct || 25}%</div>
+            </div>
+          </div>
+        </div>
+
+        {/* Notification channels */}
+        <div style={{ background: "#0f172a", borderRadius: "10px", border: "1px solid #1e293b" }}>
+          <div style={{ padding: "10px 16px", borderBottom: "1px solid #1e293b", color: "#94a3b8", fontSize: "11px", textTransform: "uppercase", letterSpacing: "1.5px", fontWeight: 700 }}>Notification Channels</div>
+          {[
+            { label: "Email", on: chan.email, key: "emailEnabled" },
+            { label: "WeChat", on: chan.wechat, key: "wechatEnabled" },
+            { label: "In-App", on: chan.inApp, key: "inAppEnabled" }
+          ].map(function(ch, i) {
+            return (
+              <div key={ch.label} style={{ display: "flex", alignItems: "center", padding: "10px 16px", borderTop: i === 0 ? "none" : "1px solid #1e293b", gap: 10 }}>
+                <span style={{ color: "#f1f5f9", fontSize: 13, fontWeight: 600, flex: 1 }}>{ch.label}</span>
+                <button onClick={function() {
+                  var p = { action: "update" };
+                  p[ch.key] = !ch.on;
+                  onAction("wealth_config", p);
+                }} style={{ padding: "5px 14px", background: ch.on ? "#064e3b" : "#1e293b", border: "1px solid " + (ch.on ? "#10b981" : "#334155"), borderRadius: 6, color: ch.on ? "#a7f3d0" : "#94a3b8", fontSize: 12, cursor: "pointer", fontWeight: 600 }}>
+                  {ch.on ? "ON" : "OFF"}
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   // ── LIST_ACCOUNTS view (primary) ──
   if (data.error) {
     return (

@@ -4,7 +4,7 @@
   "spec": {
     "toolFamily": "finances",
     "toolPrefix": "enso_finances_",
-    "description": "Financial accounts dashboard — unified view across brokerage and private-bank accounts. Each account is a Cortex entity; each periodic statement is its own synthesis page. Privacy: all data lives at ~/.enso/wiki/ and ~/.enso/data/finances/ (local only — never committed to git).",
+    "description": "Financial accounts dashboard — unified view across brokerage and private-bank accounts with wealth monitoring, refresh logs, and notification settings. Each account is a Cortex entity; each periodic statement is its own synthesis page. Privacy: all data lives at ~/.enso/wiki/ and ~/.enso/data/finances/ (local only — never committed to git).",
     "signatureId": "finances_dashboard",
     "tools": [
       {
@@ -154,6 +154,95 @@
           "message": "Processed 0 banks (no entries in config)."
         },
         "requiredDataKeys": ["tool", "success"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "wealth_status",
+        "description": "Wealth monitoring dashboard: shows all accounts with staleness indicators, active alerts (daily swings, milestone crossings, concentration risk, refresh failures), refresh schedule status, and net worth sparkline. Use when user says 'wealth status', 'account health', 'wealth dashboard', 'monitoring dashboard'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {}
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_finances_wealth_status",
+          "totalAccounts": 2,
+          "primaryCurrency": "USD",
+          "primaryTotal": 1234567,
+          "delta": 5000,
+          "deltaPct": 0.4,
+          "deltaPeriod": "2026-05-04",
+          "accounts": [{"accountId": "A1", "displayName": "Sample", "severity": "ok", "currentValue": 1234567, "daysSinceUpdate": 1.2}],
+          "alerts": [],
+          "refreshStatus": {"kkLive": {"enabled": true, "lastRefresh": null}, "rmEmails": {"enabled": true, "lastRefresh": null}},
+          "recentRefreshes": [],
+          "sparkline": [],
+          "config": {"staleness": {"warnDays": 7}, "thresholds": {"dailyChangePct": 3.0}, "channels": {"email": true}}
+        },
+        "requiredDataKeys": ["tool", "accounts"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "refresh_log",
+        "description": "Show history of all wealth data refreshes with success/failure status, duration, accounts updated, and net worth deltas. Use when user says 'refresh history', 'refresh log', 'what refreshes ran'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "limit": {"type": "number", "description": "Max entries to return (default 50, max 200)."},
+            "source": {"type": "string", "description": "Filter by source: 'kk-live' or 'rm-emails'."}
+          }
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_finances_refresh_log",
+          "totalRefreshes": 10,
+          "successCount": 8,
+          "failureCount": 2,
+          "successRate": 80,
+          "avgDurationMs": 5000,
+          "last7Days": {"total": 5, "success": 4, "failures": 1},
+          "entries": [{"ts": "2026-05-05T08:00:00Z", "source": "kk-live", "success": true, "duration": 3200, "accountsUpdated": 1, "trigger": "scheduled"}]
+        },
+        "requiredDataKeys": ["tool", "entries"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "wealth_config",
+        "description": "View or update wealth monitoring settings: refresh schedule (KK Live, RM emails), staleness thresholds, alert thresholds (daily change %, concentration), and notification channels (email, WeChat, in-app). Use when user says 'wealth settings', 'configure monitoring', 'notification settings'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "action": {"type": "string", "description": "'view' (default) or 'update' to save changes."},
+            "kkLiveEnabled": {"type": "boolean", "description": "Enable/disable KK Live auto-refresh."},
+            "kkLiveCron": {"type": "string", "description": "Cron for KK Live refresh."},
+            "rmEmailsEnabled": {"type": "boolean", "description": "Enable/disable RM emails auto-refresh."},
+            "rmEmailsCron": {"type": "string", "description": "Cron for RM emails refresh."},
+            "warnDays": {"type": "number", "description": "Days before staleness warning."},
+            "alertDays": {"type": "number", "description": "Days before staleness alert."},
+            "criticalDays": {"type": "number", "description": "Days before critical staleness."},
+            "dailyChangePct": {"type": "number", "description": "Daily swing alert threshold (%)."},
+            "concentrationPct": {"type": "number", "description": "Single-position concentration threshold (%)."},
+            "emailEnabled": {"type": "boolean", "description": "Enable email notifications."},
+            "wechatEnabled": {"type": "boolean", "description": "Enable WeChat notifications."},
+            "inAppEnabled": {"type": "boolean", "description": "Enable in-app notifications."}
+          }
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_finances_wealth_config",
+          "action": "view",
+          "updated": false,
+          "config": {
+            "refreshSchedule": {"kkLive": {"enabled": true, "cron": "0 8 * * 1-5"}, "rmEmails": {"enabled": true, "cron": "0 9 * * 1"}},
+            "staleness": {"warnDays": 7, "alertDays": 14, "criticalDays": 30},
+            "thresholds": {"dailyChangePct": 3.0, "concentrationPct": 25},
+            "channels": {"email": true, "wechat": true, "inApp": true}
+          }
+        },
+        "requiredDataKeys": ["tool", "config"],
         "isPrimary": false
       }
     ]

@@ -61,6 +61,10 @@ export interface SystemSignals {
     staleAccounts: number;
     line: string;
   } | null;
+  /** Wealth monitoring alerts (threshold breaches, staleness escalation, refresh failures) */
+  wealthAlerts?: Array<{ type: string; severity: string; title: string; detail: string }>;
+  /** Scheduled wealth refreshes that are due now */
+  wealthRefreshDue?: Array<{ source: string }>;
   /** YouTube OAuth token health. Undefined when YouTube not configured. */
   youtubeAuth?: {
     status: "valid" | "expired" | "warning" | "unknown";
@@ -1081,25 +1085,32 @@ export async function gatherSignals(): Promise<SystemSignals> {
     id: t.id, title: t.title, description: t.description, source: t.source,
   }));
 
-  // Finances rollup (local read; null when no accounts indexed yet)
+  // Finances rollup with wealth monitoring (threshold alerts, staleness, refresh status)
   let finances: SystemSignals["finances"] = null;
+  let wealthAlerts: Array<{ type: string; severity: string; title: string; detail: string }> = [];
+  let wealthRefreshDue: Array<{ source: string }> = [];
   try {
-    const { getFinancesSnapshot, getFinancesBriefingLine } = await import("./finances-summary.js");
-    const snap = getFinancesSnapshot();
-    const line = getFinancesBriefingLine();
-    if (snap && line) {
+    const { evaluateWealthSignals, shouldRefreshNow } = await import("./wealth-monitor.js");
+    const wealthSignal = await evaluateWealthSignals();
+    if (wealthSignal.snapshot) {
       finances = {
-        accountCount: snap.accountCount,
-        primaryCurrency: snap.primaryCurrency,
-        primaryTotal: snap.primaryTotal,
-        delta: snap.delta,
-        deltaPct: snap.deltaPct,
-        deltaPeriod: snap.deltaPeriod,
-        staleAccounts: snap.staleAccounts,
-        line,
+        accountCount: wealthSignal.snapshot.accountCount,
+        primaryCurrency: wealthSignal.snapshot.primaryCurrency,
+        primaryTotal: wealthSignal.snapshot.primaryTotal,
+        delta: wealthSignal.snapshot.delta,
+        deltaPct: wealthSignal.snapshot.deltaPct,
+        deltaPeriod: wealthSignal.snapshot.deltaPeriod,
+        staleAccounts: wealthSignal.snapshot.staleAccounts,
+        line: wealthSignal.briefingLine,
       };
+    } else {
+      finances = null;
     }
-  } catch { /* finances module not available — non-fatal */ }
+    wealthAlerts = wealthSignal.alerts;
+    // Check if any scheduled refresh is due
+    if (shouldRefreshNow("kk-live")) wealthRefreshDue.push({ source: "kk-live" });
+    if (shouldRefreshNow("rm-emails")) wealthRefreshDue.push({ source: "rm-emails" });
+  } catch { /* wealth-monitor not available — non-fatal */ }
 
   // YouTube auth health
   let youtubeAuth: SystemSignals["youtubeAuth"] = undefined;
@@ -1142,7 +1153,7 @@ export async function gatherSignals(): Promise<SystemSignals> {
   return {
     recentErrors, recentActions, focusAnalyses, cortexStats, taskResults,
     platformHealth: { errorRate, failedTasks, uptimeHours: Math.round(process.uptime() / 3600) },
-    pendingReacts, pendingTasks, finances, youtubeAuth, kindleAuth,
+    pendingReacts, pendingTasks, finances, wealthAlerts, wealthRefreshDue, youtubeAuth, kindleAuth,
   };
 }
 
@@ -1201,6 +1212,12 @@ export async function assessAndPrioritize(signals: SystemSignals): Promise<TeamL
     "",
     `## Wealth`,
     signals.finances ? signals.finances.line : "No financial accounts indexed yet.",
+    signals.wealthAlerts && signals.wealthAlerts.length > 0
+      ? `Alerts:\n${signals.wealthAlerts.map(a => `  - [${a.severity.toUpperCase()}] ${a.title}`).join("\n")}`
+      : "",
+    signals.wealthRefreshDue && signals.wealthRefreshDue.length > 0
+      ? `Scheduled refresh DUE NOW: ${signals.wealthRefreshDue.map(r => r.source).join(", ")}. Action needed: execute "wealth-refresh" with source param.`
+      : "",
     "",
     `## YouTube Auth`,
     signals.youtubeAuth
@@ -1577,8 +1594,13 @@ export async function executeActions(actions: TeamLeaderAction[]): Promise<TeamL
         }
 
         case "self": {
-          // TL handles directly — log and complete
-          action.status = "completed";
+          const selfTitleLower = action.title.toLowerCase();
+          // Wealth refresh action
+          if (selfTitleLower.includes("wealth") && selfTitleLower.includes("refresh")) {
+            await handleWealthRefresh(action);
+          } else {
+            action.status = "completed";
+          }
           break;
         }
 
@@ -1644,6 +1666,51 @@ export async function executeActions(actions: TeamLeaderAction[]): Promise<TeamL
 }
 
 // ── 5a. Expert Team Management ──
+
+/**
+ * Execute a wealth refresh and send completion/failure notification.
+ */
+async function handleWealthRefresh(action: TeamLeaderAction): Promise<void> {
+  const { executeWealthRefresh, formatRefreshResultNotification } = await import("./wealth-monitor.js");
+
+  // Determine which source to refresh from the action title
+  const titleLower = action.title.toLowerCase();
+  let source: "kk-live" | "rm-emails" = "kk-live";
+  if (titleLower.includes("rm") || titleLower.includes("email")) source = "rm-emails";
+
+  const result = await executeWealthRefresh(source, "scheduled");
+  const notification = formatRefreshResultNotification(result);
+
+  // Send notification via email
+  try {
+    const { sendBriefingEmail } = await import("./email.js");
+    await sendBriefingEmail({
+      to: undefined as any, // uses default configured email
+      subject: notification.subject,
+      html: notification.html,
+    });
+  } catch (err) {
+    logError("wealth-monitor", "Failed to send refresh notification email", err);
+  }
+
+  // Send WeChat notification for failures
+  if (!result.success) {
+    try {
+      const { getFollowerOpenIds, isWithinServiceWindow, sendTextMessage } = await import("./wechat.js");
+      const followers = await getFollowerOpenIds();
+      for (const openId of followers) {
+        if (!isWithinServiceWindow(openId)) continue;
+        await sendTextMessage(openId, notification.wechat);
+        break;
+      }
+    } catch { /* WeChat not configured — non-fatal */ }
+  }
+
+  action.status = result.success ? "completed" : "proposed";
+  if (!result.success) {
+    action.reasoning += ` [FAILED: ${result.error}]`;
+  }
+}
 
 /**
  * Generate expert teams for focus areas that don't have them yet.
