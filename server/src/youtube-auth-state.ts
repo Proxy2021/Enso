@@ -10,11 +10,12 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 
 export interface YouTubeAuthState {
-  status: "valid" | "expired" | "unknown";
+  status: "valid" | "expired" | "warning" | "unknown";
   lastChecked: number;
   lastError?: string;
   consecutiveFailures: number;
   lastReauthNotified?: number;
+  lastAuthSuccess?: number;
 }
 
 const STATE_PATH = join(homedir(), ".enso", "data", "youtube-auth-state.json");
@@ -78,5 +79,22 @@ export function clearAuthState(): void {
   state.lastError = undefined;
   state.consecutiveFailures = 0;
   state.lastReauthNotified = undefined;
+  state.lastAuthSuccess = Date.now();
+  persistToDisk();
+}
+
+export function setAuthWarning(): void {
+  state.status = "warning";
+  state.lastChecked = Date.now();
+  persistToDisk();
+}
+
+export function getTokenAgeDays(): number {
+  if (!state.lastAuthSuccess) return Infinity;
+  return (Date.now() - state.lastAuthSuccess) / 86_400_000;
+}
+
+export function setLastAuthSuccess(): void {
+  state.lastAuthSuccess = Date.now();
   persistToDisk();
 }

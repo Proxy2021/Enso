@@ -63,10 +63,12 @@ export interface SystemSignals {
   } | null;
   /** YouTube OAuth token health. Undefined when YouTube not configured. */
   youtubeAuth?: {
-    status: "valid" | "expired" | "unknown";
+    status: "valid" | "expired" | "warning" | "unknown";
     lastChecked: number;
     consecutiveFailures: number;
     lastError?: string;
+    tokenAgeDays?: number;
+    daysUntilExpiry?: number;
   };
   /** Kindle auth session state — proactive detection of expired Amazon sessions */
   kindleAuth?: {
@@ -1102,7 +1104,7 @@ export async function gatherSignals(): Promise<SystemSignals> {
   // YouTube auth health
   let youtubeAuth: SystemSignals["youtubeAuth"] = undefined;
   try {
-    const { getAuthState } = await import("./youtube-auth-state.js");
+    const { getAuthState, getTokenAgeDays, setAuthWarning } = await import("./youtube-auth-state.js");
     const { isAuthorized, checkTokenHealth } = await import("./youtube-auth.js");
     const { setAuthValid, setAuthExpired } = await import("./youtube-auth-state.js");
     if (isAuthorized()) {
@@ -1114,11 +1116,18 @@ export async function gatherSignals(): Promise<SystemSignals> {
         else setAuthExpired(health.error || "unknown");
       }
       const fresh = getAuthState();
+      const ageDays = getTokenAgeDays();
+      if (fresh.status === "valid" && ageDays > 5) {
+        setAuthWarning();
+      }
+      const latest = getAuthState();
       youtubeAuth = {
-        status: fresh.status,
-        lastChecked: fresh.lastChecked,
-        consecutiveFailures: fresh.consecutiveFailures,
-        lastError: fresh.lastError,
+        status: latest.status,
+        lastChecked: latest.lastChecked,
+        consecutiveFailures: latest.consecutiveFailures,
+        lastError: latest.lastError,
+        tokenAgeDays: isFinite(ageDays) ? Math.round(ageDays * 10) / 10 : undefined,
+        daysUntilExpiry: isFinite(ageDays) ? Math.round((7 - ageDays) * 10) / 10 : undefined,
       };
     }
   } catch { /* youtube module not available */ }
@@ -1197,7 +1206,9 @@ export async function assessAndPrioritize(signals: SystemSignals): Promise<TeamL
     signals.youtubeAuth
       ? signals.youtubeAuth.status === "valid"
         ? `Status: VALID (checked ${new Date(signals.youtubeAuth.lastChecked).toISOString()})`
-        : `Status: EXPIRED since ${new Date(signals.youtubeAuth.lastChecked).toISOString()} — failures: ${signals.youtubeAuth.consecutiveFailures}. Error: ${signals.youtubeAuth.lastError || "unknown"}. Action needed: send re-auth notification with priority critical.`
+        : signals.youtubeAuth.status === "warning"
+          ? `Status: WARNING — Token is ${signals.youtubeAuth.tokenAgeDays ?? "?"} days old, likely expires in ~${signals.youtubeAuth.daysUntilExpiry ?? "?"} days (Google Testing mode 7-day limit). Action needed: send proactive re-auth notification before token expires. User should re-authorize at /api/youtube/auth. Tip: publish OAuth consent screen to Production to eliminate 7-day expiry.`
+          : `Status: EXPIRED since ${new Date(signals.youtubeAuth.lastChecked).toISOString()} — failures: ${signals.youtubeAuth.consecutiveFailures}. Error: ${signals.youtubeAuth.lastError || "unknown"}. Action needed: send re-auth notification with priority critical.`
       : "YouTube not configured.",
     "",
     `## Kindle Auth`,

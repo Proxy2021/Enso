@@ -12,9 +12,9 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { saveApiKey } from "./api-keys.js";
 import { logAction, logError } from "./action-log.js";
-import { getAuthState, setAuthValid, setAuthExpired, shouldNotify, markNotified, clearAuthState } from "./youtube-auth-state.js";
+import { getAuthState, setAuthValid, setAuthExpired, shouldNotify, markNotified, clearAuthState, setLastAuthSuccess } from "./youtube-auth-state.js";
 
-const SCOPES = ["https://www.googleapis.com/auth/youtube"];
+const SCOPES = ["https://www.googleapis.com/auth/youtube.readonly"];
 const REDIRECT_PATH = "/api/youtube/callback";
 
 /** Create an OAuth2 client from stored credentials */
@@ -71,6 +71,7 @@ export async function handleCallback(code: string, baseUrl?: string): Promise<{ 
 
     // Clear auth-expired notification state so next startup/scan is clean
     clearAuthState();
+    setLastAuthSuccess();
     try {
       const notifyPath = join(homedir(), ".enso", "data", "youtube-auth-notify.json");
       if (existsSync(notifyPath)) writeFileSync(notifyPath, JSON.stringify({ ts: 0 }));
@@ -196,4 +197,4 @@ export async function callWithAuthGuard<T>(
 }
 
 /** Re-export state accessors for use by other modules */
-export { getAuthState, setAuthValid as markTokenValid, clearAuthState } from "./youtube-auth-state.js";
+export { getAuthState, setAuthValid as markTokenValid, clearAuthState, getTokenAgeDays, setAuthWarning } from "./youtube-auth-state.js";
