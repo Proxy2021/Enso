@@ -3026,8 +3026,12 @@ export async function runCheckIn(): Promise<{ urgent: boolean; message: string }
   const urgent = signals.recentErrors.filter(e => Date.now() - e.ts < 6 * 60 * 60 * 1000);
   const unreviewedFocus = signals.focusAnalyses.filter(f => f.hasUnreviewedResults);
   const failedTasks = signals.platformHealth.failedTasks;
+  // Stale wealth accounts at alert/critical severity (warn-level is handled by morning briefing)
+  const staleWealthAlerts = (signals.wealthAlerts ?? []).filter(
+    a => a.type === "staleness" && (a.severity === "warn" || a.severity === "critical")
+  );
 
-  if (urgent.length === 0 && unreviewedFocus.length === 0 && failedTasks.length === 0) {
+  if (urgent.length === 0 && unreviewedFocus.length === 0 && failedTasks.length === 0 && staleWealthAlerts.length === 0) {
     const state = loadState();
     state.lastCheckInAt = new Date().toISOString();
     saveState(state);
@@ -3039,6 +3043,9 @@ export async function runCheckIn(): Promise<{ urgent: boolean; message: string }
   if (urgent.length > 0) items.push(`${urgent.length} error(s) in last 6h`);
   if (unreviewedFocus.length > 0) items.push(`${unreviewedFocus.length} focus area(s) with unreviewed results`);
   if (failedTasks.length > 0) items.push(`${failedTasks.length} failed task(s): ${failedTasks.join(", ")}`);
+  if (staleWealthAlerts.length > 0) {
+    items.push(`${staleWealthAlerts.length} wealth account(s) critically stale: ${staleWealthAlerts.map(a => a.title).join("; ")}`);
+  }
 
   const message = `⚠️ Attention needed: ${items.join("; ")}`;
 
@@ -3050,12 +3057,22 @@ export async function runCheckIn(): Promise<{ urgent: boolean; message: string }
       const email = getNotifyEmail();
       if (email) {
         const { sendHtmlEmail } = await import("./email.js");
+        const staleSection = staleWealthAlerts.length > 0
+          ? `<div style="margin-top:16px;padding:12px;background:#1f2937;border-radius:8px;">
+              <p style="color:#fbbf24;font-size:13px;font-weight:600;margin:0 0 8px;">💰 Stale Wealth Accounts</p>
+              <ul style="color:#d1d5db;font-size:13px;margin:0;padding-left:16px;">
+                ${staleWealthAlerts.map(a => `<li style="margin:4px 0">${a.title}</li>`).join("")}
+              </ul>
+              <p style="color:#6b7280;font-size:12px;margin:8px 0 0">Open the Finances app and run a refresh to update your net worth.</p>
+            </div>`
+          : "";
         await sendHtmlEmail({
           to: email,
           subject: `⚠️ Enso Alert — ${items.length} item(s) need attention`,
           html: `<div style="max-width:600px;margin:0 auto;background:#111827;border-radius:12px;padding:24px;font-family:-apple-system,sans-serif;color:#f9fafb;">
             <h2 style="color:#fbbf24;margin:0 0 12px;">⚠️ Enso Alert</h2>
             <ul style="color:#d1d5db;font-size:14px;">${items.map(i => `<li>${i}</li>`).join("")}</ul>
+            ${staleSection}
             <a href="${getEnsoUrl()}" style="display:inline-block;margin-top:16px;background:#7c3aed;color:#fff;padding:8px 20px;border-radius:8px;text-decoration:none;font-size:14px;">Open Enso →</a>
           </div>`,
           textFallback: message,

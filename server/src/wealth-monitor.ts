@@ -232,18 +232,24 @@ export async function evaluateWealthSignals(): Promise<WealthSignal> {
     };
   });
 
-  // Staleness alerts (only alert+ severity)
+  // Staleness alerts — warn+ severity generates reminders; alert/critical escalate severity
   for (const s of accountStaleness) {
-    if (s.severity === "alert" || s.severity === "critical") {
+    if (s.severity === "warn" || s.severity === "alert" || s.severity === "critical") {
+      const alertSeverity: WealthAlert["severity"] =
+        s.severity === "critical" ? "critical" : s.severity === "alert" ? "warn" : "info";
+      const threshold =
+        s.severity === "critical" ? config.staleness.criticalDays
+        : s.severity === "alert" ? config.staleness.alertDays
+        : config.staleness.warnDays;
       alerts.push({
         id: randomUUID(),
         type: "staleness",
-        severity: s.severity === "critical" ? "critical" : "warn",
-        title: `${s.displayName} data is ${Math.round(s.daysSinceUpdate)} days old`,
-        detail: `Account "${s.displayName}" has not been refreshed in ${Math.round(s.daysSinceUpdate)} days. Consider running a refresh.`,
+        severity: alertSeverity,
+        title: `${s.displayName} needs a refresh (${Math.round(s.daysSinceUpdate)}d old)`,
+        detail: `Account "${s.displayName}" has not been refreshed in ${Math.round(s.daysSinceUpdate)} days. Run a wealth refresh to keep net worth accurate.`,
         accountId: s.accountId,
         value: s.daysSinceUpdate,
-        threshold: s.severity === "critical" ? config.staleness.criticalDays : config.staleness.alertDays,
+        threshold,
       });
     }
   }
@@ -601,12 +607,14 @@ export function formatWealthNotification(signal: WealthSignal): {
   }
 
   if (signal.accountStaleness.some(a => a.severity !== "ok")) {
-    htmlParts.push(`<h3 style="margin:16px 0 8px;font-size:14px">Staleness</h3>`);
+    htmlParts.push(`<h3 style="margin:16px 0 8px;font-size:14px">Account Refresh Needed</h3>`);
     htmlParts.push(`<ul style="padding-left:16px;margin:0">`);
     for (const s of signal.accountStaleness.filter(a => a.severity !== "ok")) {
-      htmlParts.push(`<li style="margin:4px 0">${s.displayName}: ${Math.round(s.daysSinceUpdate)}d old [${s.severity}]</li>`);
+      const icon = s.severity === "critical" ? "🔴" : s.severity === "alert" ? "🟡" : "🔵";
+      htmlParts.push(`<li style="margin:4px 0">${icon} ${s.displayName}: ${Math.round(s.daysSinceUpdate)}d since last refresh [${s.severity}]</li>`);
     }
     htmlParts.push(`</ul>`);
+    htmlParts.push(`<p style="color:#888;font-size:12px;margin:8px 0 0">Run <code>enso_finances_refresh_kk_live</code> or <code>enso_finances_refresh_rm_emails</code> to update.</p>`);
   }
 
   const html = htmlParts.join("\n");
@@ -635,8 +643,9 @@ export function formatWealthNotification(signal: WealthSignal): {
     items.push(`Net worth: ${fmtMoney(snap.primaryTotal, snap.primaryCurrency)}${snap.deltaPct != null ? ` (${dir}${snap.deltaPct}%)` : ""}`);
   }
   for (const a of signal.alerts) items.push(`[${a.severity.toUpperCase()}] ${a.title}`);
-  if (staleCount > 0 && !signal.alerts.some(a => a.type === "staleness")) {
-    items.push(`${staleCount} account${staleCount > 1 ? "s" : ""} need refresh`);
+  if (staleCount > 0) {
+    const reminderAccounts = signal.accountStaleness.filter(a => a.severity !== "ok");
+    items.push(`${staleCount} account${staleCount > 1 ? "s" : ""} need refresh: ${reminderAccounts.map(a => `${a.displayName} (${Math.round(a.daysSinceUpdate)}d)`).join(", ")}`);
   }
 
   return {
