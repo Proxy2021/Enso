@@ -668,7 +668,17 @@ export async function startEnsoServer(opts: {
       const token = req.headers.authorization?.replace("Bearer ", "")
         || (req.query.token as string | undefined);
       if (token !== accessToken) {
-        res.status(401).json({ error: "Unauthorized" });
+        const authCode = token ? "AUTH_INVALID" : "AUTH_MISSING";
+        const userMessage = token ? "Access token is incorrect" : "Connection requires an access token";
+        res.status(401).json({
+          error: userMessage,
+          authError: {
+            code: authCode,
+            service: "enso",
+            userMessage,
+            recovery: { type: "check-settings", label: "Update Connection", action: "open-connection-picker" },
+          },
+        });
         return;
       }
       next();
@@ -691,7 +701,15 @@ export async function startEnsoServer(opts: {
       const hasToken = req.headers.authorization?.replace("Bearer ", "") === accessToken
         || req.query.token === accessToken;
       if (!isSameOrigin && !hasToken) {
-        res.status(401).json({ error: "Unauthorized" });
+        res.status(401).json({
+          error: "Access token is incorrect",
+          authError: {
+            code: "AUTH_INVALID",
+            service: "enso",
+            userMessage: "Access token is incorrect",
+            recovery: { type: "check-settings", label: "Update Connection", action: "open-connection-picker" },
+          },
+        });
         return;
       }
     }
@@ -2266,6 +2284,12 @@ Return ONLY JSON.`;
     } catch (err) {
       res.status(500).send(htmlPage("Error", `Failed: ${err instanceof Error ? err.message : String(err)}`, "error"));
     }
+  });
+
+  // ── Auth Health API ──
+  app.get("/api/auth-health", async (_req, res) => {
+    const { getAllHealth } = await import("./auth-health.js");
+    res.json(getAllHealth());
   });
 
   // ── Cortex Stats API ──
@@ -4383,7 +4407,14 @@ BEHAVIOR:
       const origin = req.headers.origin ?? "";
       const isSameOrigin = origin === `http://${req.headers.host}` || origin === `https://${req.headers.host}`;
       if (!isSameOrigin && wsUrl.searchParams.get("token") !== accessToken) {
-        ws.close(4001, "Unauthorized");
+        const wsToken = wsUrl.searchParams.get("token");
+        ws.send(JSON.stringify({
+          type: "auth_error",
+          code: wsToken ? "AUTH_INVALID" : "AUTH_MISSING",
+          userMessage: wsToken ? "Access token is invalid" : "Connection requires an access token",
+          recovery: { type: "check-settings", label: "Update Connection", action: "open-connection-picker" },
+        }));
+        setTimeout(() => ws.close(4001, "Unauthorized"), 100);
         return;
       }
     }

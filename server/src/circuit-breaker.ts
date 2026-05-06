@@ -85,6 +85,18 @@ export class CircuitBreaker {
       logError("circuit-breaker", `${this.opts.name} circuit tripped OPEN after ${this.failures} failures`, undefined, { severity: "warning" });
     }
   }
+
+  /**
+   * Trip the breaker immediately on auth failure (401/403).
+   * Skips the normal failure count threshold — auth errors are deterministic,
+   * not transient, so retrying is wasteful.
+   */
+  recordAuthFailure(reason: string): void {
+    this.failures = this.opts.failureThreshold;
+    this.lastFailureTime = Date.now();
+    this.state = "open";
+    logError("circuit-breaker", `${this.opts.name} circuit tripped OPEN immediately — auth failure: ${reason}`, undefined, { severity: "warning" });
+  }
 }
 
 export const llmCircuit = new CircuitBreaker({ name: "llm", failureThreshold: 5, resetTimeoutMs: 30_000, halfOpenMaxProbes: 2 });

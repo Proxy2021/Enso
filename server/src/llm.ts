@@ -21,7 +21,7 @@ import {
   RATE_LIMIT_THROTTLE_THRESHOLD, RATE_LIMIT_MAX_THROTTLE_MS,
 } from "./config.js";
 import { logAction, logError } from "./action-log.js";
-import { llmError, llmRateLimited, llmTimeout } from "./errors.js";
+import { llmError, llmRateLimited, llmTimeout, classifyAuthError } from "./errors.js";
 import { llmCircuit } from "./circuit-breaker.js";
 import { addBreadcrumb } from "./request-context.js";
 
@@ -481,6 +481,17 @@ async function callGeminiWithRetry(
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       const msg = lastError.message;
+
+      // Fail-fast on auth errors — no retry for invalid/expired credentials
+      const is401 = msg.includes("401");
+      const is403 = msg.includes("403") && !msg.includes("rate") && !msg.includes("quota");
+      if (is401 || (is403 && msg.includes("invalid"))) {
+        const authErr = classifyAuthError(is401 ? 401 : 403, msg, "gemini");
+        if (authErr) {
+          logError("llm:auth", `Auth failure for model=${model}: ${authErr.message}`, lastError);
+          throw authErr;
+        }
+      }
 
       const isRetryable = msg.includes("timeout") || msg.includes("429") || msg.includes("500") || msg.includes("502") || msg.includes("503") || msg.includes("504") || msg.includes("AbortError") || msg.includes("fetch failed") || msg.includes("ECONNRESET") || msg.includes("ETIMEDOUT") || msg.includes("UND_ERR");
       if (!isRetryable || attempt === maxAttempts) break;

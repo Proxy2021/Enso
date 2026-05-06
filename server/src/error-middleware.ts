@@ -5,7 +5,7 @@
  * globalErrorHandler: catches all unhandled route errors, returns structured JSON
  */
 import type { Request, Response, NextFunction, RequestHandler } from "express";
-import { EnsoError } from "./errors.js";
+import { EnsoError, AuthError } from "./errors.js";
 import { errorResponse } from "./action-log.js";
 
 export function asyncHandler(
@@ -23,6 +23,16 @@ export function globalErrorHandler(
   _next: NextFunction,
 ): void {
   if (res.headersSent) return;
+
+  // Auth errors get structured response with recovery actions
+  if (err instanceof AuthError) {
+    const payload = err.toPayload();
+    res.status(err.code === "AUTH_MISSING" ? 401 : err.code === "AUTH_EXPIRED" ? 401 : 401).json({
+      error: payload.userMessage,
+      authError: payload,
+    });
+    return;
+  }
 
   const ensoErr = err instanceof EnsoError ? err : undefined;
   const isOperational = ensoErr?.isOperational ?? false;

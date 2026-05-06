@@ -35,6 +35,9 @@ export type ErrorCode =
   | "VALIDATION_FAILED"
   | "FILESYSTEM_ACCESS_FAILED"
   | "SCHEDULED_TASK_FAILED"
+  | "AUTH_INVALID"
+  | "AUTH_EXPIRED"
+  | "AUTH_MISSING"
   | "UNKNOWN_ERROR";
 
 export class EnsoError extends Error {
@@ -101,4 +104,184 @@ export function validationError(field: string, message: string): EnsoError {
 
 export function wsError(message: string, cause?: Error): EnsoError {
   return new EnsoError(message, "WS_SEND_FAILED", "ws:send", "warning", { cause });
+}
+
+// ── Auth Error Infrastructure ──
+
+export type AuthErrorCode = "AUTH_INVALID" | "AUTH_EXPIRED" | "AUTH_MISSING";
+export type AuthType = "token" | "api-key" | "oauth" | "app-password";
+
+export interface RecoveryAction {
+  type: "check-settings" | "re-authorize" | "update-key" | "wait" | "contact-admin" | "auto-retry";
+  label: string;
+  action?: string;
+  seconds?: number;
+}
+
+export interface AuthErrorPayload {
+  code: AuthErrorCode;
+  service: string;
+  userMessage: string;
+  recovery?: RecoveryAction;
+  retryAfter?: number;
+}
+
+export class AuthError extends EnsoError {
+  public readonly service: string;
+  public readonly authType: AuthType;
+  public readonly recoveryAction: RecoveryAction;
+  public readonly retryAfter?: number;
+
+  constructor(
+    message: string,
+    code: AuthErrorCode,
+    service: string,
+    authType: AuthType,
+    recoveryAction: RecoveryAction,
+    options?: { cause?: Error; retryAfter?: number },
+  ) {
+    super(message, code, `auth:${service}`, "error", { cause: options?.cause, isOperational: true });
+    this.name = "AuthError";
+    this.service = service;
+    this.authType = authType;
+    this.recoveryAction = recoveryAction;
+    this.retryAfter = options?.retryAfter;
+  }
+
+  toPayload(): AuthErrorPayload {
+    return {
+      code: this.code as AuthErrorCode,
+      service: this.service,
+      userMessage: this.message,
+      recovery: this.recoveryAction,
+      retryAfter: this.retryAfter,
+    };
+  }
+}
+
+/**
+ * Classify an HTTP error response as an auth failure. Returns an AuthError if
+ * the response indicates an authentication/authorization problem, or null if
+ * it's a different kind of error (transient, rate-limit, server error, etc.).
+ */
+export function classifyAuthError(status: number, body: any, service: string): AuthError | null {
+  const bodyStr = typeof body === "string" ? body : JSON.stringify(body ?? "");
+
+  if (service === "enso") {
+    if (status === 401) {
+      if (bodyStr.includes("missing") || bodyStr.includes("no token")) {
+        return new AuthError(
+          "Connection requires an access token",
+          "AUTH_MISSING", "enso", "token",
+          { type: "check-settings", label: "Update Connection", action: "open-connection-picker" },
+        );
+      }
+      return new AuthError(
+        "Access token is incorrect",
+        "AUTH_INVALID", "enso", "token",
+        { type: "check-settings", label: "Update Connection", action: "open-connection-picker" },
+      );
+    }
+    return null;
+  }
+
+  if (service === "youtube") {
+    if (status === 401) {
+      if (bodyStr.includes("invalid_grant") || bodyStr.includes("Token has been expired")) {
+        return new AuthError(
+          "YouTube access expired",
+          "AUTH_EXPIRED", "youtube", "oauth",
+          { type: "re-authorize", label: "Re-authorize YouTube", action: "youtube-reauth" },
+        );
+      }
+      if (bodyStr.includes("invalid_client")) {
+        return new AuthError(
+          "YouTube app credentials changed",
+          "AUTH_INVALID", "youtube", "oauth",
+          { type: "contact-admin", label: "Contact Administrator" },
+        );
+      }
+      return new AuthError(
+        "YouTube authentication failed",
+        "AUTH_INVALID", "youtube", "oauth",
+        { type: "re-authorize", label: "Re-authorize YouTube", action: "youtube-reauth" },
+      );
+    }
+    return null;
+  }
+
+  if (service === "gemini" || service === "openai") {
+    const displayName = "AI service";
+    if (status === 401) {
+      return new AuthError(
+        `${displayName} API key is invalid`,
+        "AUTH_INVALID", service, "api-key",
+        { type: "update-key", label: "Update API Key", action: "update-env" },
+      );
+    }
+    if (status === 403 && (bodyStr.includes("quota") || bodyStr.includes("insufficient"))) {
+      return new AuthError(
+        `${displayName} quota exceeded`,
+        "AUTH_EXPIRED", service, "api-key",
+        { type: "wait", label: "Wait for Quota Reset", seconds: 3600 },
+        { retryAfter: 3600 },
+      );
+    }
+    return null;
+  }
+
+  if (service === "wechat") {
+    if (bodyStr.includes("access_token expired") || bodyStr.includes("40001") || bodyStr.includes("40014")) {
+      return new AuthError(
+        "WeChat token expired",
+        "AUTH_EXPIRED", "wechat", "token",
+        { type: "auto-retry", label: "Refreshing..." },
+      );
+    }
+    return null;
+  }
+
+  if (service === "smtp" || service === "gmail") {
+    if (status === 401 || bodyStr.includes("auth") || bodyStr.includes("535")) {
+      return new AuthError(
+        "Email login failed",
+        "AUTH_INVALID", "smtp", "app-password",
+        { type: "update-key", label: "Update App Password", action: "update-env" },
+      );
+    }
+    return null;
+  }
+
+  if (service === "brave") {
+    if (status === 401 || status === 403) {
+      return new AuthError(
+        "Search API key is invalid",
+        "AUTH_INVALID", "brave", "api-key",
+        { type: "update-key", label: "Update API Key", action: "update-env" },
+      );
+    }
+    return null;
+  }
+
+  if (service === "cloudflare") {
+    if (status === 401 || status === 403) {
+      return new AuthError(
+        "Tunnel API access denied",
+        "AUTH_INVALID", "cloudflare", "api-key",
+        { type: "update-key", label: "Update API Token", action: "update-env" },
+      );
+    }
+    return null;
+  }
+
+  // Generic fallback for unknown services
+  if (status === 401 || status === 403) {
+    return new AuthError(
+      `Authentication failed for ${service}`,
+      "AUTH_INVALID", service, "api-key",
+      { type: "update-key", label: "Update Credentials", action: "update-env" },
+    );
+  }
+
+  return null;
 }
