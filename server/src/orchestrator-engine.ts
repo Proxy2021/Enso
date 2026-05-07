@@ -431,7 +431,7 @@ function extractVerdict(taskId: string, workspace?: OrchestrationWorkspace): "PA
       try {
         const content = readFileSync(filePath, "utf-8");
         // Check structured summary first
-        const structMatch = content.match(/STRUCTURED_SUMMARY\s+(\{[\s\S]*?\})/);
+        const structMatch = content.match(/<!--\s*STRUCTURED_SUMMARY\s+(\{[\s\S]*?\})\s*-->/);
         if (structMatch) {
           try {
             const parsed = JSON.parse(structMatch[1]);
