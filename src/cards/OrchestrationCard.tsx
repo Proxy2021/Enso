@@ -234,17 +234,18 @@ function ExecutingPhase({ plan, taskTerminals, progress }: { plan: Orchestration
 
   const completed = plan.tasks.filter((t) => t.status === "completed").length;
   const running = plan.tasks.filter((t) => t.status === "running").length;
+  const retrying = plan.tasks.filter((t) => t.status === "retrying").length;
   const failed = plan.tasks.filter((t) => t.status === "failed").length;
   const total = plan.tasks.length;
   const isPaused = plan.status === "paused";
   const awaitingApproval = plan.tasks.filter((t) => t.status === "awaiting_approval");
-  const pct = total > 0 ? Math.round(((completed + running * 0.5) / total) * 100) : 0;
+  const pct = total > 0 ? Math.round(((completed + (running + retrying) * 0.5) / total) * 100) : 0;
   const elapsed = useElapsedTime();
 
   // Collect tasks that have terminal data, sorted: running first, then by plan order
   const terminalTasks = plan.tasks.filter((t) => taskTerminals?.[t.taskId]?.text);
-  const runningTerminals = terminalTasks.filter((t) => t.status === "running");
-  const doneTerminals = terminalTasks.filter((t) => t.status !== "running");
+  const runningTerminals = terminalTasks.filter((t) => t.status === "running" || t.status === "retrying");
+  const doneTerminals = terminalTasks.filter((t) => t.status !== "running" && t.status !== "retrying");
   const orderedTerminals = [...runningTerminals, ...doneTerminals];
 
   // Auto-select the first running terminal, or the latest one
@@ -372,7 +373,7 @@ function ExecutingPhase({ plan, taskTerminals, progress }: { plan: Orchestration
               <div className="flex gap-0.5 overflow-x-auto pb-1 mb-1 scrollbar-none -mx-1 px-1">
                 {orderedTerminals.map((task) => {
                   const isActive = task.taskId === activeTerminalId;
-                  const isTaskRunning = task.status === "running";
+                  const isTaskRunning = task.status === "running" || task.status === "retrying";
                   return (
                     <button
                       key={task.taskId}
@@ -402,11 +403,13 @@ function ExecutingPhase({ plan, taskTerminals, progress }: { plan: Orchestration
                     <span className={`text-[9px] px-1.5 py-0.5 rounded-full ${
                       activeTask.status === "running"
                         ? "bg-blue-500/20 text-blue-300"
-                        : activeTask.status === "completed"
-                          ? "bg-green-500/15 text-green-400"
-                          : "bg-red-500/15 text-red-400"
+                        : activeTask.status === "retrying"
+                          ? "bg-amber-500/20 text-amber-300"
+                          : activeTask.status === "completed"
+                            ? "bg-green-500/15 text-green-400"
+                            : "bg-red-500/15 text-red-400"
                     }`}>
-                      {activeTask.status === "running" ? t("orchestration.live") : activeTask.status}
+                      {activeTask.status === "running" ? t("orchestration.live") : activeTask.status === "retrying" ? `retrying ${activeTask.retryCount || ""}` : activeTask.status}
                     </span>
                   </div>
                   <TerminalContent
@@ -482,6 +485,8 @@ function CompactTaskRow({ task, index, terminalData, onOpenTerminal, autoExpand 
         } ${
           highlight ? "bg-green-500/10" :
           task.status === "running" ? "bg-blue-500/10 text-gray-200" :
+          task.status === "retrying" ? "bg-amber-500/10 text-amber-300" :
+          task.status === "deferred" ? "bg-gray-500/10 text-gray-400" :
           task.status === "completed" ? "text-gray-400" :
           task.status === "failed" ? "text-red-400/80" :
           task.status === "blocked" ? "opacity-30 text-gray-500" :
@@ -501,6 +506,10 @@ function CompactTaskRow({ task, index, terminalData, onOpenTerminal, autoExpand 
             <span className="text-red-400">{"\u2717"}</span>
           ) : task.status === "running" ? (
             <Spinner size="sm" />
+          ) : task.status === "retrying" ? (
+            <span className="text-amber-400 animate-pulse">{"\u21BB"}</span>
+          ) : task.status === "deferred" ? (
+            <span className="text-gray-400">{"\u23F8"}</span>
           ) : task.status === "blocked" ? (
             <span>{"\u2298"}</span>
           ) : (
@@ -513,6 +522,16 @@ function CompactTaskRow({ task, index, terminalData, onOpenTerminal, autoExpand 
         {!expanded && hasSummary && task.structuredResult?.verdict && (
           <span className={`px-1 py-0.5 rounded-full text-[8px] font-medium border flex-shrink-0 ${verdictColor(task.structuredResult.verdict)}`}>
             {task.structuredResult.verdict}
+          </span>
+        )}
+        {task.status === "retrying" && task.retryCount != null && (
+          <span className="px-1 py-0.5 rounded-full text-[8px] font-medium border border-amber-500/40 text-amber-400 flex-shrink-0">
+            retry {task.retryCount}/{task.maxRetries || "?"}
+          </span>
+        )}
+        {task.status === "deferred" && task.deferredReason && (
+          <span className="px-1 py-0.5 rounded-full text-[8px] font-medium border border-gray-500/40 text-gray-400 flex-shrink-0 truncate max-w-[120px]" title={task.deferredReason}>
+            {task.deferredReason}
           </span>
         )}
         {canExpand && (

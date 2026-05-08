@@ -398,7 +398,9 @@ export type OrchestrationTaskStatus =
   | "completed"
   | "failed"
   | "blocked"
-  | "awaiting_approval";
+  | "awaiting_approval"
+  | "retrying"
+  | "deferred";
 
 /** Structured result parsed from agent STRUCTURED_SUMMARY blocks */
 export interface TaskStructuredResult {
@@ -437,6 +439,10 @@ export interface OrchestrationTask {
   resultSummary?: string;
   structuredResult?: TaskStructuredResult;
   error?: string;
+  retryCount?: number;
+  maxRetries?: number;
+  errorCategory?: string;
+  deferredReason?: string;
 }
 
 export interface OrchestrationAgent {
@@ -469,6 +475,8 @@ export type OrchestrationEventType =
   | "task_started"
   | "task_completed"
   | "task_failed"
+  | "task_retrying"
+  | "task_deferred"
   | "approval_needed"
   | "paused"
   | "resumed"

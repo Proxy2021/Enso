@@ -2,7 +2,7 @@
  * Lightweight circuit breaker for external API calls (LLM, Brave Search, etc.).
  * Three states: closed (normal) → open (failing, use fallback) → half-open (probe).
  */
-import { logError } from "./action-log.js";
+import { logAction, logError } from "./action-log.js";
 import { EnsoError } from "./errors.js";
 
 type CircuitState = "closed" | "open" | "half-open";
@@ -71,6 +71,8 @@ export class CircuitBreaker {
       if (this.halfOpenSuccesses >= this.opts.halfOpenMaxProbes) {
         this.state = "closed";
         this.failures = 0;
+        logAction({ ts: Date.now(), type: "system", category: `circuit:${this.opts.name}`,
+          message: `Circuit breaker ${this.opts.name} recovered to CLOSED` });
       }
     } else {
       this.failures = 0;
@@ -82,6 +84,8 @@ export class CircuitBreaker {
     this.lastFailureTime = Date.now();
     if (this.failures >= this.opts.failureThreshold) {
       this.state = "open";
+      logAction({ ts: Date.now(), type: "system", category: `circuit:${this.opts.name}`,
+        message: `Circuit breaker ${this.opts.name} tripped OPEN after ${this.failures} failures`, severity: "warning" });
       logError("circuit-breaker", `${this.opts.name} circuit tripped OPEN after ${this.failures} failures`, undefined, { severity: "warning" });
     }
   }

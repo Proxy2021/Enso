@@ -7,13 +7,14 @@
  */
 
 import { randomUUID } from "crypto";
-import { readFileSync, existsSync } from "fs";
+import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import type { OrchestrationPlan, OrchestrationTask, TaskStructuredResult } from "@shared/types.js";
 import { runClaudeCode, cancelClaudeCodeRun } from "./claude-code.js";
 import { CLAUDE_HEARTBEAT_TIMEOUT_ORCH_MS } from "./config.js";
 import { logAction, logError } from "./action-log.js";
-import { orchestrationError } from "./errors.js";
+import { EnsoError, orchestrationError } from "./errors.js";
+import { llmCircuit, braveSearchCircuit } from "./circuit-breaker.js";
 import { runWithOrchestrationContext, addBreadcrumb } from "./request-context.js";
 import type { ConnectedClient } from "./server.js";
 import type { ServerMessage } from "./types.js";
@@ -49,6 +50,86 @@ class Semaphore {
   }
 }
 
+// ── Error Classification & Retry ──
+
+type OrchErrorCategory = "transient" | "deterministic" | "resource" | "timeout";
+
+function classifyTaskError(err: unknown): OrchErrorCategory {
+  if (err instanceof EnsoError) {
+    if (err.code === "AUTH_INVALID" || err.code === "AUTH_EXPIRED" || err.code === "AUTH_MISSING") return "deterministic";
+    if (err.code === "LLM_RATE_LIMITED") return "transient";
+    if (err.code === "LLM_TIMEOUT" || err.code === "EXTERNAL_SERVICE_TIMEOUT") return "timeout";
+    if (err.code === "VALIDATION_FAILED" || err.code === "BUILD_COMPILE_ERROR") return "deterministic";
+  }
+  const msg = (err instanceof Error ? err.message : String(err)).toLowerCase();
+  if (msg.includes("401") || msg.includes("403") || msg.includes("auth") || msg.includes("permission")) return "deterministic";
+  if (msg.includes("enomem") || msg.includes("enospc") || msg.includes("disk full")) return "resource";
+  if (msg.includes("timeout") || msg.includes("timed out") || msg.includes("heartbeat")) return "timeout";
+  if (msg.includes("econnreset") || msg.includes("econnrefused") || msg.includes("503") ||
+      msg.includes("overloaded") || msg.includes("rate limit") || msg.includes("429")) return "transient";
+  return "transient";
+}
+
+interface TaskRetryPolicy {
+  maxAttempts: number;
+  baseDelayMs: number;
+  maxDelayMs: number;
+}
+
+const RETRY_POLICY: Record<OrchErrorCategory, TaskRetryPolicy> = {
+  transient:     { maxAttempts: 3, baseDelayMs: 5_000,  maxDelayMs: 30_000 },
+  timeout:       { maxAttempts: 2, baseDelayMs: 10_000, maxDelayMs: 60_000 },
+  deterministic: { maxAttempts: 1, baseDelayMs: 0,      maxDelayMs: 0 },
+  resource:      { maxAttempts: 1, baseDelayMs: 0,      maxDelayMs: 0 },
+};
+
+function computeBackoff(attempt: number, policy: TaskRetryPolicy): number {
+  const expDelay = Math.min(policy.maxDelayMs, policy.baseDelayMs * Math.pow(2, attempt));
+  return Math.floor(Math.random() * expDelay);
+}
+
+function shouldDeferTask(task: OrchestrationTask): string | null {
+  const llmState = llmCircuit.getState();
+  if (llmState.state === "open") return "LLM circuit open";
+  if (task.agentRole === "researcher") {
+    const braveState = braveSearchCircuit.getState();
+    if (braveState.state === "open") return "Brave Search circuit open";
+  }
+  return null;
+}
+
+// ── Dead Letter Persistence ──
+
+interface DeadLetterEntry {
+  taskId: string;
+  orchestrationId: string;
+  title: string;
+  agentRole: string;
+  failedAt: string;
+  totalAttempts: number;
+  errorCategory: OrchErrorCategory;
+  lastError: string;
+  errorHistory: Array<{ attempt: number; error: string; category: OrchErrorCategory; timestamp: string }>;
+  dependsOn: string[];
+  completedDependencyContext: Record<string, string>;
+}
+
+function persistDeadLetter(entry: DeadLetterEntry, workspace?: OrchestrationWorkspace): void {
+  if (!workspace) return;
+  const dlqPath = join(workspace.root, "dead-letters.json");
+  try {
+    const existing: DeadLetterEntry[] = existsSync(dlqPath)
+      ? JSON.parse(readFileSync(dlqPath, "utf-8"))
+      : [];
+    existing.push(entry);
+    writeFileSync(dlqPath, JSON.stringify(existing, null, 2));
+    logAction({ ts: Date.now(), type: "action", category: "orchestrator:dead-letter",
+      message: `Persisted dead letter for task ${entry.taskId} (${entry.errorCategory}, ${entry.totalAttempts} attempts)` });
+  } catch (err) {
+    logError("orchestrator", `Failed to persist dead letter for ${entry.taskId}`, err, { severity: "warning" });
+  }
+}
+
 // ── Types ──
 
 export interface ActiveOrchestration {
@@ -71,6 +152,8 @@ export interface DAGExecutorParams {
   onTaskStart: (taskId: string) => void;
   onTaskDone: (taskId: string, summary: string) => void;
   onTaskFail: (taskId: string, error: string) => void;
+  onTaskRetrying?: (taskId: string, attempt: number, maxAttempts: number, delayMs: number) => void;
+  onTaskDeferred?: (taskId: string, reason: string) => void;
   cwd: string;
   maxConcurrency?: number;
   workspace?: OrchestrationWorkspace;
@@ -83,7 +166,7 @@ export interface DAGExecutorParams {
  * with a concurrency semaphore. Each task gets its own Claude Code session.
  */
 export async function executeDAG(params: DAGExecutorParams): Promise<void> {
-  const { plan, orch, buildTaskPrompt, onTaskStart, onTaskDone, onTaskFail, cwd, maxConcurrency = 4, workspace } = params;
+  const { plan, orch, buildTaskPrompt, onTaskStart, onTaskDone, onTaskFail, onTaskRetrying, onTaskDeferred, cwd, maxConcurrency = 4, workspace } = params;
 
   const semaphore = new Semaphore(maxConcurrency);
   const completedSet = new Set<string>();
@@ -99,7 +182,13 @@ export async function executeDAG(params: DAGExecutorParams): Promise<void> {
       failedSet.add(task.taskId);
     } else if (task.status === "blocked") {
       blockedSet.add(task.taskId);
+    } else if (task.status === "retrying") {
+      // On resume, treat retrying tasks as pending (reset retry state)
+      task.status = "pending";
+      task.retryCount = 0;
+      task.errorCategory = undefined;
     }
+    // deferred tasks stay deferred — re-evaluated each loop iteration
   }
 
   const orchId = plan.orchestrationId;
@@ -118,8 +207,11 @@ export async function executeDAG(params: DAGExecutorParams): Promise<void> {
       break;
     }
 
-    // Find ready tasks: pending + all deps completed + not blocked
+    // Find ready tasks: pending/deferred + all deps completed + not blocked
     const readyTasks = plan.tasks.filter((t) => {
+      if (t.status === "deferred") {
+        return !shouldDeferTask(t);
+      }
       if (t.status !== "pending") return false;
       if (blockedSet.has(t.taskId)) return false;
       if (runningMap.has(t.taskId)) return false;
@@ -131,13 +223,26 @@ export async function executeDAG(params: DAGExecutorParams): Promise<void> {
       if (orch.aborted) break;
       if (semaphore.available <= 0) break;
 
+      // Circuit breaker pre-check
+      const deferReason = shouldDeferTask(task);
+      if (deferReason) {
+        task.status = "deferred";
+        task.deferredReason = deferReason;
+        onTaskDeferred?.(task.taskId, deferReason);
+        logAction({ ts: Date.now(), type: "action", category: "orchestrator",
+          message: `DAG: task ${task.taskId} deferred — ${deferReason}` });
+        continue;
+      }
+
       await semaphore.acquire();
 
-      const runId = randomUUID();
+      let runId = randomUUID();
       orch.taskRunIds.set(task.taskId, runId);
 
       // Mark as running
       task.status = "running";
+      task.retryCount = 0;
+      task.deferredReason = undefined;
       onTaskStart(task.taskId);
       addBreadcrumb("orch", `task ${task.taskId} started (${task.agentRole})`);
 
@@ -155,108 +260,176 @@ export async function executeDAG(params: DAGExecutorParams): Promise<void> {
       const virtualCardId = `${orch.bootstrapCardId}:task:${task.taskId}`;
       const taskClient = createTaskClient(orch.client, task.taskId, virtualCardId, orch);
 
-      // Spawn Claude Code session for this task
+      // Spawn Claude Code session for this task (with retry logic)
       const taskPromise = (async () => {
-        try {
-          const { sessionId } = await runWithOrchestrationContext(orchId, task.taskId, () => runClaudeCode({
-            prompt,
-            cwd,
-            client: taskClient,
-            runId,
-            targetCardId: virtualCardId,
-            skipPersist: true,
-            heartbeatTimeoutMs: CLAUDE_HEARTBEAT_TIMEOUT_ORCH_MS,
-          }));
+        let attempt = 0;
+        const errorHistory: Array<{ attempt: number; error: string; category: OrchErrorCategory; timestamp: string }> = [];
 
-          orch.taskSessionIds.set(task.taskId, sessionId);
+        while (true) {
+          try {
+            const { sessionId } = await runWithOrchestrationContext(orchId, task.taskId, () => runClaudeCode({
+              prompt,
+              cwd,
+              client: taskClient,
+              runId,
+              targetCardId: virtualCardId,
+              skipPersist: true,
+              heartbeatTimeoutMs: CLAUDE_HEARTBEAT_TIMEOUT_ORCH_MS,
+            }));
 
-          if (orch.aborted) return;
+            orch.taskSessionIds.set(task.taskId, sessionId);
 
-          // Task completed — parse output file for summary + full output
-          const summaryResult = readTaskSummary(task.taskId, workspace);
-          const summaryText = summaryResult?.text || `Task ${task.taskId} completed`;
-          task.status = "completed";
-          task.resultSummary = summaryText;
-          task.structuredResult = summaryResult?.structured;
+            if (orch.aborted) return;
 
-          // Store full output content (for focus evolution deliverables, Cortex persistence)
-          if (workspace) {
-            try {
-              const fullPath = workspace.taskOutputPath(task.taskId);
-              if (existsSync(fullPath)) {
-                (task as any).fullOutput = readFileSync(fullPath, "utf-8");
-              }
-            } catch (err) { logError("orchestration", `Failed to read full task output for ${task.taskId}`, err, { severity: "info" }); }
-          }
+            // Task completed — parse output file for summary + full output
+            const summaryResult = readTaskSummary(task.taskId, workspace);
+            const summaryText = summaryResult?.text || `Task ${task.taskId} completed`;
+            task.status = "completed";
+            task.resultSummary = summaryText;
+            task.structuredResult = summaryResult?.structured;
+            task.errorCategory = undefined;
 
-          completedSet.add(task.taskId);
-          orch.sharedContext.set(task.taskId, summaryText);
-          onTaskDone(task.taskId, summaryText);
-
-          logAction({
-            ts: Date.now(),
-            type: "action",
-            category: "orchestrator",
-            message: `DAG: task ${task.taskId} completed — ${summaryText.slice(0, 100)}`,
-          });
-
-          // ── Fix-Verify Loop: Check for FAIL verdict on review tasks ──
-          if (task.taskId === "review" || task.agentRole === "reviewer") {
-            const verdict = extractVerdict(task.taskId, workspace);
-            if (verdict === "FAIL" && !plan.tasks.some(t => t.taskId === "fix-cycle")) {
-              // Inject a fix task into the plan
-              const fixTask: OrchestrationTask = {
-                taskId: "fix-cycle",
-                title: "Fix Build Issues (automated fix cycle)",
-                description: buildFixTaskDescription(task.taskId, workspace),
-                agentRole: "coder",
-                dependsOn: [task.taskId],
-                outputType: "code",
-                status: "pending",
-              };
-              plan.tasks.push(fixTask);
-
-              // Re-point downstream tasks that depended on "review" to now depend on "fix-cycle"
-              for (const t of plan.tasks) {
-                if (t.taskId !== "fix-cycle" && t.dependsOn.includes(task.taskId)) {
-                  t.dependsOn = t.dependsOn.map(d => d === task.taskId ? "fix-cycle" : d);
+            // Store full output content (for focus evolution deliverables, Cortex persistence)
+            if (workspace) {
+              try {
+                const fullPath = workspace.taskOutputPath(task.taskId);
+                if (existsSync(fullPath)) {
+                  (task as any).fullOutput = readFileSync(fullPath, "utf-8");
                 }
-              }
-
-              logAction({
-                ts: Date.now(),
-                type: "action",
-                category: "orchestrator",
-                message: `Fix-verify loop: FAIL verdict detected, injecting fix-cycle task`,
-              });
+              } catch (err) { logError("orchestration", `Failed to read full task output for ${task.taskId}`, err, { severity: "info" }); }
             }
+
+            completedSet.add(task.taskId);
+            orch.sharedContext.set(task.taskId, summaryText);
+            onTaskDone(task.taskId, summaryText);
+
+            logAction({
+              ts: Date.now(),
+              type: "action",
+              category: "orchestrator",
+              message: `DAG: task ${task.taskId} completed — ${summaryText.slice(0, 100)}`,
+            });
+
+            // ── Fix-Verify Loop: Check for FAIL verdict on review tasks ──
+            if (task.taskId === "review" || task.agentRole === "reviewer") {
+              const verdict = extractVerdict(task.taskId, workspace);
+              if (verdict === "FAIL" && !plan.tasks.some(t => t.taskId === "fix-cycle")) {
+                const fixTask: OrchestrationTask = {
+                  taskId: "fix-cycle",
+                  title: "Fix Build Issues (automated fix cycle)",
+                  description: buildFixTaskDescription(task.taskId, workspace),
+                  agentRole: "coder",
+                  dependsOn: [task.taskId],
+                  outputType: "code",
+                  status: "pending",
+                };
+                plan.tasks.push(fixTask);
+
+                for (const t of plan.tasks) {
+                  if (t.taskId !== "fix-cycle" && t.dependsOn.includes(task.taskId)) {
+                    t.dependsOn = t.dependsOn.map(d => d === task.taskId ? "fix-cycle" : d);
+                  }
+                }
+
+                logAction({
+                  ts: Date.now(),
+                  type: "action",
+                  category: "orchestrator",
+                  message: `Fix-verify loop: FAIL verdict detected, injecting fix-cycle task`,
+                });
+              }
+            }
+            break; // Success — exit retry loop
+
+          } catch (err) {
+            if (orch.aborted) return;
+
+            attempt++;
+            const errorMsg = err instanceof Error ? err.message : String(err);
+            const errorCategory = classifyTaskError(err);
+            const policy = RETRY_POLICY[errorCategory];
+
+            task.errorCategory = errorCategory;
+            task.retryCount = attempt;
+            errorHistory.push({ attempt, error: errorMsg.slice(0, 200), category: errorCategory, timestamp: new Date().toISOString() });
+
+            // Resource errors → defer (don't retry, re-enter pending pool)
+            if (errorCategory === "resource") {
+              task.status = "deferred";
+              task.deferredReason = `Resource error: ${errorMsg.slice(0, 100)}`;
+              onTaskDeferred?.(task.taskId, task.deferredReason);
+              logAction({ ts: Date.now(), type: "action", category: "orchestrator",
+                message: `DAG: task ${task.taskId} deferred — ${task.deferredReason}` });
+              break;
+            }
+
+            // Retries remaining → backoff and retry
+            if (attempt < policy.maxAttempts) {
+              const delay = computeBackoff(attempt, policy);
+              task.status = "retrying";
+              task.maxRetries = policy.maxAttempts;
+              onTaskRetrying?.(task.taskId, attempt, policy.maxAttempts, delay);
+
+              logAction({ ts: Date.now(), type: "action", category: "orchestrator",
+                message: `DAG: task ${task.taskId} retrying (attempt ${attempt + 1}/${policy.maxAttempts}) after ${delay}ms — ${errorCategory}: ${errorMsg.slice(0, 100)}` });
+
+              await new Promise(resolve => setTimeout(resolve, delay));
+              task.status = "running";
+
+              runId = randomUUID();
+              orch.taskRunIds.set(task.taskId, runId);
+              continue;
+            }
+
+            // Exhausted retries — permanent failure
+            task.status = "failed";
+            task.error = errorMsg;
+            failedSet.add(task.taskId);
+            onTaskFail(task.taskId, errorMsg);
+            blockDependents(plan, task.taskId, blockedSet);
+
+            persistDeadLetter({
+              taskId: task.taskId,
+              orchestrationId: orchId,
+              title: task.title,
+              agentRole: task.agentRole,
+              failedAt: new Date().toISOString(),
+              totalAttempts: attempt,
+              errorCategory,
+              lastError: errorMsg,
+              errorHistory,
+              dependsOn: task.dependsOn,
+              completedDependencyContext: Object.fromEntries(
+                task.dependsOn.filter(d => orch.sharedContext.has(d))
+                  .map(d => [d, orch.sharedContext.get(d)!.slice(0, 500)])
+              ),
+            }, workspace);
+
+            logError("orchestrator", `DAG: task ${task.taskId} dead-lettered after ${attempt} attempts`,
+              orchestrationError(`Task ${task.taskId} permanently failed`, "dead-letter",
+                err instanceof Error ? err : undefined));
+            break;
           }
-        } catch (err) {
-          if (orch.aborted) return;
-
-          const errorMsg = err instanceof Error ? err.message : String(err);
-          task.status = "failed";
-          task.error = errorMsg;
-          failedSet.add(task.taskId);
-          onTaskFail(task.taskId, errorMsg);
-
-          // Block all downstream dependents
-          blockDependents(plan, task.taskId, blockedSet);
-
-          logError("orchestrator", `DAG: task ${task.taskId} failed`, orchestrationError(`Task ${task.taskId} failed`, "dag-execution", err instanceof Error ? err : undefined));
-        } finally {
-          semaphore.release();
-          runningMap.delete(task.taskId);
-          orch.taskRunIds.delete(task.taskId);
         }
-      })();
+      })().finally(() => {
+        semaphore.release();
+        runningMap.delete(task.taskId);
+        orch.taskRunIds.delete(task.taskId);
+      });
 
       runningMap.set(task.taskId, taskPromise);
     }
 
-    // If nothing is running and nothing is ready, we're done
-    if (runningMap.size === 0) {
+    // If nothing is running and nothing is ready (including deferred), we're done
+    const hasDeferredTasks = plan.tasks.some(t => t.status === "deferred");
+    if (runningMap.size === 0 && !hasDeferredTasks) {
       break;
+    }
+
+    // If only deferred tasks remain (no running), wait briefly for circuit breakers to recover
+    if (runningMap.size === 0 && hasDeferredTasks) {
+      await new Promise(resolve => setTimeout(resolve, 5_000));
+      continue;
     }
 
     // Wait for at least one running task to complete (unlocks new waves)
@@ -267,12 +440,13 @@ export async function executeDAG(params: DAGExecutorParams): Promise<void> {
   const completed = plan.tasks.filter((t) => t.status === "completed").length;
   const failed = plan.tasks.filter((t) => t.status === "failed").length;
   const blocked = plan.tasks.filter((t) => t.status === "blocked").length;
+  const deferred = plan.tasks.filter((t) => t.status === "deferred").length;
 
   logAction({
     ts: Date.now(),
     type: "action",
     category: "orchestrator",
-    message: `DAG executor finished: ${completed} completed, ${failed} failed, ${blocked} blocked out of ${plan.tasks.length}`,
+    message: `DAG executor finished: ${completed} completed, ${failed} failed, ${blocked} blocked, ${deferred} deferred out of ${plan.tasks.length}`,
   });
 }
 

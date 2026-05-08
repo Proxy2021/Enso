@@ -958,6 +958,13 @@ export async function handleOrchestrationApprove(params: {
         const running = orch.plan.tasks.filter(t => t.status === "running").length;
         updateOrchestrationCounts(orchestrationId, { failed, running });
       },
+      onTaskRetrying: (taskId, attempt, maxAttempts, delayMs) => {
+        updateOrchestrationProgress(orchestrationId, "task_retrying", taskId,
+          `Retrying (attempt ${attempt + 1}/${maxAttempts}, backoff ${Math.round(delayMs / 1000)}s)`);
+      },
+      onTaskDeferred: (taskId, reason) => {
+        updateOrchestrationProgress(orchestrationId, "task_deferred", taskId, reason);
+      },
       cwd: PROJECT_ROOT,
       maxConcurrency: orch.maxConcurrency,
       workspace: orch.workspace,
@@ -1159,6 +1166,13 @@ export async function handleOrchestrationResume(params: {
         const failed = orch.plan.tasks.filter(t => t.status === "failed").length;
         const running = orch.plan.tasks.filter(t => t.status === "running").length;
         updateOrchestrationCounts(orchestrationId, { failed, running });
+      },
+      onTaskRetrying: (taskId, attempt, maxAttempts, delayMs) => {
+        updateOrchestrationProgress(orchestrationId, "task_retrying", taskId,
+          `Retrying (attempt ${attempt + 1}/${maxAttempts}, backoff ${Math.round(delayMs / 1000)}s)`);
+      },
+      onTaskDeferred: (taskId, reason) => {
+        updateOrchestrationProgress(orchestrationId, "task_deferred", taskId, reason);
       },
       cwd: PROJECT_ROOT,
       maxConcurrency: orch.maxConcurrency,
