@@ -35,6 +35,7 @@ function getTransporter(): { transporter: nodemailer.Transporter; senderEmail: s
       auth: { user: email, pass: password },
       pool: true,
       maxConnections: 3,
+      connectionTimeout: 15_000,
       socketTimeout: 30_000,
       greetingTimeout: 15_000,
     });
@@ -179,7 +180,7 @@ export function createEmailTools(): EnsoAgentTool[] {
           } catch (err) {
             lastErr = err;
             const msg = err instanceof Error ? err.message : String(err);
-            const isTransient = /socket close|ECONN|ETIMEDOUT|ECONNRESET|socket disconnected|TLS connection|before secure/i.test(msg);
+            const isTransient = /socket close|ECONN|ETIMEDOUT|ECONNRESET|socket disconnected|TLS connection|before secure|timeout/i.test(msg);
             if (isTransient && attempt < maxRetries) {
               transporter = null;
               await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
