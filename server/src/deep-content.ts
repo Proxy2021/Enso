@@ -921,26 +921,33 @@ export async function renderLongformAudio(
   const sampleRates: number[] = new Array(allSegments.length).fill(0);
   let completed = 0;
 
+  const SEGMENT_RETRIES = 2;
   await Promise.all(
-    allSegments.map((seg, idx) =>
-      withTtsSlot(() => renderPodcastSegment(seg, geminiKey))
-        .then(async (res) => {
-          // Normalize loudness + append silence pad so per-call drift doesn't
-          // compound across the concatenated podcast. Falls back to raw PCM
-          // if ffmpeg isn't available.
-          const normalized = await normalizeAndPadPcm(res.pcm, res.sampleRate, 150);
-          pcmBuffers[idx] = normalized;
-          sampleRates[idx] = res.sampleRate;
-          completed++;
-          onProgress?.(completed - 1, allSegments.length);
-        })
-        .catch((err) => {
-          logError("book-podcast", `Failed to render segment ${idx}`, err);
-          completed++;
-          onProgress?.(completed - 1, allSegments.length);
-          // pcmBuffers[idx] stays as empty Buffer — segment skipped
-        }),
-    ),
+    allSegments.map((seg, idx) => {
+      const renderWithRetry = async (): Promise<void> => {
+        for (let attempt = 1; attempt <= SEGMENT_RETRIES; attempt++) {
+          try {
+            const res = await withTtsSlot(() => renderPodcastSegment(seg, geminiKey));
+            const normalized = await normalizeAndPadPcm(res.pcm, res.sampleRate, 150);
+            pcmBuffers[idx] = normalized;
+            sampleRates[idx] = res.sampleRate;
+            completed++;
+            onProgress?.(completed - 1, allSegments.length);
+            return;
+          } catch (err) {
+            if (attempt < SEGMENT_RETRIES) {
+              logAction({ ts: Date.now(), type: "action", category: "book-podcast", message: `Segment ${idx} failed (attempt ${attempt}/${SEGMENT_RETRIES}), retrying in ${3 * attempt}s...` });
+              await new Promise(r => setTimeout(r, 3000 * attempt));
+            } else {
+              logError("book-podcast", `Failed to render segment ${idx} after ${SEGMENT_RETRIES} attempts`, err);
+              completed++;
+              onProgress?.(completed - 1, allSegments.length);
+            }
+          }
+        }
+      };
+      return renderWithRetry();
+    }),
   );
 
   // Verify sample rate consistency across segments — drift here would cause

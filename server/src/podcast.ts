@@ -223,6 +223,7 @@ export async function renderSingleSpeakerTTS(
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        signal: AbortSignal.timeout(120_000),
       });
 
       if (!res.ok) {
@@ -264,7 +265,7 @@ export async function renderSingleSpeakerTTS(
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));
       const msg = lastError.message;
-      const isRetryable = msg.includes("fetch failed") || msg.includes("ECONNRESET") || msg.includes("429") || msg.includes("499") || msg.includes("500") || msg.includes("502") || msg.includes("503");
+      const isRetryable = msg.includes("fetch failed") || msg.includes("ECONNRESET") || msg.includes("terminated") || msg.includes("socket hang up") || msg.includes("AbortError") || msg.includes("TimeoutError") || msg.includes("429") || msg.includes("499") || msg.includes("500") || msg.includes("502") || msg.includes("503");
       if (isRetryable && attempt < maxAttempts) {
         await new Promise(r => setTimeout(r, 2000 * attempt));
         continue;
