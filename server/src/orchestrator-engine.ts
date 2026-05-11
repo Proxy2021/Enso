@@ -512,6 +512,12 @@ interface TaskSummaryResult {
   structured?: TaskStructuredResult;
 }
 
+/** Fix the most common LLM JSON mistakes before parsing. */
+function repairJson(s: string): string {
+  // Remove trailing commas before ] or }
+  return s.replace(/,(\s*[}\]])/g, "$1");
+}
+
 /**
  * Try to read the task's output file for a summary.
  * If a STRUCTURED_SUMMARY block exists, parse it and return both the
@@ -541,7 +547,10 @@ function readTaskSummary(taskId: string, workspace?: OrchestrationWorkspace): Ta
         );
         if (structuredMatch) {
           try {
-            const parsed = JSON.parse(structuredMatch[1]);
+            const rawJson = structuredMatch[1];
+            let parsed: any;
+            try { parsed = JSON.parse(rawJson); }
+            catch { parsed = JSON.parse(repairJson(rawJson)); }
             const verdict = parsed.verdict || "completed";
             const findings = (parsed.keyFindings || [])
               .slice(0, 3)
@@ -607,12 +616,20 @@ function extractVerdict(taskId: string, workspace?: OrchestrationWorkspace): "PA
         // Check structured summary first
         const structMatch = content.match(/<!--\s*STRUCTURED_SUMMARY\s+(\{[\s\S]*?\})\s*-->/);
         if (structMatch) {
+          const rawJson = structMatch[1];
           try {
-            const parsed = JSON.parse(structMatch[1]);
+            let parsed: any;
+            try { parsed = JSON.parse(rawJson); }
+            catch { parsed = JSON.parse(repairJson(rawJson)); }
             if (parsed.verdict === "PASS" || parsed.verdict === "FAIL") {
               return parsed.verdict;
             }
-          } catch (err) { logError("orchestration", "Verdict JSON parse failed", err, { severity: "warning" }); }
+          } catch (err) {
+            logError("orchestration", "Verdict JSON parse failed", err, { severity: "warning" });
+            // Targeted fallback: extract just the verdict field without full JSON parse
+            const vf = rawJson.match(/"verdict"\s*:\s*"(PASS|FAIL)"/i);
+            if (vf) return vf[1].toUpperCase() as "PASS" | "FAIL";
+          }
         }
         // Check for explicit VERDICT line
         const verdictMatch = content.match(/VERDICT:\s*(PASS|FAIL)/i);

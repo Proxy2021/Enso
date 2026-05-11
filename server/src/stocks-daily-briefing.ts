@@ -15,7 +15,7 @@
  */
 
 import { executeToolDirect } from "./native-tools/registry.js";
-import { sendHtmlEmail } from "./email.js";
+import { sendHtmlEmail, resetEmailTransporter } from "./email.js";
 import { attachCardSnapshot, registerNotification, storeBriefingHtml, type SharedCardSnapshot } from "./reacts.js";
 import { loadAllApps } from "./app-persistence.js";
 import { getEnsoUrl } from "./shareable-pages.js";
@@ -368,6 +368,10 @@ export async function runStocksDailyBriefing(params: StocksDailyBriefingParams =
       title: subject, ttlDays: SNAPSHOT_TTL_DAYS,
     };
     attachCardSnapshot(notificationId, snapshot);
+
+    // Reset the SMTP transporter before sending — the long daily_routine refresh
+    // (5+ min) leaves any cached pool connections stale, causing timeouts.
+    resetEmailTransporter();
 
     // Email body is the picks summary; the prominent in-body "Open interactive
     // dashboard →" button is the action surface. Skip the generic Approve/Defer/Reply

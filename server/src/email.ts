@@ -27,9 +27,11 @@ export interface SendEmailResult {
   briefingUrl?: string;
 }
 
-// ── Transporter (lazy, reused) ──
+// ── Transporter (lazy, recreated after idle) ──
 
 let transporter: nodemailer.Transporter | null = null;
+let lastSendTs = 0;
+const MAX_IDLE_MS = 5 * 60 * 1000;
 
 function getTransporter(): { transporter: nodemailer.Transporter; senderEmail: string } {
   const email = process.env.SMTP_EMAIL;
@@ -41,17 +43,21 @@ function getTransporter(): { transporter: nodemailer.Transporter; senderEmail: s
     );
   }
 
+  const idleMs = Date.now() - lastSendTs;
+  if (transporter && lastSendTs > 0 && idleMs > MAX_IDLE_MS) {
+    transporter.close();
+    transporter = null;
+  }
+
   if (!transporter) {
     transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 587,
       secure: false, // STARTTLS
       auth: { user: email, pass: password },
-      pool: true,
-      maxConnections: 3,
-      connectionTimeout: 15_000,
+      connectionTimeout: 10_000,
       socketTimeout: 30_000,
-      greetingTimeout: 15_000,
+      greetingTimeout: 10_000,
     });
   }
 
@@ -68,7 +74,7 @@ export function resetEmailTransporter(): void {
  */
 export async function sendHtmlEmail(params: SendHtmlEmailParams): Promise<SendEmailResult> {
   const { to, subject, html, textFallback } = params;
-  const maxRetries = 2;
+  const maxRetries = 3;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
@@ -78,12 +84,14 @@ export async function sendHtmlEmail(params: SendHtmlEmailParams): Promise<SendEm
 
       await t.sendMail({ from, to, subject, text: plainText, html });
 
+      lastSendTs = Date.now();
       logAction({ ts: Date.now(), type: "action", category: "email", message: `Email sent to ${to} via SMTP` });
       return { success: true, message: `Email sent to ${to}` };
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       const isTransient = /socket close|ECONN|ETIMEDOUT|ECONNRESET|socket disconnected|TLS connection|before secure|timeout/i.test(msg);
       if (isTransient && attempt < maxRetries) {
+        logAction({ ts: Date.now(), type: "action", category: "email", message: `SMTP transient error (attempt ${attempt + 1}/${maxRetries + 1}): ${msg.slice(0, 120)}` });
         transporter = null;
         await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
         continue;
