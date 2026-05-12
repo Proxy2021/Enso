@@ -359,7 +359,11 @@ async function fireTask(task: ScheduledTaskDef): Promise<void> {
     task.lastRunStatus = "failed";
     task.consecutiveFailures = (task.consecutiveFailures || 0) + 1;
 
-    if (task.recurring && task.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+    const durationMs = Date.now() - now;
+    const { category, severity } = classifyTaskError(err, task, durationMs);
+    const isCircuitBreak = task.recurring && task.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES;
+
+    if (isCircuitBreak) {
       task.enabled = false;
       task.nextFireAt = undefined;
       logError("scheduled-tasks",
@@ -378,12 +382,18 @@ async function fireTask(task: ScheduledTaskDef): Promise<void> {
       firedAt: now,
       completedAt: Date.now(),
       status: "failed",
-      durationMs: Date.now() - now,
+      durationMs,
       error: err instanceof Error ? err.message : String(err),
+      errorCategory: category,
+      severity: isCircuitBreak ? "critical" : severity,
+      consecutiveFailureCount: task.consecutiveFailures,
+      circuitBroken: isCircuitBreak,
+      taskName: task.name,
     };
     appendRunLog(failRun);
     broadcastCallback?.({ scheduledTaskUpdate: { ...task }, scheduledTaskRun: failRun });
 
+    emitTaskEvent(isCircuitBreak ? "task.circuit_break" : "task.failed", task, failRun);
     logError("scheduled-tasks", `Task "${task.name}" failed`, err);
   }
 }
@@ -414,9 +424,11 @@ function detectMissedTasks(): void {
 export function initScheduler(
   onFire: (task: ScheduledTaskDef) => Promise<ScheduledTaskRun>,
   broadcast: (msg: Partial<import("@shared/types.js").ServerMessage>) => void,
+  onTaskEvent?: (type: string, task: ScheduledTaskDef, run: ScheduledTaskRun) => void,
 ): void {
   fireCallback = onFire;
   broadcastCallback = broadcast;
+  taskEventCallback = onTaskEvent ?? null;
   loadTasks();
   detectMissedTasks();
 

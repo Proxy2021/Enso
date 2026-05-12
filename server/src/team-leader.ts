@@ -461,6 +461,10 @@ async function processTLEvent(event: AgentEvent): Promise<void> {
       return handleReactForTL(event.payload.reactId as string);
     case "task.completed":
       return handleTaskCompletedEvent(event.payload as { actionId: string; actionTitle?: string; result?: string });
+    case "task.failed":
+    case "task.timeout":
+    case "task.circuit_break":
+      return handleScheduledTaskFailedEvent(event);
     case "agent.escalate":
       return handleEscalation(event);
     default:
@@ -878,6 +882,111 @@ Return JSON only, no markdown: {"decision":"act","reason":"short reason","action
         status: "done",
       });
       resolveReact(reactId, `TL: acknowledge (fallback) — LLM temporarily unavailable`);
+    }
+  }
+}
+
+/** TL handles scheduled task failure/timeout/circuit-break events */
+async function handleScheduledTaskFailedEvent(event: AgentEvent): Promise<void> {
+  const { task, run } = event.payload as {
+    task: { taskId: string; name: string; consecutiveFailures?: number };
+    run: {
+      error?: string; errorCategory?: string; severity?: string;
+      consecutiveFailureCount?: number; circuitBroken?: boolean;
+      durationMs?: number; taskName?: string;
+    };
+  };
+
+  const severity = run.severity ?? "warning";
+  const isUrgent = severity === "critical" || event.type === "task.circuit_break";
+
+  logAction({
+    ts: Date.now(), type: "error", category: "team-leader:task-failure",
+    message: `Task "${task.name}" ${event.type}: ${run.error ?? "unknown error"}`,
+  });
+
+  if (isUrgent) {
+    await sendScheduledTaskAlert(task, run, event.type);
+  }
+
+  // For recurring failures (2+), queue auto-fix (skip transient network errors)
+  if ((run.consecutiveFailureCount ?? 0) >= 2 && run.errorCategory !== "network") {
+    queueTask({
+      title: `Auto-fix: ${task.name}`,
+      description: `Task "${task.name}" has failed ${run.consecutiveFailureCount} times. ` +
+        `Category: ${run.errorCategory ?? "unknown"}. Last error: ${run.error ?? "unknown"}. ` +
+        `Investigate the root cause and fix it.`,
+      source: "task-failure-autofix",
+    });
+  }
+}
+
+async function sendScheduledTaskAlert(
+  task: { taskId: string; name: string; consecutiveFailures?: number },
+  run: {
+    error?: string; errorCategory?: string; severity?: string;
+    consecutiveFailureCount?: number; circuitBroken?: boolean;
+    durationMs?: number;
+  },
+  eventType: string,
+): Promise<void> {
+  const config = loadConfig();
+  const isCircuitBreak = eventType === "task.circuit_break";
+
+  const subject = isCircuitBreak
+    ? `[CRITICAL] Task "${task.name}" disabled after ${task.consecutiveFailures} failures`
+    : `Task "${task.name}" failed (${run.errorCategory ?? "unknown"})`;
+
+  const bodyLines = [
+    `**Task:** ${task.name}`,
+    `**Status:** ${isCircuitBreak ? "AUTO-DISABLED (circuit breaker)" : "Failed"}`,
+    `**Error:** ${run.error ?? "Unknown"}`,
+    `**Category:** ${run.errorCategory ?? "unclassified"}`,
+    `**Duration:** ${run.durationMs ? `${(run.durationMs / 1000).toFixed(1)}s` : "unknown"}`,
+    `**Consecutive failures:** ${run.consecutiveFailureCount ?? task.consecutiveFailures}`,
+    isCircuitBreak ? `\n**Action required:** Re-enable this task after fixing the underlying issue.` : "",
+  ].filter(Boolean).join("\n");
+
+  const htmlBody = bodyLines.replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>").replace(/\n/g, "<br>");
+
+  // Send via configured channels
+  if (config.channels.email) {
+    try {
+      const { getNotifyEmail } = await import("./shareable-pages.js");
+      const email = getNotifyEmail();
+      if (email) {
+        const { sendHtmlEmail } = await import("./email.js");
+        await sendHtmlEmail({ to: email, subject, html: htmlBody });
+      }
+    } catch (err) {
+      logError("team-leader", "Failed to send task failure email alert", err);
+    }
+  }
+
+  if (config.channels.wechat) {
+    try {
+      const { getFollowerOpenIds, isWithinServiceWindow, sendTextMessage } = await import("./wechat.js");
+      const followers = await getFollowerOpenIds();
+      const wechatText = `⚠️ ${subject}\n\n${bodyLines.replace(/\*\*/g, "")}`;
+      for (const openId of followers) {
+        if (!isWithinServiceWindow(openId)) continue;
+        await sendTextMessage(openId, wechatText);
+        break;
+      }
+    } catch { /* WeChat not configured — non-fatal */ }
+  }
+
+  if (config.channels.inApp) {
+    try {
+      const { createArtifact } = await import("./agent-artifacts.js");
+      createArtifact({
+        type: "action", agentId: "tl", agentName: "Team Leader",
+        title: subject,
+        body: bodyLines,
+        status: isCircuitBreak ? "error" : "warning",
+      });
+    } catch (err) {
+      logError("team-leader", "Failed to create task failure artifact", err);
     }
   }
 }

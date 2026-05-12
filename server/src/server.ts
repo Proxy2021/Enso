@@ -4709,7 +4709,14 @@ BEHAVIOR:
             account: { id: account.id ?? "standalone", peer: firstClient.id },
           } : null);
         };
-        initScheduler(executeScheduledTask, broadcastToClients);
+        initScheduler(executeScheduledTask, broadcastToClients, (type, task, run) => {
+          import("./team-leader.js").then(({ createEvent, processEvent }) => {
+            const event = createEvent(type, { agent: "tl" }, { task, run }, "scheduled-tasks");
+            processEvent(event).catch(err =>
+              logError("scheduled-tasks", `Event processing failed for ${type}`, err)
+            );
+          }).catch(err => logError("scheduled-tasks", `Failed to import team-leader for ${type} event`, err));
+        });
         runtime.log?.("[enso] scheduled task scheduler started");
 
         // Validate that all tool-type tasks reference registered tools.
