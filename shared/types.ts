@@ -674,10 +674,15 @@ export interface ScheduledTaskRun {
   taskId: string;
   firedAt: number;
   completedAt?: number;
-  status: "running" | "success" | "failed";
+  status: "running" | "success" | "failed" | "timeout";
   durationMs?: number;
   error?: string;
   resultSummary?: string;
+  errorCategory?: "timeout" | "crash" | "tool-error" | "network" | "auth" | "unknown";
+  severity?: "critical" | "error" | "warning";
+  consecutiveFailureCount?: number;
+  circuitBroken?: boolean;
+  taskName?: string;
 }
 
 // ── Sprint Results Summary ──

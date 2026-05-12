@@ -25,6 +25,7 @@ const CHECK_INTERVAL_MS = 15_000; // 15 second check loop
 const MAX_CONCURRENT = 2;
 const DEFAULT_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const MAX_RUN_LOG_ENTRIES = 100;
+const TASK_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
 const BASE_DIR = join(homedir(), ".enso", "scheduled-tasks");
 const TASKS_FILE = join(BASE_DIR, "tasks.json");
 const RUNS_DIR = join(BASE_DIR, "runs");
@@ -34,8 +35,10 @@ const RUNS_DIR = join(BASE_DIR, "runs");
 let tasks: ScheduledTaskDef[] = [];
 let checkInterval: ReturnType<typeof setInterval> | null = null;
 const inFlight = new Set<string>(); // taskIds currently executing
+const inFlightStartTimes = new Map<string, number>(); // taskId → start timestamp for timeout detection
 let fireCallback: ((task: ScheduledTaskDef) => Promise<ScheduledTaskRun>) | null = null;
 let broadcastCallback: ((msg: Partial<import("@shared/types.js").ServerMessage>) => void) | null = null;
+let taskEventCallback: ((type: string, task: ScheduledTaskDef, run: ScheduledTaskRun) => void) | null = null;
 
 // ── Persistence ──
 
@@ -162,10 +165,88 @@ function cronToHuman(cron: string): string {
   return cron; // Fallback to raw
 }
 
+// ── Error Classification ──
+
+function classifyTaskError(
+  error: unknown,
+  task: ScheduledTaskDef,
+  durationMs: number,
+): { category: ScheduledTaskRun["errorCategory"]; severity: ScheduledTaskRun["severity"] } {
+  const msg = error instanceof Error ? error.message : String(error);
+  const lc = msg.toLowerCase();
+
+  let category: ScheduledTaskRun["errorCategory"] = "unknown";
+  if (durationMs >= TASK_TIMEOUT_MS) category = "timeout";
+  else if (lc.includes("timeout") || lc.includes("timed out") || lc.includes("etimedout")) category = "timeout";
+  else if (lc.includes("econnrefused") || lc.includes("enotfound") || lc.includes("fetch failed") || lc.includes("network")) category = "network";
+  else if (lc.includes("401") || lc.includes("403") || lc.includes("auth") || lc.includes("token") || lc.includes("credential")) category = "auth";
+  else if (lc.includes("tool") || lc.includes("executor") || lc.includes("no task executor")) category = "tool-error";
+  else category = "crash";
+
+  const failures = (task.consecutiveFailures || 0) + 1;
+  let severity: ScheduledTaskRun["severity"] = "warning";
+  if (failures >= MAX_CONSECUTIVE_FAILURES) severity = "critical";
+  else if (failures >= 2) severity = "error";
+
+  return { category, severity };
+}
+
+function emitTaskEvent(type: string, task: ScheduledTaskDef, run: ScheduledTaskRun): void {
+  if (!taskEventCallback) return;
+  try {
+    taskEventCallback(type, task, run);
+  } catch (err) {
+    logError("scheduled-tasks", `Failed to emit ${type} event`, err);
+  }
+}
+
 // ── Check Loop ──
 
 async function checkLoop(): Promise<void> {
   const now = Date.now();
+
+  // Timeout detection for hung tasks
+  for (const [taskId, startTime] of inFlightStartTimes.entries()) {
+    const elapsed = now - startTime;
+    if (elapsed > TASK_TIMEOUT_MS) {
+      const task = tasks.find(t => t.taskId === taskId);
+      if (task) {
+        logError("scheduled-tasks", `Task "${task.name}" timed out after ${Math.round(elapsed / 1000)}s`);
+
+        const failureCount = (task.consecutiveFailures || 0) + 1;
+        const isCircuitBreak = task.recurring && failureCount >= MAX_CONSECUTIVE_FAILURES;
+
+        const timeoutRun: ScheduledTaskRun = {
+          runId: randomUUID(),
+          taskId,
+          firedAt: startTime,
+          completedAt: now,
+          status: "timeout",
+          durationMs: elapsed,
+          error: `Task execution timed out after ${Math.round(elapsed / 1000)}s`,
+          errorCategory: "timeout",
+          severity: isCircuitBreak ? "critical" : (failureCount >= 2 ? "error" : "warning"),
+          consecutiveFailureCount: failureCount,
+          circuitBroken: isCircuitBreak,
+          taskName: task.name,
+        };
+
+        task.lastRunStatus = "failed";
+        task.consecutiveFailures = failureCount;
+        if (isCircuitBreak) {
+          task.enabled = false;
+          task.nextFireAt = undefined;
+        }
+        persistTasks();
+        appendRunLog(timeoutRun);
+        broadcastCallback?.({ scheduledTaskUpdate: { ...task }, scheduledTaskRun: timeoutRun });
+
+        emitTaskEvent(isCircuitBreak ? "task.circuit_break" : "task.timeout", task, timeoutRun);
+        inFlight.delete(taskId);
+        inFlightStartTimes.delete(taskId);
+      }
+    }
+  }
 
   for (const task of tasks) {
     if (!task.enabled || inFlight.has(task.taskId)) continue;
@@ -186,6 +267,7 @@ async function checkLoop(): Promise<void> {
     if (task.nextFireAt && now >= task.nextFireAt) {
       // Fire!
       inFlight.add(task.taskId);
+      inFlightStartTimes.set(task.taskId, now);
       task.lastRunStatus = "running";
 
       // Broadcast status update
@@ -193,6 +275,7 @@ async function checkLoop(): Promise<void> {
 
       fireTask(task).finally(() => {
         inFlight.delete(task.taskId);
+        inFlightStartTimes.delete(task.taskId);
       });
     }
   }
@@ -227,14 +310,27 @@ async function fireTask(task: ScheduledTaskDef): Promise<void> {
     if (run.status === "failed") {
       task.consecutiveFailures = (task.consecutiveFailures || 0) + 1;
 
-      if (task.recurring && task.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+      // Enrich with error classification
+      const { category, severity } = classifyTaskError(run.error, task, run.durationMs ?? 0);
+      run.errorCategory = run.errorCategory ?? category;
+      run.severity = run.severity ?? severity;
+      run.consecutiveFailureCount = task.consecutiveFailures;
+      run.taskName = task.name;
+
+      const isCircuitBreak = task.recurring && task.consecutiveFailures >= MAX_CONSECUTIVE_FAILURES;
+      if (isCircuitBreak) {
         task.enabled = false;
         task.nextFireAt = undefined;
+        run.circuitBroken = true;
+        run.severity = "critical";
         logError("scheduled-tasks",
           `Task "${task.name}" auto-disabled after ${task.consecutiveFailures} consecutive failures. ` +
           `Last error: ${run.error || "unknown"}. Re-enable manually after fixing the issue.`
         );
       }
+
+      // Emit failure event to TL
+      emitTaskEvent(isCircuitBreak ? "task.circuit_break" : "task.failed", task, run);
     } else if (run.status === "success") {
       task.consecutiveFailures = 0;
     }

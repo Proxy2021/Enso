@@ -513,9 +513,22 @@ interface TaskSummaryResult {
 }
 
 /** Fix the most common LLM JSON mistakes before parsing. */
-function repairJson(s: string): string {
+export function repairJson(s: string): string {
+  let r = s;
+  // Strip control characters (except \n \r \t) that break JSON.parse
+  r = r.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, "");
   // Remove trailing commas before ] or }
-  return s.replace(/,(\s*[}\]])/g, "$1");
+  r = r.replace(/,(\s*[}\]])/g, "$1");
+  // Fix single-quoted strings → double-quoted (only outside existing double quotes)
+  r = r.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, '"$1"');
+  return r;
+}
+
+/** Try JSON.parse with automatic repair on failure. */
+export function safeParseJson(raw: string): any | null {
+  try { return JSON.parse(raw); } catch {}
+  try { return JSON.parse(repairJson(raw)); } catch {}
+  return null;
 }
 
 /**
@@ -548,9 +561,8 @@ function readTaskSummary(taskId: string, workspace?: OrchestrationWorkspace): Ta
         if (structuredMatch) {
           try {
             const rawJson = structuredMatch[1];
-            let parsed: any;
-            try { parsed = JSON.parse(rawJson); }
-            catch { parsed = JSON.parse(repairJson(rawJson)); }
+            const parsed = safeParseJson(rawJson);
+            if (!parsed) throw new Error("Could not parse JSON even after repair");
             const verdict = parsed.verdict || "completed";
             const findings = (parsed.keyFindings || [])
               .slice(0, 3)
@@ -617,16 +629,12 @@ function extractVerdict(taskId: string, workspace?: OrchestrationWorkspace): "PA
         const structMatch = content.match(/<!--\s*STRUCTURED_SUMMARY\s+(\{[\s\S]*?\})\s*-->/);
         if (structMatch) {
           const rawJson = structMatch[1];
-          try {
-            let parsed: any;
-            try { parsed = JSON.parse(rawJson); }
-            catch { parsed = JSON.parse(repairJson(rawJson)); }
-            if (parsed.verdict === "PASS" || parsed.verdict === "FAIL") {
-              return parsed.verdict;
-            }
-          } catch (err) {
-            logError("orchestration", "Verdict JSON parse failed", err, { severity: "warning" });
-            // Targeted fallback: extract just the verdict field without full JSON parse
+          const parsed = safeParseJson(rawJson);
+          if (parsed && (parsed.verdict === "PASS" || parsed.verdict === "FAIL")) {
+            return parsed.verdict;
+          }
+          if (!parsed) {
+            logError("orchestration", "Verdict JSON parse failed, trying regex fallback", null, { severity: "warning" });
             const vf = rawJson.match(/"verdict"\s*:\s*"(PASS|FAIL)"/i);
             if (vf) return vf[1].toUpperCase() as "PASS" | "FAIL";
           }

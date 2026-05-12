@@ -3222,6 +3222,32 @@ BEHAVIOR:
     }
   });
 
+  app.post("/api/team-leader/wealth-refresh", async (req, res) => {
+    try {
+      const { executeWealthRefresh } = await import("./wealth-monitor.js");
+      const source = (req.body as any)?.source as "kk-live" | "rm-emails" | undefined;
+      if (source && source !== "kk-live" && source !== "rm-emails") {
+        res.status(400).json({ error: "source must be 'kk-live' or 'rm-emails'" });
+        return;
+      }
+      if (source) {
+        const result = await executeWealthRefresh(source, "manual");
+        res.json(result);
+      } else {
+        const [kkResult, rmResult] = await Promise.allSettled([
+          executeWealthRefresh("kk-live", "manual"),
+          executeWealthRefresh("rm-emails", "manual"),
+        ]);
+        res.json({
+          "kk-live": kkResult.status === "fulfilled" ? kkResult.value : { success: false, error: String((kkResult as PromiseRejectedResult).reason) },
+          "rm-emails": rmResult.status === "fulfilled" ? rmResult.value : { success: false, error: String((rmResult as PromiseRejectedResult).reason) },
+        });
+      }
+    } catch (err: any) {
+      errorResponse(res, 500, "wealth-monitor", "Wealth refresh failed", err);
+    }
+  });
+
   app.post("/api/team-leader/actions/:id/complete", async (req, res) => {
     try {
       const { completeAction } = await import("./team-leader.js");

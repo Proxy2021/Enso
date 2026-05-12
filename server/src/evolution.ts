@@ -28,6 +28,7 @@ import type { Project, Persona, TeamAgent } from "./project-manager.js";
 import { APP_CATALOG } from "./app-catalog.js";
 import { loadAllApps, SHIPPED_APPS_DIR } from "./app-persistence.js";
 import { getWorkspace } from "./orchestration-workspace.js";
+import { safeParseJson } from "./orchestrator-engine.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const PLUGIN_DIR = dirname(__filename);
@@ -93,8 +94,8 @@ function buildSprintHistoryContext(projectId: string, limit = 3): string {
       // Extract structured summary for score + verdict
       const summaryMatch = metaReview.match(/<!--\s*STRUCTURED_SUMMARY\s+(\{[\s\S]*?\})\s*-->/);
       if (summaryMatch) {
-        try {
-          const s = JSON.parse(summaryMatch[1]);
+        const s = safeParseJson(summaryMatch[1]);
+        if (s) {
           const parts: string[] = [];
           if (s.sprintScore !== undefined) parts.push(`Score: ${s.sprintScore}/10`);
           if (s.verdict) parts.push(`Build: ${s.verdict}`);
@@ -102,7 +103,7 @@ function buildSprintHistoryContext(projectId: string, limit = 3): string {
           if (s.keyFindings && Array.isArray(s.keyFindings) && s.keyFindings.length) {
             lines.push(`Findings: ${(s.keyFindings as string[]).slice(0, 3).join("; ")}`);
           }
-        } catch { /* malformed JSON — skip */ }
+        }
       }
       // Extract next sprint seeds section (first 500 chars)
       const seedMatch = metaReview.match(/(?:##?\s*)?Next Sprint Seed[^\n]*\n([\s\S]{0,600})/i);
