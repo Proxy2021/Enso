@@ -25,7 +25,7 @@ const APP_ID = "stocks_daily";
 const PRIMARY_SUFFIX = "today";
 const FS_REPO_DIR = "D:/Github/FactorStrategies";
 const FS_PYTHON = "D:/Github/FactorStrategies/.venv/Scripts/python.exe";
-const REFRESH_TIMEOUT_MS = 20 * 60 * 1000; // 20 min — daily_routine fetches Alpha Vantage + computes holdings for all presets
+const REFRESH_TIMEOUT_MS = 45 * 60 * 1000; // 45 min — daily_routine has 8 steps; factor_health.py alone took 312s; previous 20min limit caused kill mid step-8
 // Actions the recipient can invoke from the public landing page.
 // add_to_watchlist + factor_info + stock_detail = read/write to ~/.enso/data only.
 // portfolio_checkin spawns the FactorStrategies python script; with the trade
