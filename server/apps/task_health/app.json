@@ -1,0 +1,228 @@
+{
+  "version": 1,
+  "createdAt": 1747036800000,
+  "spec": {
+    "toolFamily": "task_health",
+    "toolPrefix": "enso_task_health_",
+    "description": "Scheduled task health dashboard: monitor task statuses, failure rates, execution history, error classification, circuit breaker states, and drill into specific task run logs. The Team Leader's command center for scheduled task reliability.",
+    "signatureId": "task_health_dashboard",
+    "tools": [
+      {
+        "suffix": "overview",
+        "description": "Get scheduled task health overview: total tasks, enabled/disabled counts, health score, failure summary, upcoming tasks, and circuit-broken tasks. Use when the user says: 'task health', 'scheduled task dashboard', 'task overview', 'how are tasks doing', 'task status'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_task_health_overview",
+          "totalTasks": 8,
+          "enabled": 6,
+          "disabled": 2,
+          "healthScore": 85,
+          "healthLevel": "good",
+          "byStatus": { "success": 5, "failed": 1, "running": 0, "timeout": 0, "never_run": 2 },
+          "circuitBroken": [],
+          "upcoming": [
+            { "taskId": "daily-stock-picks", "name": "Daily Stock Picks", "nextFireAt": 1747123200000, "cron": "0 6 * * *" }
+          ],
+          "recentFailures": [
+            { "taskId": "article-digest", "name": "Daily Article Discovery", "lastRunStatus": "failed", "consecutiveFailures": 2, "lastFiredAt": 1747036000000 }
+          ],
+          "checkedAt": 1747036800000
+        },
+        "requiredDataKeys": ["tool", "totalTasks", "healthScore"],
+        "isPrimary": true
+      },
+      {
+        "suffix": "task_list",
+        "description": "List all scheduled tasks with status, schedule, failure counts, and next fire time. Sortable and filterable. Use when the user says: 'list tasks', 'show all tasks', 'scheduled tasks', 'task list', 'what tasks are running'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "filter": {
+              "type": "string",
+              "description": "Filter: 'all', 'enabled', 'disabled', 'failing', 'circuit-broken' (default: 'all')"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_task_health_task_list",
+          "filter": "all",
+          "tasks": [
+            {
+              "taskId": "daily-stock-picks",
+              "name": "Daily Stock Picks",
+              "description": "Run stock prediction pipeline",
+              "cron": "0 6 * * *",
+              "cronHuman": "Every day at 6:00 AM",
+              "enabled": true,
+              "lastRunStatus": "success",
+              "consecutiveFailures": 0,
+              "lastFiredAt": 1747036000000,
+              "nextFireAt": 1747123200000,
+              "actionType": "prompt",
+              "recurring": true
+            }
+          ],
+          "total": 1
+        },
+        "requiredDataKeys": ["tool", "tasks"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "task_runs",
+        "description": "Get execution history for a specific task — run-by-run timeline with status, duration, errors, and error classification. Use when the user says: 'task history', 'task runs', 'show runs for', 'task execution log', 'drill into task'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "taskId": {
+              "type": "string",
+              "description": "The task ID to get runs for"
+            },
+            "count": {
+              "type": "number",
+              "description": "Number of runs to return (1-100, default: 20)"
+            }
+          },
+          "required": ["taskId"]
+        },
+        "sampleParams": { "taskId": "daily-stock-picks" },
+        "sampleData": {
+          "tool": "enso_task_health_task_runs",
+          "taskId": "daily-stock-picks",
+          "taskName": "Daily Stock Picks",
+          "runs": [
+            {
+              "runId": "abc-123",
+              "firedAt": 1747036000000,
+              "completedAt": 1747036300000,
+              "status": "success",
+              "durationMs": 300000,
+              "resultSummary": "Pipeline completed successfully"
+            }
+          ],
+          "stats": {
+            "total": 10,
+            "successes": 8,
+            "failures": 1,
+            "timeouts": 1,
+            "successRate": 80,
+            "avgDurationMs": 250000,
+            "maxDurationMs": 600000,
+            "minDurationMs": 120000
+          }
+        },
+        "requiredDataKeys": ["tool", "taskId", "runs"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "failure_analysis",
+        "description": "Analyze failures across all scheduled tasks: breakdown by error category, severity distribution, most-failing tasks, failure trends over time. Use when the user says: 'task failures', 'why are tasks failing', 'failure analysis', 'task error breakdown', 'failure trends'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "days": {
+              "type": "number",
+              "description": "Time window in days (1-30, default: 7)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_task_health_failure_analysis",
+          "days": 7,
+          "totalFailures": 12,
+          "byCategory": [
+            { "category": "timeout", "count": 5 },
+            { "category": "tool-error", "count": 4 },
+            { "category": "network", "count": 3 }
+          ],
+          "bySeverity": { "critical": 1, "error": 7, "warning": 4 },
+          "worstTasks": [
+            { "taskId": "article-digest", "name": "Daily Article Discovery", "failures": 5, "lastError": "Timeout after 600000ms" }
+          ],
+          "dailyTrend": [
+            { "date": "2026-05-06", "failures": 3, "successes": 5 },
+            { "date": "2026-05-07", "failures": 1, "successes": 7 }
+          ]
+        },
+        "requiredDataKeys": ["tool", "totalFailures", "byCategory"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "timeline",
+        "description": "Get a chronological timeline of recent task executions across all tasks — shows what ran, when, and whether it succeeded. Use when the user says: 'task timeline', 'recent executions', 'what ran today', 'execution history', 'task activity'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hours": {
+              "type": "number",
+              "description": "Time window in hours (1-168, default: 24)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_task_health_timeline",
+          "hours": 24,
+          "executions": [
+            {
+              "taskId": "daily-stock-picks",
+              "taskName": "Daily Stock Picks",
+              "runId": "abc-123",
+              "firedAt": 1747036000000,
+              "completedAt": 1747036300000,
+              "status": "success",
+              "durationMs": 300000
+            }
+          ],
+          "summary": { "total": 8, "successes": 6, "failures": 1, "timeouts": 1 }
+        },
+        "requiredDataKeys": ["tool", "executions"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "health_report",
+        "description": "Comprehensive health report for the Team Leader: task reliability scores, recommendations, risk assessment, and actionable items. Use when the user says: 'task health report', 'TL task report', 'task recommendations', 'task risk assessment', 'full task health'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {},
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_task_health_health_report",
+          "overallScore": 78,
+          "healthLevel": "good",
+          "taskScores": [
+            { "taskId": "daily-stock-picks", "name": "Daily Stock Picks", "score": 100, "status": "healthy" },
+            { "taskId": "article-digest", "name": "Daily Article Discovery", "score": 40, "status": "at-risk" }
+          ],
+          "risks": [
+            { "level": "high", "task": "Daily Article Discovery", "reason": "2 consecutive failures, approaching circuit breaker threshold" }
+          ],
+          "recommendations": [
+            "Investigate 'Daily Article Discovery' — 2 consecutive failures (tool-error category)",
+            "All circuit breakers healthy — no immediate action needed"
+          ],
+          "checkedAt": 1747036800000
+        },
+        "requiredDataKeys": ["tool", "overallScore", "taskScores"],
+        "isPrimary": false
+      }
+    ]
+  }
+}

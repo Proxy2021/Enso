@@ -1306,7 +1306,22 @@ export async function assessAndPrioritize(signals: SystemSignals): Promise<TeamL
     "",
     `## Scheduled Tasks (last 24h)`,
     signals.taskResults.length > 0
-      ? signals.taskResults.map(t => `- ${t.taskName}: ${t.status}${t.resultSummary ? ` — ${t.resultSummary.slice(0, 100)}` : ""}`).join("\n")
+      ? (() => {
+          // Group by task and determine if a task recovered (had a failure but last run succeeded)
+          const byTask = new Map<string, typeof signals.taskResults>();
+          for (const t of signals.taskResults) {
+            if (!byTask.has(t.taskId)) byTask.set(t.taskId, []);
+            byTask.get(t.taskId)!.push(t);
+          }
+          return [...byTask.values()].map(runs => {
+            // Sort descending so runs[0] = most recent
+            const sorted = [...runs].sort((a, b) => b.firedAt - a.firedAt);
+            const latest = sorted[0];
+            const hadPriorFailure = sorted.slice(1).some(r => r.status === "failed");
+            const recoveredTag = hadPriorFailure && latest.status === "success" ? " [RECOVERED — prior failure now resolved, no action needed]" : "";
+            return `- ${latest.taskName}: ${latest.status}${recoveredTag}${latest.resultSummary ? ` — ${latest.resultSummary.slice(0, 100)}` : ""}`;
+          }).join("\n");
+        })()
       : "No task runs in last 24h.",
     "",
     `## User Reacts (${signals.pendingReacts.length} pending)`,
@@ -1409,6 +1424,7 @@ Rules:
 - "autoExecute" = true for ANYTHING that doesn't need the user's brain. Effort is irrelevant.
 - "needsUserInput" = true is EXTREMELY RARE. You are the decision-maker. The user trusts you to act.
 - For recurring errors (same error appearing multiple times), prioritize as critical and auto-execute the fix
+- If a task shows [RECOVERED] in the task list (last run succeeded despite prior failure), do NOT create a fix action — the issue is already resolved. Only acknowledge the recovery in the briefing if noteworthy.
 - Include at least one platform improvement if any gaps are visible
 - Order by impact, not effort
 
