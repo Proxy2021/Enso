@@ -9,6 +9,7 @@ import { promisify } from "util";
 import { join, basename } from "path";
 import { mkdirSync, existsSync, readdirSync } from "fs";
 import { safeResolvePath } from "./media-tools.js";
+import { toolExecutionError } from "./errors.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -45,9 +46,9 @@ export interface VideoMetadata {
 // ── Video Inspection ──
 
 export async function inspectVideo(path: string): Promise<VideoMetadata> {
-  if (!hasFfmpeg()) throw new Error("FFmpeg is not installed. Install from https://ffmpeg.org/download.html");
-  if (!path || !path.trim()) throw new Error("Video file path is required");
-  if (!existsSync(path)) throw new Error(`File not found: ${path}`);
+  if (!hasFfmpeg()) throw toolExecutionError("enso_video_inspect", "FFmpeg is not installed. Install from https://ffmpeg.org/download.html");
+  if (!path || !path.trim()) throw toolExecutionError("enso_video_inspect", "Video file path is required");
+  if (!existsSync(path)) throw toolExecutionError("enso_video_inspect", `File not found: ${path}`);
 
   const { stdout } = await execFileAsync("ffprobe", [
     "-v", "quiet", "-print_format", "json",
@@ -91,10 +92,10 @@ export async function extractFrames(params: {
   value?: number;
   outputDir: string;
 }): Promise<string[]> {
-  if (!hasFfmpeg()) throw new Error("FFmpeg is not installed.");
-  if (!params.path || !existsSync(params.path)) throw new Error(`Video file not found: ${params.path}`);
+  if (!hasFfmpeg()) throw toolExecutionError("enso_video_extract_frames", "FFmpeg is not installed.");
+  if (!params.path || !existsSync(params.path)) throw toolExecutionError("enso_video_extract_frames", `Video file not found: ${params.path}`);
   const safeOut = safeResolvePath(params.outputDir);
-  if (!safeOut.ok) throw new Error(`Invalid output directory: ${safeOut.error}`);
+  if (!safeOut.ok) throw toolExecutionError("enso_video_extract_frames", `Invalid output directory: ${safeOut.error}`);
   mkdirSync(safeOut.path, { recursive: true });
 
   const args: string[] = ["-i", params.path, "-y"];
@@ -107,7 +108,7 @@ export async function extractFrames(params: {
   } else if (params.mode === "count") {
     const count = params.value || 10;
     const meta = await inspectVideo(params.path);
-    if (meta.duration <= 0) throw new Error("Cannot determine video duration");
+    if (meta.duration <= 0) throw toolExecutionError("enso_video_extract_frames", "Cannot determine video duration");
     const interval = meta.duration / count;
     args.push("-vf", `fps=1/${interval}`);
   }
@@ -130,8 +131,8 @@ export interface SceneBoundary {
 }
 
 export async function detectScenes(path: string, threshold: number = 0.3): Promise<SceneBoundary[]> {
-  if (!hasFfmpeg()) throw new Error("FFmpeg is not installed.");
-  if (!path || !existsSync(path)) throw new Error(`Video file not found: ${path}`);
+  if (!hasFfmpeg()) throw toolExecutionError("enso_video_detect_scenes", "FFmpeg is not installed.");
+  if (!path || !existsSync(path)) throw toolExecutionError("enso_video_detect_scenes", `Video file not found: ${path}`);
 
   const { stderr } = await execFileAsync("ffmpeg", [
     "-i", path,
@@ -164,15 +165,15 @@ export async function generateThumbnail(params: {
   size?: string;
   outputPath: string;
 }): Promise<{ outputPath: string; timestamp: number; size: string }> {
-  if (!hasFfmpeg()) throw new Error("FFmpeg is not installed.");
-  if (!params.path || !existsSync(params.path)) throw new Error(`Video file not found: ${params.path}`);
+  if (!hasFfmpeg()) throw toolExecutionError("enso_video_thumbnail", "FFmpeg is not installed.");
+  if (!params.path || !existsSync(params.path)) throw toolExecutionError("enso_video_thumbnail", `Video file not found: ${params.path}`);
 
   const time = params.time ?? 1; // default to 1 second in
   const size = params.size ?? "320x240";
 
   // Ensure output directory exists — validate path to prevent traversal
   const safeOutPath = safeResolvePath(params.outputPath);
-  if (!safeOutPath.ok) throw new Error(`Invalid output path: ${safeOutPath.error}`);
+  if (!safeOutPath.ok) throw toolExecutionError("enso_video_thumbnail", `Invalid output path: ${safeOutPath.error}`);
   const outDir = join(safeOutPath.path, "..");
   mkdirSync(outDir, { recursive: true });
 

@@ -4,6 +4,8 @@ export default function GeneratedUI({ data, onAction }) {
   const [expandedError, setExpandedError] = useState(null);
   const [activityType, setActivityType] = useState("all");
   const [expandedCluster, setExpandedCluster] = useState(null);
+  const [expandedAction, setExpandedAction] = useState(null);
+  const [expandedAlert, setExpandedAlert] = useState(null);
 
   const isOverview = data?.tool === "enso_error_monitor_overview";
   const isErrors = data?.tool === "enso_error_monitor_errors";
@@ -15,6 +17,8 @@ export default function GeneratedUI({ data, onAction }) {
   const isHealthCheck = data?.tool === "enso_error_monitor_health_check";
   const isErrorCodes = data?.tool === "enso_error_monitor_error_codes";
   const isRecurring = data?.tool === "enso_error_monitor_recurring";
+  const isTlReport = data?.tool === "enso_error_monitor_tl_report";
+  const isAlertStatus = data?.tool === "enso_error_monitor_alert_status";
 
   const severityColor = (sev) => {
     if (sev === "critical") return "rose";
@@ -171,6 +175,8 @@ export default function GeneratedUI({ data, onAction }) {
         )}
 
         <div className="flex gap-2 flex-wrap">
+          <Button variant="primary" icon={LucideReact.FileText} onClick={() => onAction("tl_report")}>TL Report</Button>
+          <Button variant="outline" icon={LucideReact.Bell} onClick={() => onAction("alert_status")}>Alerts</Button>
           <Button variant="outline" icon={LucideReact.Activity} onClick={() => onAction("overview")}>Overview</Button>
           <Button variant="outline" icon={LucideReact.TrendingUp} onClick={() => onAction("trends")}>Trends</Button>
           <Button variant="outline" icon={LucideReact.Repeat} onClick={() => onAction("recurring")}>Recurring</Button>
@@ -284,6 +290,8 @@ export default function GeneratedUI({ data, onAction }) {
 
         <div className="flex gap-2 flex-wrap">
           <Button variant="primary" icon={LucideReact.HeartPulse} onClick={() => onAction("health_check")}>Health Check</Button>
+          <Button variant="primary" icon={LucideReact.FileText} onClick={() => onAction("tl_report")}>TL Report</Button>
+          <Button variant="outline" icon={LucideReact.Bell} onClick={() => onAction("alert_status")}>Alerts</Button>
           <Button variant="outline" icon={LucideReact.List} onClick={() => onAction("errors")}>Error Log</Button>
           <Button variant="outline" icon={LucideReact.TrendingUp} onClick={() => onAction("trends")}>Trends</Button>
           <Button variant="outline" icon={LucideReact.BarChart3} onClick={() => onAction("categories")}>Categories</Button>
@@ -720,6 +728,302 @@ export default function GeneratedUI({ data, onAction }) {
             })}
           </div>
         )}
+      </div>
+    );
+  }
+
+  // ── TL REPORT ──
+  if (isTlReport) {
+    var score = data.score || 0;
+    var level = data.healthLevel || "unknown";
+    var sum = data.summary || {};
+    var sev = sum.bySeverity || {};
+    var actions = data.actions || [];
+    var trend = data.hourlyTrend || [];
+    var spikes = data.spikes || [];
+    var topCodes = data.topCodes || [];
+    var recurring = data.recurring || [];
+    var cbs = data.circuitBreakers || [];
+    var fixes = data.fixes || {};
+    var trendDir = sum.trendDirection || 0;
+    var erRate = data.errorRate || {};
+
+    var scoreColor = score >= 90 ? "#10b981" : score >= 70 ? "#22c55e" : score >= 50 ? "#f59e0b" : score >= 30 ? "#f97316" : "#ef4444";
+    var trendColor = trendDir > 50 ? "rose" : trendDir > 20 ? "amber" : trendDir < -20 ? "emerald" : "gray";
+    var trendArrow = trendDir > 0 ? "↑" : trendDir < 0 ? "↓" : "→";
+
+    var priorityColor = function(p) {
+      if (p === "critical") return "rose";
+      if (p === "high") return "red";
+      if (p === "medium") return "amber";
+      if (p === "low") return "blue";
+      return "emerald";
+    };
+
+    var priorityIcon = function(p) {
+      if (p === "critical") return LucideReact.AlertOctagon;
+      if (p === "high") return LucideReact.AlertCircle;
+      if (p === "medium") return LucideReact.AlertTriangle;
+      if (p === "low") return LucideReact.Info;
+      return LucideReact.CheckCircle;
+    };
+
+    var displayTrend = trend.map(function(b) { return { label: b.label, count: b.count }; });
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <LucideReact.FileText className="w-5 h-5 text-violet-400" />
+            <span className="text-lg font-semibold text-white">TL Error Briefing</span>
+          </div>
+          <Badge variant={score >= 70 ? "success" : score >= 50 ? "warning" : "danger"}>
+            {level.charAt(0).toUpperCase() + level.slice(1)} ({score}/100)
+          </Badge>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <div className="relative w-20 h-20 flex-shrink-0">
+            <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="#27272a" strokeWidth="8" />
+              <circle cx="50" cy="50" r="42" fill="none" stroke={scoreColor} strokeWidth="8"
+                strokeDasharray={2 * Math.PI * 42} strokeDashoffset={2 * Math.PI * 42 * (1 - score / 100)}
+                strokeLinecap="round" />
+            </svg>
+            <div className="absolute inset-0 flex items-center justify-center">
+              <span className="text-xl font-bold text-white">{score}</span>
+            </div>
+          </div>
+          <div className="flex-1 grid grid-cols-2 gap-2">
+            <Stat label="Errors (window)" value={sum.total || 0} accent="red" />
+            <Stat label="Today" value={sum.todayCount || 0} change={trendDir !== 0 ? trendArrow + " " + Math.abs(trendDir) + "%" : undefined} trend={trendDir > 20 ? "up" : trendDir < -20 ? "down" : undefined} accent={trendColor} />
+            <Stat label="7d Daily Avg" value={sum.dailyAvg7d || 0} accent="gray" />
+            <Stat label="Error Rate (5m)" value={erRate.count != null ? erRate.count + "/" + (erRate.threshold || 20) : "-"} accent={erRate.count >= (erRate.threshold || 20) ? "rose" : "emerald"} />
+          </div>
+        </div>
+
+        {cbs.length > 0 && (
+          <div className="flex gap-2 flex-wrap">
+            {cbs.map(function(b, i) {
+              return (
+                <div key={i} className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-zinc-800/60 text-xs">
+                  <div className={"w-2 h-2 rounded-full " + (b.state === "closed" ? "bg-emerald-400" : b.state === "open" ? "bg-red-400 animate-pulse" : "bg-amber-400")} />
+                  <span className="text-zinc-300">{b.name}</span>
+                  <Badge variant={b.state === "closed" ? "success" : b.state === "open" ? "danger" : "warning"} size="sm">{b.state}</Badge>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        <UICard header="Action Items" accent={actions.some(function(a) { return a.priority === "critical"; }) ? "rose" : actions.some(function(a) { return a.priority === "high"; }) ? "red" : "emerald"}>
+          <div className="space-y-2">
+            {actions.map(function(a, i) {
+              var PIcon = priorityIcon(a.priority);
+              return (
+                <div key={i} className="flex items-start gap-2 p-2 rounded bg-zinc-800/40">
+                  <PIcon className={"w-4 h-4 mt-0.5 flex-shrink-0 text-" + priorityColor(a.priority) + "-400"} />
+                  <div className="flex-1">
+                    <div className="text-sm text-zinc-200">{a.action}</div>
+                    <div className="flex items-center gap-2 mt-0.5">
+                      <Badge variant={priorityColor(a.priority)} size="sm">{a.priority}</Badge>
+                      <span className="text-xs text-zinc-500">{a.type}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </UICard>
+
+        {displayTrend.length > 0 && (
+          <UICard header={"Hourly Trend (" + (data.hours || 24) + "h)" + (spikes.length > 0 ? " — " + spikes.length + " spike(s)" : "")}>
+            <ResponsiveContainer width="100%" height={140}>
+              <AreaChart data={displayTrend} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
+                <defs>
+                  <linearGradient id="trendGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#ef4444" stopOpacity={0.4} />
+                    <stop offset="100%" stopColor="#ef4444" stopOpacity={0.05} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#333" />
+                <XAxis dataKey="label" tick={{ fill: "#999", fontSize: 9 }} interval="preserveStartEnd" />
+                <YAxis tick={{ fill: "#999", fontSize: 9 }} allowDecimals={false} />
+                <Tooltip contentStyle={{ backgroundColor: "#1f1f23", border: "1px solid #333", borderRadius: 6 }} />
+                <Area type="monotone" dataKey="count" stroke="#ef4444" fill="url(#trendGrad)" name="Errors" />
+              </AreaChart>
+            </ResponsiveContainer>
+          </UICard>
+        )}
+
+        {(topCodes.length > 0 || recurring.length > 0) && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {topCodes.length > 0 && (
+              <UICard header="Top Error Codes">
+                <div className="space-y-1.5">
+                  {topCodes.slice(0, 5).map(function(c, i) {
+                    return (
+                      <div key={i} className="flex items-center justify-between text-sm cursor-pointer hover:bg-zinc-800/40 p-1 rounded"
+                        onClick={function() { onAction("error_codes", { code: c.code }); }}>
+                        <span className="text-cyan-300 font-mono text-xs truncate flex-1">{c.code}</span>
+                        <Badge variant="outline" size="sm">{c.count}</Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              </UICard>
+            )}
+            {recurring.length > 0 && (
+              <UICard header="Recurring Patterns">
+                <div className="space-y-1.5">
+                  {recurring.slice(0, 5).map(function(r, i) {
+                    return (
+                      <div key={i} className="flex items-center justify-between text-sm p-1">
+                        <span className="text-zinc-300 text-xs truncate flex-1 mr-2">{r.message}</span>
+                        <Badge variant="danger" size="sm">{r.count}x</Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              </UICard>
+            )}
+          </div>
+        )}
+
+        {fixes.unacknowledged > 0 && (
+          <div className="flex items-center gap-2 p-2 rounded bg-emerald-900/20 border border-emerald-800/50 text-sm">
+            <LucideReact.Wrench className="w-4 h-4 text-emerald-400" />
+            <span className="text-emerald-300">{fixes.unacknowledged} unacknowledged fix(es)</span>
+            <Button variant="ghost" size="sm" onClick={function() { onAction("fixes"); }}>Review</Button>
+          </div>
+        )}
+
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" icon={LucideReact.Bell} onClick={function() { onAction("alert_status"); }}>Alerts</Button>
+          <Button variant="outline" icon={LucideReact.Activity} onClick={function() { onAction("overview"); }}>Overview</Button>
+          <Button variant="outline" icon={LucideReact.TrendingUp} onClick={function() { onAction("trends"); }}>Trends</Button>
+          <Button variant="outline" icon={LucideReact.Repeat} onClick={function() { onAction("recurring"); }}>Recurring</Button>
+          <Button variant="outline" icon={LucideReact.List} onClick={function() { onAction("errors"); }}>Error Log</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── ALERT STATUS ──
+  if (isAlertStatus) {
+    var alerts = data.alerts || [];
+    var status = data.status || "clear";
+    var cs = data.circuitSummary || {};
+    var ws = data.windowSummary || {};
+    var erRate = data.errorRate || {};
+
+    var statusConfig = {
+      critical: { color: "rose", icon: LucideReact.AlertOctagon, label: "CRITICAL", bg: "bg-red-900/30 border-red-800" },
+      warning: { color: "amber", icon: LucideReact.AlertTriangle, label: "WARNING", bg: "bg-amber-900/30 border-amber-800" },
+      clear: { color: "emerald", icon: LucideReact.CheckCircle, label: "ALL CLEAR", bg: "bg-emerald-900/30 border-emerald-800" }
+    };
+    var sc = statusConfig[status] || statusConfig.clear;
+    var StatusIcon = sc.icon;
+
+    var alertLevelIcon = function(level) {
+      if (level === "critical") return LucideReact.AlertOctagon;
+      if (level === "warning") return LucideReact.AlertTriangle;
+      return LucideReact.Info;
+    };
+
+    var alertLevelColor = function(level) {
+      if (level === "critical") return "rose";
+      if (level === "warning") return "amber";
+      return "blue";
+    };
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <LucideReact.Bell className="w-5 h-5 text-amber-400" />
+            <span className="text-lg font-semibold text-white">Alert Status</span>
+          </div>
+          <Button variant="ghost" icon={LucideReact.RefreshCw} size="sm" onClick={function() { onAction("alert_status", { hours: data.hours }); }}>Refresh</Button>
+        </div>
+
+        <div className={"flex items-center gap-3 p-3 rounded-lg border " + sc.bg}>
+          <StatusIcon className={"w-6 h-6 text-" + sc.color + "-400" + (status === "critical" ? " animate-pulse" : "")} />
+          <div>
+            <div className={"text-sm font-bold text-" + sc.color + "-300"}>{sc.label}</div>
+            <div className="text-xs text-zinc-400">
+              {alerts.length === 0 ? "No active alerts" : alerts.length + " active alert" + (alerts.length !== 1 ? "s" : "")} · {data.hours || 6}h window
+            </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <Stat label="Errors (window)" value={ws.total || 0} accent={ws.total > 0 ? "red" : "gray"} />
+          <Stat label="Critical" value={ws.critical || 0} accent={ws.critical > 0 ? "rose" : "gray"} />
+          <Stat label="Rate (5m)" value={erRate.count != null ? erRate.count : "-"} accent={erRate.count >= (erRate.threshold || 20) ? "rose" : "emerald"} />
+          <Stat label="Circuits" value={(cs.open || 0) + " open / " + (cs.total || 0)} accent={cs.open > 0 ? "rose" : "emerald"} />
+        </div>
+
+        {alerts.length === 0 ? (
+          <UICard accent="emerald">
+            <div className="flex items-center gap-3 py-4 justify-center">
+              <LucideReact.CheckCircle className="w-8 h-8 text-emerald-400" />
+              <div>
+                <div className="text-sm font-medium text-emerald-300">System Clear</div>
+                <div className="text-xs text-zinc-400">No active alerts in the last {data.hours || 6} hours</div>
+              </div>
+            </div>
+          </UICard>
+        ) : (
+          <div className="space-y-2">
+            {alerts.map(function(a, i) {
+              var AIcon = alertLevelIcon(a.level);
+              var aColor = alertLevelColor(a.level);
+              var isExp = expandedAlert === i;
+              return (
+                <UICard key={i} accent={aColor}>
+                  <div className="cursor-pointer" onClick={function() { setExpandedAlert(isExp ? null : i); }}>
+                    <div className="flex items-start gap-2">
+                      <AIcon className={"w-4 h-4 mt-0.5 flex-shrink-0 text-" + aColor + "-400" + (a.level === "critical" ? " animate-pulse" : "")} />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-zinc-200">{a.title}</div>
+                        <div className="flex items-center gap-2 mt-0.5">
+                          <Badge variant={aColor} size="sm">{a.level.toUpperCase()}</Badge>
+                          <span className="text-xs text-zinc-500">{a.source}</span>
+                          <span className="text-xs text-zinc-500">{formatTime(a.ts)}</span>
+                        </div>
+                      </div>
+                      <LucideReact.ChevronDown className={"w-4 h-4 text-zinc-500 transition-transform " + (isExp ? "rotate-180" : "")} />
+                    </div>
+                    {isExp && (
+                      <div className="mt-2 ml-6 p-2 rounded bg-zinc-900/60 text-xs text-zinc-300">
+                        {a.detail}
+                      </div>
+                    )}
+                  </div>
+                </UICard>
+              );
+            })}
+          </div>
+        )}
+
+        <div className="flex gap-2 flex-wrap">
+          {[3, 6, 12, 24].map(function(h) {
+            return (
+              <Button key={h} variant={(data.hours || 6) === h ? "primary" : "ghost"} size="sm"
+                onClick={function() { onAction("alert_status", { hours: h }); }}>
+                {h}h
+              </Button>
+            );
+          })}
+        </div>
+
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" icon={LucideReact.FileText} onClick={function() { onAction("tl_report"); }}>TL Report</Button>
+          <Button variant="outline" icon={LucideReact.HeartPulse} onClick={function() { onAction("health_check"); }}>Health Check</Button>
+          <Button variant="outline" icon={LucideReact.Activity} onClick={function() { onAction("overview"); }}>Overview</Button>
+          <Button variant="outline" icon={LucideReact.Shield} onClick={function() { onAction("circuit_breakers"); }}>Circuits</Button>
+        </div>
       </div>
     );
   }

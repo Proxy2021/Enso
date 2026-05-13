@@ -696,8 +696,8 @@ export async function handleStandaloneInbound(params: {
       });
       // Refine focus area from conversation (fire-and-forget)
       import("./focus-areas.js").then(({ refineFocusFromConversation }) => {
-        refineFocusFromConversation(activeFocusId!, rawBody, answer).catch(() => {});
-      }).catch(() => {});
+        refineFocusFromConversation(activeFocusId!, rawBody, answer).catch(e => logError("agent", "Focus refinement from conversation failed", e, { severity: "info" }));
+      }).catch(e => logError("agent", "Failed to import focus-areas for refinement", e, { severity: "info" }));
     } catch (err) {
       logError("standalone-agent", "Focus chat LLM call failed", err, { cardId: stableCardId });
       client.send({
@@ -738,8 +738,8 @@ export async function handleStandaloneInbound(params: {
       // Refine focus area from conversation (fire-and-forget)
       if (activeFocusId) {
         import("./focus-areas.js").then(({ refineFocusFromConversation }) => {
-          refineFocusFromConversation(activeFocusId!, rawBody, answer).catch(() => {});
-        }).catch(() => {});
+          refineFocusFromConversation(activeFocusId!, rawBody, answer).catch(e => logError("agent", "Focus refinement from conversation failed", e, { severity: "info" }));
+        }).catch(e => logError("agent", "Failed to import focus-areas for refinement", e, { severity: "info" }));
       }
     } catch (err) {
       logError("standalone-agent", `callChatLLM failed for ${userChatModel}`, err, { cardId: stableCardId });
@@ -1036,8 +1036,8 @@ export async function handleStandaloneInbound(params: {
     // Refine focus area from conversation (fire-and-forget)
     if (activeFocusId) {
       import("./focus-areas.js").then(({ refineFocusFromConversation }) => {
-        refineFocusFromConversation(activeFocusId!, rawBody, replyText).catch(() => {});
-      }).catch(() => {});
+        refineFocusFromConversation(activeFocusId!, rawBody, replyText).catch(e => logError("agent", "Focus refinement from conversation failed", e, { severity: "info" }));
+      }).catch(e => logError("agent", "Failed to import focus-areas for refinement", e, { severity: "info" }));
     }
   } catch (err) {
     logError("standalone-agent", "Gemini agent call failed", err, { cardId: stableCardId });

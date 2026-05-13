@@ -103,8 +103,10 @@ export class CircuitBreaker {
   }
 }
 
-export const llmCircuit = new CircuitBreaker({ name: "llm", failureThreshold: 5, resetTimeoutMs: 30_000, halfOpenMaxProbes: 2 });
+export const llmCircuit = new CircuitBreaker({ name: "llm", failureThreshold: 3, resetTimeoutMs: 30_000, halfOpenMaxProbes: 2 });
 export const braveSearchCircuit = new CircuitBreaker({ name: "brave-search", failureThreshold: 3, resetTimeoutMs: 60_000, halfOpenMaxProbes: 2 });
+export const youtubeCircuit = new CircuitBreaker({ name: "youtube", failureThreshold: 1, resetTimeoutMs: 300_000, halfOpenMaxProbes: 2 });
+export const smtpCircuit = new CircuitBreaker({ name: "smtp", failureThreshold: 3, resetTimeoutMs: 120_000, halfOpenMaxProbes: 2 });
 
 export function getCircuitBreakerStates(): Array<{ name: string; state: string; failures: number; lastFailureTime: number }> {
   const result: Array<{ name: string; state: string; failures: number; lastFailureTime: number }> = [];

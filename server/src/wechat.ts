@@ -9,6 +9,7 @@
  */
 
 import { logAction, logError } from "./action-log.js";
+import { externalServiceError } from "./errors.js";
 
 // ── Access Token Cache ──
 
@@ -19,10 +20,9 @@ function getCredentials(): { appId: string; appSecret: string } {
   const appSecret = process.env.WECHAT_APP_SECRET;
 
   if (!appId || !appSecret) {
-    throw new Error(
+    throw externalServiceError("wechat",
       "WeChat credentials not configured. Go to Settings > Service Keys and add your WeChat App ID + App Secret. " +
-      "Get them from https://mp.weixin.qq.com/debug/cgi-bin/sandbox",
-    );
+      "Get them from https://mp.weixin.qq.com/debug/cgi-bin/sandbox");
   }
 
   return { appId, appSecret };
@@ -41,7 +41,7 @@ async function getAccessToken(): Promise<string> {
   const data = (await res.json()) as { access_token?: string; expires_in?: number; errcode?: number; errmsg?: string };
 
   if (data.errcode || !data.access_token) {
-    throw new Error(`WeChat token error: ${data.errmsg ?? "unknown error"} (code: ${data.errcode})`);
+    throw externalServiceError("wechat", `WeChat token error: ${data.errmsg ?? "unknown error"} (code: ${data.errcode})`);
   }
 
   cachedToken = {
@@ -378,7 +378,7 @@ async function uploadPermanentMedia(token: string, buffer: Buffer, filename: str
   });
   const data = (await res.json()) as { media_id?: string; errcode?: number; errmsg?: string };
 
-  if (!data.media_id) throw new Error(`Material upload failed: ${data.errmsg} (code: ${data.errcode})`);
+  if (!data.media_id) throw externalServiceError("wechat", `Material upload failed: ${data.errmsg} (code: ${data.errcode})`);
   logAction({ ts: Date.now(), type: "action", category: "wechat", message: `Permanent media uploaded: ${data.media_id}` });
   return data.media_id;
 }
@@ -493,7 +493,7 @@ export async function getFollowerOpenIds(): Promise<string[]> {
   };
 
   if (data.errcode && data.errcode !== 0) {
-    throw new Error(`WeChat follower list failed: ${data.errmsg} (code: ${data.errcode})`);
+    throw externalServiceError("wechat", `WeChat follower list failed: ${data.errmsg} (code: ${data.errcode})`);
   }
 
   return data.data?.openid ?? [];
@@ -513,7 +513,7 @@ export async function getUserInfo(openId: string): Promise<{ nickname: string; h
   };
 
   if (data.errcode && data.errcode !== 0) {
-    throw new Error(`WeChat user info failed: ${data.errmsg} (code: ${data.errcode})`);
+    throw externalServiceError("wechat", `WeChat user info failed: ${data.errmsg} (code: ${data.errcode})`);
   }
 
   return {

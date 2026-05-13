@@ -734,8 +734,8 @@ If nothing changed, return { "hasRefinement": false }.`;
           type: "focus.refined",
           payload: { focusId, clarityChanged: true, oldClarity, newClarity: area.clarity },
           timestamp: Date.now(),
-        }).catch(() => {});
-      }).catch(() => {});
+        }).catch(e => logError("focus", "Failed to emit focus.refined event", e, { severity: "info" }));
+      }).catch(e => logError("focus", "Failed to import conversation-context for focus event", e, { severity: "info" }));
     }
   } catch (err) {
     logError("focus-areas", `Refinement failed for "${area.title}"`, err);
@@ -968,8 +968,8 @@ The synthesizer task must dependsOn all other tasks.`,
                   import("./team-leader.js").then(({ assessFocusUnderstanding, processEvent, createEvent }) => {
                     assessFocusUnderstanding(freshArea, updateFocusAssessment)
                       .then(() => processEvent(createEvent("focus.evaluation.done", { agent: "tl" }, { focusId }, "system")))
-                      .catch(() => {});
-                  }).catch(() => {});
+                      .catch(e => logError("focus", "Failed to assess focus understanding after evaluation", e, { severity: "info" }));
+                  }).catch(e => logError("focus", "Failed to import team-leader for post-evaluation assessment", e, { severity: "info" }));
                 }
               }
             } catch (err) {
@@ -1336,7 +1336,7 @@ export async function launchFocusEvolve(params: {
                       }
                     })
                     .catch(err => logError("focus-areas", "Sprint deliverable enrichment failed", err));
-                }).catch(() => {});
+                }).catch(e => logError("focus", "Failed to import cortex-enrichment for sprint deliverables", e, { severity: "info" }));
               }
 
               logAction({ ts: Date.now(), type: "action", category: "focus-areas",

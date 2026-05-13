@@ -12,6 +12,7 @@ import { homedir } from "node:os";
 import type { EnsoAgentTool } from "./local-types.js";
 import { getAuthenticatedClient, isAuthorized, isAuthError, REAUTH_MESSAGE, checkTokenHealth, callWithAuthGuard } from "./youtube-auth.js";
 import { logAction, logError } from "./action-log.js";
+import { dataSourceError, toolExecutionError } from "./errors.js";
 
 // ── Helpers ──
 
@@ -39,7 +40,7 @@ function errorResult(message: string) {
 
 function getYouTube() {
   const auth = getAuthenticatedClient();
-  if (!auth) throw new Error("YouTube not authorized. Configure YouTube Client ID & Secret in Settings, then visit /api/youtube/auth to authorize.");
+  if (!auth) throw dataSourceError("youtube", "YouTube not authorized. Configure YouTube Client ID & Secret in Settings, then visit /api/youtube/auth to authorize.");
   return google.youtube({ version: "v3", auth });
 }
 
@@ -51,7 +52,7 @@ function getYouTubePublic() {
   const apiKey = process.env.YOUTUBE_API_KEY || process.env.GEMINI_API_KEY;
   if (apiKey) return google.youtube({ version: "v3", auth: apiKey });
 
-  throw new Error("No YouTube credentials configured");
+  throw dataSourceError("youtube", "No YouTube credentials configured");
 }
 
 /** Enrich video IDs with view counts, durations, etc. */
@@ -148,7 +149,7 @@ export async function checkYouTubeOnStartup(): Promise<void> {
   try {
     await callWithAuthGuard(async () => {
       const health = await checkTokenHealth();
-      if (!health.valid) throw new Error(health.error || "Token validation failed");
+      if (!health.valid) throw dataSourceError("youtube", health.error || "Token validation failed");
       logAction({ ts: Date.now(), type: "action", category: "youtube", message: "Startup health check: YouTube token valid" });
     });
   } catch {
@@ -285,7 +286,7 @@ export async function search(params: Record<string, unknown>): Promise<VideoInfo
   const maxResults = Math.min(Number(params.maxResults) || 10, 50);
   const order = (params.order as string) || "relevance";
 
-  if (!query.trim()) throw new Error("Search query is required");
+  if (!query.trim()) throw toolExecutionError("enso_youtube_search", "Search query is required");
 
   const res = await yt.search.list({
     part: ["snippet"],
@@ -310,12 +311,12 @@ async function channelVideos(params: Record<string, unknown>): Promise<VideoInfo
   const channelId = String(params.channelId || "");
   const maxResults = Math.min(Number(params.maxResults) || 10, 50);
 
-  if (!channelId.trim()) throw new Error("channelId is required");
+  if (!channelId.trim()) throw toolExecutionError("enso_youtube_channel_videos", "channelId is required");
 
   // Get uploads playlist
   const chRes = await yt.channels.list({ part: ["contentDetails"], id: [channelId] });
   const uploads = chRes.data.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
-  if (!uploads) throw new Error(`No uploads playlist found for channel ${channelId}`);
+  if (!uploads) throw dataSourceError("youtube", `No uploads playlist found for channel ${channelId}`);
 
   const plRes = await yt.playlistItems.list({
     part: ["snippet", "contentDetails"],
@@ -398,7 +399,7 @@ async function unsubscribe(params: Record<string, unknown>): Promise<{ unsubscri
   const subscriptionIds = (params.subscriptionIds as string[] | undefined) || [];
 
   if (channelIds.length === 0 && subscriptionIds.length === 0) {
-    throw new Error("Provide channelIds or subscriptionIds to unsubscribe from");
+    throw toolExecutionError("enso_youtube_unsubscribe", "Provide channelIds or subscriptionIds to unsubscribe from");
   }
 
   // If channelIds provided, look up their subscription IDs first

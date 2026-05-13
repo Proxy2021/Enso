@@ -412,3 +412,47 @@ export function getErrorSummary(hours = 24): ErrorSummary {
     recentErrors: filtered.slice(-10).reverse(),
   };
 }
+
+// ── Error Trend Detection ──
+
+export interface ErrorTrend {
+  category: string;
+  last24h: number;
+  avg7d: number;
+  ratio: number;
+}
+
+export function getErrorTrends(minAbsolute = 10): ErrorTrend[] {
+  const now = Date.now();
+  const day = 24 * 60 * 60 * 1000;
+  const lines = readLogFile(ERROR_LOG_PATH);
+
+  const buckets24h = new Map<string, number>();
+  const buckets7d = new Map<string, number>();
+
+  for (const line of lines) {
+    try {
+      const entry = JSON.parse(line) as LogEntry;
+      const age = now - entry.ts;
+      if (age > 7 * day) continue;
+      const cat = entry.category;
+      buckets7d.set(cat, (buckets7d.get(cat) ?? 0) + 1);
+      if (age <= day) {
+        buckets24h.set(cat, (buckets24h.get(cat) ?? 0) + 1);
+      }
+    } catch { /* skip */ }
+  }
+
+  const trends: ErrorTrend[] = [];
+  for (const [category, last24h] of buckets24h) {
+    if (last24h < minAbsolute) continue;
+    const total7d = buckets7d.get(category) ?? 0;
+    const avg7d = total7d / 7;
+    const ratio = avg7d > 0 ? last24h / avg7d : last24h;
+    if (ratio >= 2) {
+      trends.push({ category, last24h, avg7d: Math.round(avg7d * 10) / 10, ratio: Math.round(ratio * 10) / 10 });
+    }
+  }
+
+  return trends.sort((a, b) => b.ratio - a.ratio);
+}

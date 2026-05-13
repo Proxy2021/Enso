@@ -124,8 +124,8 @@ Return ONLY the JSON array, no markdown fences.`;
             type: "cortex.entity.created",
             payload: { entityId: item.entityId, title: entry.title, semanticTags: tags, source: entry.source },
             timestamp: Date.now(),
-          }).catch(() => {});
-        }).catch(() => {});
+          }).catch(e => logError("cortex-enrichment", "Failed to emit cortex.entity.created event", e, { severity: "info" }));
+        }).catch(e => logError("cortex-enrichment", "Failed to import conversation-context for event emission", e, { severity: "info" }));
       }
 
       logAction({

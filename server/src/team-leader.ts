@@ -81,6 +81,8 @@ export interface SystemSignals {
     daysSinceValidation: number | null;
     message: string;
   };
+  /** Error categories with >2x spike in last 24h vs 7d average */
+  errorTrends?: Array<{ category: string; last24h: number; avg7d: number; ratio: number }>;
 }
 
 export interface TeamLeaderAction {
@@ -1259,10 +1261,17 @@ export async function gatherSignals(): Promise<SystemSignals> {
     kindleAuth = await validateKindleSession();
   } catch { /* kindle validation not available */ }
 
+  // Error trend detection (24h vs 7d average)
+  let errorTrends: SystemSignals["errorTrends"] = [];
+  try {
+    const { getErrorTrends } = await import("./action-log.js");
+    errorTrends = getErrorTrends();
+  } catch { /* action-log not available */ }
+
   return {
     recentErrors, recentActions, focusAnalyses, cortexStats, taskResults,
     platformHealth: { errorRate, failedTasks, uptimeHours: Math.round(process.uptime() / 3600) },
-    pendingReacts, pendingTasks, finances, wealthAlerts, wealthRefreshDue, youtubeAuth, kindleAuth,
+    pendingReacts, pendingTasks, finances, wealthAlerts, wealthRefreshDue, youtubeAuth, kindleAuth, errorTrends,
   };
 }
 
@@ -1358,6 +1367,11 @@ export async function assessAndPrioritize(signals: SystemSignals): Promise<TeamL
         ? `Status: VALID — ${signals.kindleAuth.message}`
         : `Status: EXPIRED — ${signals.kindleAuth.message}. Action needed: notify user to run Kindle Login (enso_context_kindle_login) to re-authenticate.`
       : "Kindle auth state not available.",
+    "",
+    `## Error Trends (24h vs 7d avg)`,
+    signals.errorTrends && signals.errorTrends.length > 0
+      ? signals.errorTrends.map(t => `  - [${t.category}] ${t.last24h} errors in 24h (${t.ratio}x above 7d avg of ${t.avg7d}/day)`).join("\n")
+      : "No error spikes detected.",
   ].join("\n");
 
   const prompt = `You are the Team Leader of Enso, a personal AI assistant platform.

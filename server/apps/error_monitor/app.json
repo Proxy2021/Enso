@@ -4,7 +4,7 @@
   "spec": {
     "toolFamily": "error_monitor",
     "toolPrefix": "enso_error_monitor_",
-    "description": "Real-time error monitoring dashboard: error summary with severity breakdown, error trends over time, category analysis, recent error feed, fix tracking, system health score, circuit breaker states, error code analysis, recurring error pattern detection, and actionable recommendations. Reads from Enso's action log, error log, circuit breakers, and error rate monitor.",
+    "description": "Real-time error monitoring dashboard: error summary with severity breakdown, error trends over time, category analysis, recent error feed, fix tracking, system health score, circuit breaker states, error code analysis, recurring error pattern detection, actionable recommendations, Team Leader error briefing with trend comparison and spike detection, and real-time alert triage. Reads from Enso's action log, error log, circuit breakers, and error rate monitor.",
     "signatureId": "error_monitor_view",
     "tools": [
       {
@@ -320,6 +320,80 @@
           "uniqueErrors": 8
         },
         "requiredDataKeys": ["tool", "patterns"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "tl_report",
+        "description": "Generate a comprehensive Team Leader error report with health score, error trends vs 7-day baseline, spike detection, circuit breaker status, prioritized action items, and top recurring patterns. The TL's primary briefing tool for system health. Use when the user says: 'TL report', 'error report', 'daily error briefing', 'system report', 'health report for TL', 'error briefing'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hours": {
+              "type": "number",
+              "description": "Time window in hours (1-168, default: 24)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_error_monitor_tl_report",
+          "hours": 24,
+          "score": 72,
+          "healthLevel": "good",
+          "errorRate": { "count": 3, "windowMs": 300000, "threshold": 20 },
+          "uptime": 86400,
+          "summary": {
+            "total": 18,
+            "bySeverity": { "critical": 0, "error": 8, "warning": 7, "info": 3 },
+            "categories": [{ "category": "standalone-agent", "count": 5 }],
+            "todayCount": 12,
+            "dailyAvg7d": 8.5,
+            "trendDirection": 41
+          },
+          "circuitBreakers": [{ "name": "llm", "state": "closed", "failures": 0 }],
+          "hourlyTrend": [{ "hour": "2026-05-13T08:00", "label": "08:00", "count": 2 }],
+          "spikes": [],
+          "topCodes": [{ "code": "LLM_CALL_FAILED", "count": 3, "severity": "error", "lastSeen": 1713510000000 }],
+          "recurring": [{ "fingerprint": "abc123", "count": 4, "message": "Tool call failed", "category": "standalone-agent", "severity": "error" }],
+          "actions": [{ "priority": "medium", "action": "Error rate trending up 41% vs 7-day average", "type": "trend" }],
+          "fixes": { "total": 5, "unacknowledged": 1, "recent": [] },
+          "generatedAt": 1713513600000
+        },
+        "requiredDataKeys": ["tool", "score", "healthLevel", "actions"],
+        "isPrimary": false
+      },
+      {
+        "suffix": "alert_status",
+        "description": "Real-time alert status: active alerts from circuit breakers, error rate threshold, critical errors, error spikes, new error codes, and recurring pattern surges. Provides a quick triage view of what needs attention NOW. Use when the user says: 'active alerts', 'alert status', 'what needs attention', 'any alerts', 'error alerts', 'urgent errors', 'triage'.",
+        "parameters": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "hours": {
+              "type": "number",
+              "description": "Lookback window in hours (1-48, default: 6)"
+            }
+          },
+          "required": []
+        },
+        "sampleParams": {},
+        "sampleData": {
+          "tool": "enso_error_monitor_alert_status",
+          "hours": 6,
+          "status": "warning",
+          "alertCount": 2,
+          "alerts": [
+            { "id": "error-spike", "level": "warning", "title": "Error spike: 12 errors in last hour", "detail": "3x above average", "source": "trend-analysis", "ts": 1713513600000 },
+            { "id": "new-error-codes", "level": "info", "title": "1 new error code(s) in last hour", "detail": "CORTEX_INGEST_FAILED", "source": "error-code-analysis", "ts": 1713513600000 }
+          ],
+          "errorRate": { "count": 5, "windowMs": 300000, "threshold": 20 },
+          "circuitSummary": { "total": 2, "open": 0, "halfOpen": 0, "closed": 2 },
+          "windowSummary": { "total": 25, "critical": 0, "error": 10, "warning": 12, "info": 3 },
+          "checkedAt": 1713513600000
+        },
+        "requiredDataKeys": ["tool", "status", "alerts"],
         "isPrimary": false
       }
     ]

@@ -41,6 +41,7 @@ import { createFocusAgentTools } from "./src/focus-agent.js";
 import { createTeamLeaderTools } from "./src/team-leader.js";
 import { createStocksDailyBriefingTools } from "./src/stocks-daily-briefing.js";
 import { startSelfHealing } from "./src/self-heal.js";
+import { logError } from "./src/action-log.js";
 import { setCardAccountResolver, cardContexts } from "./src/outbound/card-context.js";
 import { loadAllPersistedCards } from "./src/outbound/card-persistence.js";
 
@@ -127,12 +128,16 @@ async function main(): Promise<void> {
 
   process.on("uncaughtException", (err, origin) => {
     console.error(`[enso:fatal] Uncaught exception (${origin}):`, err);
+    logError("system", `Uncaught exception (${origin})`, err, { severity: "critical" });
     selfHeal.recordError(err);
     gracefulExit(1);
   });
 
   process.on("unhandledRejection", (reason) => {
     console.error("[enso] Unhandled rejection:", reason);
+    logError("system", "Unhandled promise rejection",
+      reason instanceof Error ? reason : new Error(String(reason)),
+      { severity: "critical" });
     selfHeal.recordError(reason);
   });
 
